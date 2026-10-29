@@ -12,8 +12,3 @@
   [headers.values]
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
-
-[[redirects]]
-  from = "/api/trade"
-  to = "/.netlify/functions/trade"
-  status = 200

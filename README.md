@@ -1,21 +1,8 @@
-# BANK TRADES PRO · Research terminal
+# BANK TRADES PRO — experimental BUY/SELL engine
+This build displays BUY YES, BUY NO, WAIT, HOLD, SELL / TAKE PROFIT, or SELL / STOP LOSS REVIEW based on explicit, experimental rules.
 
-Read-only Kalshi 15-minute market dashboard, 8 crypto and 8 commodity series, public order-book snapshots and optional Coinbase independent crypto spot references.
+BUY requires five live quote samples, a directional movement threshold, two-sided quotes, a spread guardrail, and enough time before closing. SELL/HOLD uses manually entered side, entry price, contract quantity, fees, and current bid. These are **heuristic alerts, not calibrated profitable predictions**; BUY is not an instruction to place a real bet. The 0–100 watchlist score is not a probability or confidence level.
 
-## Deploy with Netlify (GitHub import recommended)
-1. Create a new GitHub repository and upload the **contents of this folder** (index.html, netlify.toml, netlify/functions/data.js).
-2. In Netlify, Add new project → Import an existing project → GitHub → select repo.
-3. Leave build command empty and publish directory `.`; the included netlify.toml controls Functions.
-4. Deploy. The site calls `/api/data`. Verify the market and diagnostics panels after it loads.
+Features: 8-coin market radar, polling, quote chart, ranking, browser speech alerts, position review, and Netlify backend. Automatic real-money orders remain disabled. The site must be open to collect samples and speak.
 
-Note: Drag-and-drop static upload methods may not deploy Netlify Functions. Use Git import or the Netlify CLI (`netlify deploy --prod --dir=. --functions=netlify/functions`).
-
-## Architecture and limits
-- Public Kalshi REST quotes and order-book snapshots, not continuously streaming WebSocket.
-- Coinbase spot is an **independent reference** and is **not** the Kalshi settlement oracle.
-- Quotes are updated approximately every 12 seconds *while a browser tab is visible*; no guaranteed latency or uptime.
-- Signal defaults to WAIT because there is no calibrated directional model, and price/spread alone does not prove a profitable edge.
-- Missing/unavailable markets explicitly show offline/closed. Data errors never turn into fake prices.
-- No accounts, API keys, trade execution or membership authentication.
-- For credible predictive signals: collect timestamped Kalshi/settlement-oracle data on an always-on server; validate out-of-sample probability calibration, track realistic fills and fees; implement real-time streaming with reconnect and monitoring.
-- Verify the exact series, settlement rules, distribution rights, and current API fields with Kalshi before commercial use.
+To deploy: upload the ZIP contents to the root of GitHub repo, replacing index.html and netlify.toml, adding netlify/functions/data.js. Netlify must build from GitHub, publish directory '.', functions directory 'netlify/functions'. Verify /api/data?mode=markets returns JSON. Availability and accuracy have NOT been verified on the deployed site.
