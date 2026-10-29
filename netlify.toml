@@ -1,0 +1,36 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/kalshi/*"
+  to = "/.netlify/functions/kalshi/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api/spot"
+  to = "/.netlify/functions/spot"
+  status = 200
+
+[[redirects]]
+  from = "/.netlify/functions/kalshi/markets"
+  to = "/.netlify/functions/kalshi?resource=markets"
+  status = 200
+
+[[redirects]]
+  from = "/.netlify/functions/kalshi/series"
+  to = "/.netlify/functions/kalshi?resource=series"
+  status = 200
+
+[[redirects]]
+  from = "/api/demo-trade"
+  to = "/.netlify/functions/trading"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Cache-Control = "no-store"
