@@ -9,7 +9,7 @@ export default async()=>{
  const s=db(),state=await s.get('state',{type:'json'});
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
  // Settle prior server paper positions only from official finalized labels.
- for(const t of ledger.trades.filter(x=>x.status==='OPEN')){
+ for(const t of ledger.trades.filter(x=>x.status==='OPEN'||(x.status==='CLOSED'&&!['WIN','LOSS'].includes(x.settlement)))){
   let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
   if(!['yes','no'].includes(String(o?.result||'').toLowerCase())){
    try{
@@ -24,7 +24,17 @@ export default async()=>{
   }
   if(!['yes','no'].includes(String(o?.result||'').toLowerCase()))continue;
   const won=(t.side==='up'&&o.result==='yes')||(t.side==='down'&&o.result==='no'),payout=won?t.qty:0;
-  ledger.cash=Math.round((ledger.cash+payout)*100)/100;t.status='SETTLED';t.settlement=o.result;t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
+  if(t.status==='CLOSED'){
+   // A simulated early exit has already returned its proceeds to cash. Never pay it twice.
+   // Classify the actual paper exit P/L, not the later market outcome.
+   if(!Number.isFinite(t.pnl))continue;
+   t.settlement=t.pnl>0?'WIN':t.pnl<0?'LOSS':'TIE';
+   t.marketResult=o.result;t.outcomeVerifiedAt=now;
+  }else{
+   ledger.cash=Math.round((ledger.cash+payout)*100)/100;
+   t.status='SETTLED';t.marketResult=o.result;t.settlement=won?'WIN':'LOSS';
+   t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
+  }
  }
  // Paper-only exit simulation: use the executable bid, never the mid/ask.
  // This does not imply a real Kalshi order could fill at that price or quantity.
