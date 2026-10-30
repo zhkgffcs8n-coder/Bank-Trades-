@@ -24,7 +24,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 .pro-tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.pro-tabs button{white-space:nowrap}.pro-tabs button.active{background:linear-gradient(120deg,#765817,#d2a342);color:#07101c}.pro-panel{display:none}.pro-panel.active{display:block}.pro-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.pro-price{border:1px solid #95722e;border-radius:14px;padding:17px;background:#101c2c}.pro-price b{font-size:27px;color:#ffd477}.pro-state{color:#ffd477}.pro-up{color:#50e6b4}.pro-down{color:#ff8091}.pro-market{padding:12px;border-bottom:1px solid #30415c;display:flex;align-items:center;justify-content:space-between;gap:12px}.pro-market:last-child{border-bottom:0}.pro-market small{display:block}.pro-flag{font-size:11px;color:#ffd477}.pro-disabled{opacity:.8}.pro-grid pre{overflow:auto}@media(max-width:500px){.pro-market{font-size:12px}}
 </style><link rel="stylesheet" href="/premium.css?v=4"></head><body><main>
 <header><div><div class="brand">BANK <span>TRADES</span> PRO</div><div class="tag">KALSHI • 15-MINUTE INTELLIGENCE</div></div><div id="health" class="pill">CONNECTING</div></header>
-<aside class="terminal-sidebar"><div class="sidebar-caption">WORKSPACE</div><nav class="terminal-nav" aria-label="Main navigation"><a href="#liveTerminal">◈ Live signals</a><a href="#premiumChart">▥ Charts</a><a href="#pro" data-open-tab="kaibot">♧ KaiBot</a><a href="#pro" data-open-tab="paper">▣ Paper trade</a><a href="#pro" data-open-tab="commodities">◉ Markets</a><a href="#voice">♬ Voice alerts</a><a href="#diagnostics">⚙ Diagnostics</a></nav><div class="sidebar-note"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><span id="premiumHealth" class="pill">CONNECTING</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><p class="premium-foot">WAIT means no independently validated directional edge. Quote quality is not a win probability.</p></div><div class="premium-panel"><h2>CONTRACT PRICE <small> / LIVE QUOTES</small></h2><div class="premium-actions"><a href="#pro">OPEN KAIBOT &amp; MARKETS</a><a href="#chart">DETAIL CHART ↓</a></div><p class="premium-foot" id="premiumChartTitle">BTC quote mid-price · browser session</p><canvas id="premiumChart" class="premium-chart"></canvas><p class="premium-foot">Quote samples collected only while this page is open. Not exchange candles or a historical backtest.</p><div class="premium-label">AI / SIGNAL ENGINE</div><p id="premiumAI">Gathering quotes. Predictions are not calibrated.</p></div></section><section class="card" id="marketRadar"><div class="between"><h2>MARKET RADAR</h2><button id="refresh">↻ REFRESH</button></div><div class="toolbar"><button id="voice">🔇 VOICE OFF</button><button id="auto">AUTO REFRESH ON</button></div><div id="coins" class="grid"><p>Loading official Kalshi markets…</p></div></section>
+<aside class="terminal-sidebar"><div class="sidebar-caption">WORKSPACE</div><nav class="terminal-nav" aria-label="Main navigation"><a href="#liveTerminal">◈ Live signals</a><a href="#premiumChart">▥ Charts</a><a href="#pro" data-open-tab="kaibot">♧ KaiBot</a><a href="#pro" data-open-tab="paper">▣ Paper trade</a><a href="#pro" data-open-tab="commodities">◉ Markets</a><a href="#voice">♬ Voice alerts</a><a href="#diagnostics">⚙ Diagnostics</a></nav><div class="sidebar-note"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><span id="premiumHealth" class="pill">CONNECTING</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><p class="premium-foot">WAIT means no independently validated directional edge. Quote quality is not a win probability.</p></div><div class="premium-panel"><h2>CONTRACT PRICE <small> / LIVE QUOTES</small></h2><div class="premium-actions"><a href="#pro">OPEN KAIBOT &amp; MARKETS</a><a href="#chart">DETAIL CHART ↓</a></div><p class="premium-foot" id="premiumChartTitle">BTC quote mid-price · browser session</p><canvas id="premiumChart" class="premium-chart"></canvas><p class="premium-foot">Quote samples collected only while this page is open. Not exchange candles or a historical backtest.</p><div class="premium-label">AI / SIGNAL ENGINE</div><p id="premiumAI">Gathering quotes. Predictions are not calibrated.</p></div></section><section class="card" id="marketRadar"><div class="between"><h2>MARKET RADAR</h2><button id="refresh">↻ REFRESH</button></div><div class="toolbar"><button id="voice">🔇 VOICE OFF</button><button id="auto">AUTO REFRESH ON</button><small>Voice follows the selected market. Quotes poll about every 12 seconds; not a tick-by-tick feed.</small></div><div id="coins" class="grid"><p>Loading official Kalshi markets…</p></div></section>
 <div class="columns"><div><section class="card" id="signalDesk"><div class="tag">SIGNAL DESK</div><h2 id="title">Select a market</h2><div class="signal" id="signal">WAIT</div><p id="reason">Waiting for verified quotes.</p>
 <div class="metrics"><div class="metric"><small>YES BID / ASK</small><b id="yes">—</b></div><div class="metric"><small>NO BID / ASK</small><b id="no">—</b></div><div class="metric"><small>TIME LEFT</small><b id="left">—</b></div></div>
 <div class="toolbar"><button id="depthBtn">LOAD ORDER BOOK</button><button id="spotBtn">CHECK SPOT</button><button id="kalshiBtn">OPEN KALSHI ↗</button></div>
@@ -52,7 +52,9 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const val=(m,k)=>{if(!m)return null;const dollars=m[k+'_dollars'];if(dollars!==undefined&&dollars!==null){const n=Number(dollars);return Number.isFinite(n)?n:null}const n=Number(m[k]);return m[k]===undefined||m[k]===null||!Number.isFinite(n)?null:n/100};
 const fmt=n=>n==null?'—':(n*100).toFixed(1)+'¢';
 const expiryMs=m=>m&&m.expires_at?Date.parse(m.expires_at):NaN;
-const say=s=>{if(!voice||!('speechSynthesis'in window)||s===lastSpoken)return;lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.05;window.speechSynthesis.speak(u)};
+const spokenAt=new Map();
+const say=(s,urgent=false)=>{if(!voice||document.hidden||!('speechSynthesis'in window))return;if(!urgent&&Date.now()-(spokenAt.get(s)||0)<60000)return;spokenAt.set(s,Date.now());lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.12;window.speechSynthesis.speak(u)};
+const direction=a=>a.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
 
@@ -60,10 +62,13 @@ function signalFor(asset,m,stale){
  if(stale||!m)return {action:'WAIT',score:0,reason:'Stale or missing data'};
  const left=(expiryMs(m)-Date.now())/1000;
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
- if(left<75||left>930||[ya,yb,na,nb].some(x=>x==null||x<=0||x>=1))return {action:'WAIT',score:0,reason:'Expired, too little time, or incomplete quotes'};
- const spread=Math.max(ya-yb,na-nb),h=(history[asset]||[]).filter(x=>x.t>=Date.now()-180000 && x.t>=Date.parse(m.open_time||0));
+ if(!Number.isFinite(left)||left<75||left>930||[ya,yb,na,nb].some(x=>x==null||x<=0||x>=1))return {action:'WAIT',score:0,reason:'Expired, too little time, or incomplete quotes'};
+ if(ya<yb||na<nb)return {action:'WAIT',score:0,reason:'Crossed or invalid order book'};
+ const spread=Math.max(ya-yb,na-nb),h=(history[asset]||[]).filter(x=>x.t>=Date.now()-180000 && x.t>=(Number.isFinite(Date.parse(m.open_time))?Date.parse(m.open_time):0) && x.ticker===m.ticker);
  if(spread>.06||h.length<5)return {action:'WAIT',score:0,reason:h.length<5?'Collecting five live quote samples':'Spread too wide'};
- const first=h[Math.max(0,h.length-5)].v,last=h[h.length-1].v;
+ const recent=h.slice(-5);
+ if(recent[4].t-recent[0].t<36000||recent.some((p,i)=>i&&p.t-recent[i-1].t>25000))return {action:'WAIT',score:0,reason:'Collecting continuous recent samples'};
+ const first=recent[0].v,last=recent[4].v;
  const momentum=last-first,dir=momentum>.025?'YES':momentum<-.025?'NO':null;
  const sideAsk=dir==='YES'?ya:na,sideBid=dir==='YES'?yb:nb;
  if(!dir||sideAsk>.88||sideAsk<.12)return {action:'WAIT',score:0,reason:'No meaningful short-term quote momentum or price outside guardrails'};
@@ -80,9 +85,10 @@ function exitFor(m,stale){
  return action+' · estimated sell at bid '+fmt(bid)+' · estimated P/L $'+pnl.toFixed(2)+' ('+roi.toFixed(1)+'% before market impact). This is a rules-based alert, not a prediction or guaranteed fill.';
 }
 function show(){
- const r=current(),m=r?.market,now=Date.now(),stale=!fetched||(now-fetched)>30000;
+ const r=current(),m=r?.market,now=Date.now(),stale=!Number.isFinite(fetched)||!fetched||Math.abs(now-fetched)>25000;
  $('title').textContent=selected+(m?' · '+(m.title||m.ticker):' · No verified open market');
- $('left').textContent=m?Math.max(0,Math.floor((expiryMs(m)-now)/60000))+'m':'—';
+ const seconds=m?Math.max(0,Math.floor((expiryMs(m)-now)/1000)):NaN;
+ $('left').textContent=Number.isFinite(seconds)?Math.floor(seconds/60)+'m '+String(seconds%60).padStart(2,'0')+'s':'—';
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  $('yes').textContent=fmt(yb)+' / '+fmt(ya);$('no').textContent=fmt(nb)+' / '+fmt(na);
  let reason='';if(stale)reason='Feed stale or unavailable. Do not trade from this quote.';
@@ -91,8 +97,11 @@ function show(){
  else if(expiryMs(m)<=now)reason='Contract closed.';
  else reason='Live quotes verified, but no independently validated directional edge. WAIT for a tested signal; spread alone cannot predict the winner.';
  const sig=signalFor(selected,m,stale);
- $('signal').textContent=sig.action;$('reason').textContent=sig.action==='WAIT'?reason+' '+sig.reason:sig.reason;
- if(sig.action!==prevSignal){if(sig.action!=='WAIT')say(selected+' '+sig.action+' experimental signal');prevSignal=sig.action}
+ $('signal').textContent=direction(sig.action);$('reason').textContent=sig.action==='WAIT'?reason+' '+sig.reason:sig.reason;
+ const signalKey=selected+':'+(m?.ticker||'none')+':'+sig.action;
+ if(signalKey!==prevSignal){say(sig.action==='WAIT'?selected+'. Wait. '+sig.reason:selected+'. '+direction(sig.action)+'. Ask '+Math.round(sig.ask*100)+' cents. Experimental.',sig.action==='WAIT');prevSignal=signalKey}
+ const liveSignals=rows.map(row=>({asset:row.asset,ticker:row.market?.ticker,...signalFor(row.asset,row.market,stale)}));
+ window.dispatchEvent(new CustomEvent('banktrades:signals',{detail:liveSignals}));
 
  $('exit').textContent=exitFor(m,stale);
  $('age').textContent=fetched?Math.round((now-fetched)/1000)+'s':'—';
@@ -119,23 +128,25 @@ function render(){
 async function refresh(){
  if(busy)return;busy=true;$('health').textContent='● UPDATING';
  try{const d=await api('/api/data?mode=markets');if(!Array.isArray(d.results))throw Error('Invalid feed response');
- rows=d.results;fetched=Date.parse(d.fetched_at)||Date.now();
+ const sourceTime=Date.parse(d.fetched_at);if(!Number.isFinite(sourceTime)||Math.abs(Date.now()-sourceTime)>25000)throw Error('Stale or invalid source timestamp');
+ rows=d.results;fetched=sourceTime;
  $('count').textContent=rows.filter(x=>x.market).length+'/8';$('updated').textContent=new Date(fetched).toLocaleTimeString();
  $('health').textContent='● FEED CONNECTED';$('health').className='pill green';
  $('diagnostics').textContent='Source: '+d.source+'\nLast fetch: '+d.fetched_at+'\n'+rows.map(r=>r.asset+': '+(r.market?'OPEN':r.error||'NO OPEN MARKET')).join('\n');
  for(const r of rows){const m=r.market;if(!m)continue;const a=val(m,'yes_ask'),b=val(m,'yes_bid');if(a!=null&&b!=null){const h=history[r.asset]||(history[r.asset]=[]);if(h.length&&h[h.length-1].ticker!==m.ticker)h.length=0;h.push({t:Date.now(),v:(a+b)/2,ticker:m.ticker});if(h.length>100)h.shift()}}
  render();
- }catch(e){$('health').textContent='● FEED ERROR';$('health').className='pill red';$('diagnostics').textContent='Feed error: '+e.message+'\nCheck Netlify Functions deployment and /api/data endpoint.';show()}
+ }catch(e){fetched=0;$('health').textContent='● FEED ERROR';$('health').className='pill red';$('diagnostics').textContent='Feed error: '+e.message+'\nCheck Netlify Functions deployment and /api/data endpoint.';show()}
  finally{busy=false}
 }
 $('refresh').onclick=refresh;
 $('auto').onclick=()=>{auto=!auto;$('auto').textContent='AUTO REFRESH '+(auto?'ON':'OFF')};
-$('voice').onclick=()=>{voice=!voice;$('voice').textContent=voice?'🔊 VOICE ON':'🔇 VOICE OFF';if(voice)say('Bank Trades voice alerts enabled. Research mode active.')};
+$('voice').onclick=()=>{if(!('speechSynthesis'in window)){$('voice').textContent='VOICE UNSUPPORTED';return}voice=!voice;$('voice').textContent=voice?'🔊 VOICE ON · '+selected:'🔇 VOICE OFF';if(voice){say('Voice on. '+selected+'. Experimental alerts. Keep this page open.',true);prevSignal=''}else window.speechSynthesis.cancel()};
 $('depthBtn').onclick=async()=>{const m=current()?.market;if(!m){$('book').textContent='No open market';return}$('book').textContent='Loading…';try{const d=await api('/api/data?mode=orderbook&ticker='+encodeURIComponent(m.ticker));$('book').textContent=JSON.stringify(d.orderbook,null,2).slice(0,3500)}catch(e){$('book').textContent='Depth unavailable: '+e.message}};
 $('spotBtn').onclick=async()=>{try{const d=await api('/api/data?mode=spot&asset='+selected);$('spot').textContent='Coinbase '+selected+' spot: $'+Number(d.price).toLocaleString()+' · NOT Kalshi settlement oracle'}catch(e){$('spot').textContent='Spot unavailable: '+e.message}};
 $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://kalshi.com/markets/'+encodeURIComponent(m.event_ticker||m.ticker),'_blank','noopener')};
 ['side','entry','qty','fees'].forEach(id=>$(id).addEventListener('input',show));
 window.addEventListener('resize',draw);
+window.addEventListener('banktrades:select',event=>{if(!assets.includes(event.detail))return;selected=event.detail;render();if(voice)$('voice').textContent='🔊 VOICE ON · '+selected});
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
 refresh();
 })();
