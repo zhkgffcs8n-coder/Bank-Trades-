@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
 function syncSignals(){document.querySelectorAll('#premiumRows tr').forEach(tr=>{const sig=engineSignals.find(s=>s.asset===tr.dataset.asset);const cell=tr.children[3];if(!cell)return;const action=sig?.action||'WAIT';cell.textContent=action.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+(action==='WAIT'?'':' · EXP');cell.title=sig?.reason||'Waiting for signal engine';cell.className='premium-action'+(action==='BUY YES'?' up':action==='BUY NO'?' down':'')})}
-window.addEventListener('banktrades:signals',event=>{engineSignals=event.detail;syncSignals()});
+window.addEventListener('banktrades:signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const panel=$('premiumAI');if(!panel)return;const sig=engineSignals.find(s=>s.asset===selected);if(!sig){panel.textContent=selected+' · Waiting for a verified signal evaluation.';return}const action=(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');panel.textContent=selected+' · '+action+' · '+(sig.reason||'No reason provided')+(sig.action==='WAIT'?'':' · EXPERIMENTAL — not a calibrated win probability');});
 function price(m,k){if(!m)return NaN;return m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN}
 function cell(tr,v){const td=document.createElement('td');td.textContent=v;tr.append(td);return td}
 function chart(){
