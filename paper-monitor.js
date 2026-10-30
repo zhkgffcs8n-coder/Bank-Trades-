@@ -19,7 +19,10 @@ let lastAlert='',dismissed='',quotes=new Map(),lastFetch=0;
 close.onclick=()=>{dismissed=lastAlert;banner.style.display='none'};
 function alertNow(kind,message,id){if(id===dismissed)return;if(id!==lastAlert){lastAlert=id;title.textContent=kind;detail.textContent=message;banner.style.display='block'}}
 const host=document.getElementById('pro-paper');if(!host)return;
-const panel=document.createElement('section');panel.id='btPaperStats';const heading=document.createElement('h3');heading.textContent='KAIBOT · LIVE KALSHI PAPER PERFORMANCE';const metrics=document.createElement('div');metrics.className='btMetrics';const table=document.createElement('table');panel.append(heading,metrics,table);host.insertBefore(panel,host.querySelector('#paperLedger'));
+const panel=document.createElement('section');panel.id='btPaperStats';const heading=document.createElement('h3');heading.textContent='KAIBOT · LIVE KALSHI PAPER PERFORMANCE';const metrics=document.createElement('div');metrics.className='btMetrics';const table=document.createElement('table');const cloudButton=document.createElement('button');cloudButton.type='button';cloudButton.textContent='COPY CLOUD TRADE REPORT';cloudButton.style.cssText='background:#d6a94e;color:#111;border:0;border-radius:8px;padding:10px;font-weight:800;margin:8px 0;cursor:pointer';
+const cloudState=document.createElement('small');cloudState.style.display='block';
+cloudButton.onclick=async()=>{cloudState.textContent='Loading private report…';try{const res=await fetch('/.netlify/functions/paper-history',{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);const report=await res.json();await navigator.clipboard.writeText(JSON.stringify(report,null,2));cloudState.textContent='Copied '+report.records.length+' cloud entries. Paste into ChatGPT for analysis.'+(report.hasMore?' More records exist; report is partial.':'')}catch(e){cloudState.textContent='Could not copy report: '+e.message}};
+panel.append(heading,cloudButton,cloudState,metrics,table);host.insertBefore(panel,host.querySelector('#paperLedger'));
 const money=n=>'$'+(Number(n)||0).toFixed(2);
 const read=()=>{try{const b=JSON.parse(localStorage.getItem(key));return b&&Array.isArray(b.trades)?b:{cash:1000,trades:[]}}catch{return {cash:1000,trades:[]}}};
 const quote=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
