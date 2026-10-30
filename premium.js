@@ -42,9 +42,9 @@ async function update(){
   if(assets.includes(asset)){
    const tile=document.createElement('div');tile.className='premium-tile';
    const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI';
-   const value=document.createElement('b');value.textContent=valid?'UP '+ya.toFixed(1)+'¢':'—';
+   const value=document.createElement('b');value.textContent=valid?'UP '+ya.toFixed(1)+'%':'—';
    const meta=document.createElement('small');meta.textContent=valid?remaining+' min remaining':'Market unavailable';
-   const down=document.createElement('small');down.textContent=valid?'DOWN '+na.toFixed(1)+'¢ · UP bid '+yb.toFixed(1)+'¢':'Waiting for Kalshi quotes';
+   const down=document.createElement('small');down.textContent=valid?'DOWN '+na.toFixed(1)+'% · UP bid '+yb.toFixed(1)+'%':'Waiting for Kalshi quotes';
    tile.append(label,value,down,meta);$('premiumStrip').append(tile);
   }
  }
