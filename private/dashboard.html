@@ -89,7 +89,7 @@ function signalFor(asset,m,stale){
  const reversals=steps.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(steps[i])&&Math.abs(x)>.004&&Math.abs(steps[i])>.004).length;
  if(reversals>2)return {action:'WAIT',score:0,reason:asset+' WAIT: repeated short-term reversals detected'};
  const score=Math.min(92,Math.round(38+Math.abs(momentum)*300+Math.max(0,.06-spread)*160+agreement*8));
- return {action:'BUY '+dir,score,reason:asset+' multi-factor signal: '+(momentum*100).toFixed(1)+'¢ momentum · '+Math.round(agreement*100)+'% directional sample agreement · '+(spread*100).toFixed(1)+'¢ spread. Evidence score, not win probability; validate with settled paper rounds.',side:dir,ask:sideAsk,bid:sideBid,expiresAt:expiryMs(m),spread,momentum,features:[1,Math.min(1,Math.abs(momentum)/.1),Math.min(1,spread/.06),Math.min(1,left/930),agreement]};
+ return {action:'BUY '+dir,score,reason:asset+' multi-factor signal: '+(momentum*100).toFixed(1)+'¢ momentum · '+Math.round(agreement*100)+'% directional sample agreement · '+(spread*100).toFixed(1)+'¢ spread. Evidence score, not win probability; validate with settled paper rounds.',side:dir,ask:sideAsk,bid:sideBid,expiresAt:expiryMs(m),spread,momentum,agreement,features:[1,Math.min(1,Math.abs(momentum)/.1),Math.min(1,spread/.06),Math.min(1,left/930)]};
 }
 function exitFor(m,stale){
  const side=$('side').value,entry=Number($('entry').value)/100,qty=Number($('qty').value),fees=Number($('fees').value);
