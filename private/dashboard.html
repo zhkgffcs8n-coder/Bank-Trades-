@@ -101,7 +101,7 @@ function exitFor(m,stale){
  return action+' · estimated sell at bid '+fmt(bid)+' · estimated P/L $'+pnl.toFixed(2)+' ('+roi.toFixed(1)+'% before market impact). This is a rules-based alert, not a prediction or guaranteed fill.';
 }
 function show(){
- const r=current(),m=r?.market,now=Date.now(),stale=!Number.isFinite(fetched)||!fetched||Math.abs(now-fetched)>25000;
+ const r=current(),m=r?.market,now=Date.now(),stale=!Number.isFinite(fetched)||!fetched||Math.abs(now-fetched)>45000;
  $('title').textContent=selected+(m?' · '+(m.title||m.ticker):' · No verified open market');
  const seconds=m?Math.max(0,Math.floor((expiryMs(m)-now)/1000)):NaN;
  $('left').textContent=Number.isFinite(seconds)?Math.floor(seconds/60)+'m '+String(seconds%60).padStart(2,'0')+'s':'—';
@@ -121,7 +121,7 @@ function show(){
 
  $('exit').textContent=exitFor(m,stale);
  $('age').textContent=fetched?Math.round((now-fetched)/1000)+'s':'—';
- if(stale){$('health').textContent='● STALE / OFFLINE';$('health').className='pill red'}
+ if(stale){$('health').textContent='● STALE / OFFLINE';$('health').className='pill red'}else{$('health').textContent='● FEED CONNECTED';$('health').className='pill green'}
 }
 function draw(){
  const c=$('chart'),ctx=c.getContext('2d'),w=c.clientWidth||320,h=230,dpr=devicePixelRatio||1;
@@ -137,7 +137,7 @@ function render(){
  $('coins').innerHTML=assets.map(a=>{const r=rows.find(x=>x.asset===a),m=r?.market,ask=val(m,'yes_ask');return `<button class="coin ${selected===a?'active':''}" data-asset="${a}"><strong>${a}</strong><small>${m?fmt(ask)+' YES ask':'No verified contract'}</small><small>${m?'Closes '+esc(new Date(expiryMs(m)).toLocaleTimeString()):r?.error?'Feed error':'Unavailable'}</small></button>`}).join('');
  document.querySelectorAll('[data-asset]').forEach(b=>b.onclick=()=>{selected=b.dataset.asset;show();render();draw();$('book').textContent='Load depth for '+selected});
  const ranking=rows.filter(x=>x.market).map(r=>{const a=val(r.market,'yes_ask'),b=val(r.market,'yes_bid');return {...r,spread:a!=null&&b!=null&&a>=b?a-b:null}}).filter(x=>x.spread!=null).sort((a,b)=>a.spread-b.spread);
- const candidates=rows.filter(r=>r.market).map(r=>({...r,sig:signalFor(r.asset,r.market,Date.now()-fetched>30000)})).filter(r=>r.sig.action!=='WAIT').sort((a,b)=>b.sig.score-a.sig.score);
+ const candidates=rows.filter(r=>r.market).map(r=>({...r,sig:signalFor(r.asset,r.market,Date.now()-fetched>45000)})).filter(r=>r.sig.action!=='WAIT').sort((a,b)=>b.sig.score-a.sig.score);
  $('rank').innerHTML=candidates.length?candidates.map((r,i)=>`<div class="rank"><b>${i+1}. ${esc(r.asset)} — ${esc(r.sig.action)}</b> · screening score ${r.sig.score}/100<br><small>${esc(r.sig.reason)}</small></div>`).join(''):'No markets pass the BUY filters yet. Collecting samples; no trade is recommended.';
  show();draw();
 }
