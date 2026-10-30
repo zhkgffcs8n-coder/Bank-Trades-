@@ -197,6 +197,15 @@ exports.handler=async event=>{
       });
     }
 
+    if(q.mode==='btc-candles'){
+      const granularity=60,end=Math.floor(Date.now()/60000)*60000;
+      const start=end-180*60000;
+      const url='https://api.exchange.coinbase.com/products/BTC-USD/candles?'+new URLSearchParams({granularity:String(granularity),start:new Date(start).toISOString(),end:new Date(end).toISOString()});
+      const rows=await get(url,6500);
+      if(!Array.isArray(rows))throw Error('Invalid BTC candle feed');
+      const candles=rows.filter(x=>Array.isArray(x)&&x.length>=6&&x.slice(0,6).every(Number.isFinite)&&x[0]*1000<end).map(x=>({t:x[0],low:x[1],high:x[2],open:x[3],close:x[4],volume:x[5]})).sort((a,b)=>a.t-b.t);
+      return reply(200,{source:'Coinbase Exchange BTC-USD 1-minute completed candles; not Kalshi settlement oracle',fetched_at:new Date().toISOString(),granularity_seconds:60,candles});
+    }
     if(q.mode==='spot'){
       const asset=String(q.asset||'').toUpperCase();
 
