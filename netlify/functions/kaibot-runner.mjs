@@ -26,14 +26,34 @@ export default async()=>{
   const won=(t.side==='up'&&o.result==='yes')||(t.side==='down'&&o.result==='no'),payout=won?t.qty:0;
   ledger.cash=Math.round((ledger.cash+payout)*100)/100;t.status='SETTLED';t.settlement=o.result;t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
  }
+ // Paper-only exit simulation: use the executable bid, never the mid/ask.
+ // This does not imply a real Kalshi order could fill at that price or quantity.
+ for(const t of ledger.trades.filter(x=>x.status==='OPEN')){
+  try{
+   const result=await get(base+'/markets/'+encodeURIComponent(t.ticker)),m=result?.market;
+   if(!m||!['open','active'].includes(String(m.status||'').toLowerCase()))continue;
+   const bid=q(m,t.side==='up'?'yes_bid':'no_bid'),ask=q(m,t.side==='up'?'yes_ask':'no_ask');
+   if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5)continue;
+   const roi=(bid-Number(t.ask))/Number(t.ask);
+   const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'');
+   const secondsLeft=(expiry-now)/1000;
+   const reason=roi<=-.12?'PAPER STOP LOSS':roi>=.20?'PAPER TAKE PROFIT':secondsLeft>0&&secondsLeft<=90?'PAPER TIME EXIT':null;
+   if(!reason)continue;
+   const proceeds=Math.round(Number(t.qty)*bid)/100;
+   t.status='CLOSED';t.exitReason=reason;t.exitBid=bid;t.exitedAt=now;
+   t.pnl=Math.round((proceeds-Number(t.cost))*100)/100;
+   t.paperExitOnly=true;
+   ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;
+  }catch(e){console.warn('Paper exit quote unavailable',t.ticker,String(e))}
+ }
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
- const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.ticker));
+ const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.asset));
  for(const [asset,series] of Object.entries(SERIES)){
   try{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(m.ticker))continue;
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Read the same paper-only signal rules as the dashboard; preserve execution as a separate step.
    const signal=gatePaperEntry({...paperSignal(m,records,null,now),asset},stats);
@@ -42,7 +62,7 @@ export default async()=>{
    const side=signal.side,ask=signal.ask;
    // BTC remains disabled for automatic paper entries pending independent validation.
    if(asset==='BTC')continue;
-   const max=Math.min(1000,Math.max(1,Number(state.maxSpend)||50)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
+   const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch{}
  }
