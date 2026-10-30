@@ -23,13 +23,13 @@ async function cycle(){
   spent=load().trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);
   for(const row of data.results||[]){
    const m=row.market;if(!m||!m.ticker||attempted.has(m.ticker))continue;
-   const time=Date.parse(m.expires_at)-Date.now();if(!Number.isFinite(time)||time<75000||time>930000)continue;
+   const time=Date.parse(m.expires_at)-Date.now();if(!Number.isFinite(time)||time<360000||time>930000)continue;
    const yb=quote(m,'yes_bid'),ya=quote(m,'yes_ask'),nb=quote(m,'no_bid'),na=quote(m,'no_ask');
-   if(![yb,ya,nb,na].every(Number.isFinite)||Math.min(yb,ya,nb,na)<=0||Math.max(yb,ya,nb,na)>=100||ya<yb||na<nb||Math.max(ya-yb,na-nb)>6)continue;
+   if(![yb,ya,nb,na].every(Number.isFinite)||Math.min(yb,ya,nb,na)<=0||Math.max(yb,ya,nb,na)>=100||ya<yb||na<nb||Math.max(ya-yb,na-nb)>3)continue;
    const h=samples.get(m.ticker)||[];h.push({t:Date.now(),v:(yb+ya)/2});while(h.length>12)h.shift();samples.set(m.ticker,h);
    if(h.length<6||h[h.length-1].t-h[0].t<50000)continue;
    const change=h[h.length-1].v-h[0].v,side=change>3?'up':change< -3?'down':null;if(!side)continue;
-   const ask=side==='up'?ya:na;if(ask<12||ask>85)continue;
+   const ask=side==='up'?ya:na;if(ask<35||ask>80)continue;
    const max=Math.min(20,Math.max(1,Number(el('kaiMax').value)||5));
    const qty=Math.min(5,Math.floor(max/(ask/100))),cost=qty*ask/100;
    if(!qty||spent+cost>25)continue;
