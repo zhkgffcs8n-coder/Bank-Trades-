@@ -21,6 +21,7 @@ button{background:#253b5b;border:1px solid #476084;color:white;border-radius:9px
 input,select{background:#0c1b2e;color:white;border:1px solid #4a6182;border-radius:8px;padding:9px;max-width:105px}label{font-size:12px;color:#b7c9e1}canvas{width:100%;height:230px;border:1px solid var(--line);border-radius:10px;background:#071426}
 pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 @media(min-width:720px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}.columns{grid-template-columns:1.25fr 1fr}}
+.pro-tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.pro-tabs button{white-space:nowrap}.pro-tabs button.active{background:linear-gradient(120deg,#765817,#d2a342);color:#07101c}.pro-panel{display:none}.pro-panel.active{display:block}.pro-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.pro-price{border:1px solid #95722e;border-radius:14px;padding:17px;background:#101c2c}.pro-price b{font-size:27px;color:#ffd477}.pro-state{color:#ffd477}.pro-up{color:#50e6b4}.pro-down{color:#ff8091}.pro-market{padding:12px;border-bottom:1px solid #30415c;display:flex;align-items:center;justify-content:space-between;gap:12px}.pro-market:last-child{border-bottom:0}.pro-market small{display:block}.pro-flag{font-size:11px;color:#ffd477}.pro-disabled{opacity:.8}.pro-grid pre{overflow:auto}@media(max-width:500px){.pro-market{font-size:12px}}
 </style></head><body><main>
 <header><div><div class="brand">BANK <span>TRADES</span> PRO</div><div class="tag">KALSHI • 15-MINUTE INTELLIGENCE</div></div><div id="health" class="pill">CONNECTING</div></header>
 <section class="card"><div class="tag">LIVE RESEARCH TERMINAL</div><h1>TRADE THE DATA.<br><span style="color:var(--gold)">NOT THE HYPE.</span></h1><p>Eight-coin scanner, live Kalshi quotes, momentum watch signals, exit-risk rules, voice notifications, and a rolling quote chart. All recommendations fail closed when data is stale or missing.</p>
@@ -37,6 +38,13 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 <div class="toolbar"><label>Side <select id="side"><option>YES</option><option>NO</option></select></label><label>Entry (¢) <input id="entry" type="number" value="50" min="1" max="99" step=".1"></label><label>Contracts <input id="qty" type="number" value="10" min="1" max="10000"></label><label>Fees ($) <input id="fees" type="number" value="0" min="0" step=".01"></label></div>
 <div id="exit">Select a market to inspect executable quote availability.</div><p>Exit decisions require your position size, entry price, current executable bid, fees, and settlement outlook. This dashboard does not access private positions.</p></section>
 <section class="card"><h2>SYSTEM DIAGNOSTICS</h2><pre id="diagnostics">Starting…</pre></section></div></div>
+<section class="card" id="pro"><div class="between"><div><div class="tag">BANK TRADES PRO · MEMBER TERMINAL</div><h2>ALL-MARKET INTELLIGENCE</h2></div><span class="pill" id="proStatus">CHECKING DATA</span></div>
+<div class="pro-tabs" role="tablist" aria-label="Trading platform sections"><button class="active" data-protab="scanner">⚡ LIVE SIGNALS</button><button data-protab="paper">📊 PAPER TRADE</button><button data-protab="real">🔒 AUTO TRADE</button><button data-protab="member">♛ MEMBERSHIP</button><button data-protab="learning">🧠 LEARNING LAB</button></div>
+<div class="pro-panel active" id="pro-scanner"><p>Every supported market is checked independently. Data-quality rankings are not BUY UP/DOWN predictions. Never infer a winning direction from spreads alone.</p><div id="proMarkets">Loading market-wide quality scanner…</div><small>Source: Kalshi public quotes · research only · stale and unavailable markets rejected.</small></div>
+<div class="pro-panel" id="pro-paper"><h2>Paper Trading · Demo</h2><p>Simulation and persistent trade ledger are in development. No fake balances or simulated fills are presented as real performance.</p><div class="notice">PAPER TRADING NOT ACTIVE — no orders are submitted.</div></div>
+<div class="pro-panel" id="pro-real"><h2>Real-Money Auto Trading</h2><div class="notice">LOCKED · Real-money order execution is not implemented. Do not enter Kalshi API keys into this site yet. Secure server-side authentication, key encryption, account isolation, limits and a kill switch are required before launch.</div></div>
+<div class="pro-panel" id="pro-member"><h2>VIP Memberships</h2><div class="pro-grid"><div class="pro-price">WEEKLY<br><b>$50</b><small>per week</small></div><div class="pro-price">MONTHLY<br><b>$60</b><small>per month</small></div><div class="pro-price">ANNUAL<br><b>$600</b><small>per year</small></div></div><p>Secure email registration and billing checkout are not active yet. No payments are accepted through this preview.</p></div>
+<div class="pro-panel" id="pro-learning"><h2>Market Memory &amp; Model Validation</h2><p>Planned: persistent timestamped candles, market outcomes, walk-forward backtests, model calibration and versioned retraining. No historical AI learning or accuracy metric is active yet.</p><div class="notice">MODEL STATUS: NOT TRAINED · PREDICTIONS NOT CALIBRATED</div></div></section>
 <div class="notice">RESEARCH / PAPER-ONLY BUILD. No live-money order submission, no stored credentials, and no automatic bets. BUY YES/NO and SELL alerts are experimental rules, not validated trading recommendations. Screening scores are not win probabilities. No win rate or profit is guaranteed. Missing data means WAIT, not a fabricated BUY signal.</div>
 </main><script>
 (()=>{'use strict';
@@ -132,5 +140,36 @@ $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://
 window.addEventListener('resize',draw);
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
 refresh();
+})();
+</script><script>
+(()=>{'use strict';
+ const tabs=document.querySelectorAll('[data-protab]');
+ tabs.forEach(b=>b.addEventListener('click',()=>{
+  tabs.forEach(x=>x.classList.toggle('active',x===b));
+  document.querySelectorAll('.pro-panel').forEach(p=>p.classList.toggle('active',p.id==='pro-'+b.dataset.protab));
+ }));
+ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ let lastOk=0;
+ async function update(){
+  const status=document.getElementById('proStatus'),out=document.getElementById('proMarkets');
+  try{
+   const ctrl=new AbortController(),timeout=setTimeout(()=>ctrl.abort(),11000);
+   let response;
+   try{response=await fetch('/api/data?mode=signals',{cache:'no-store',signal:ctrl.signal});}
+   finally{clearTimeout(timeout);}
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json();
+   const ts=Date.parse(data.fetched_at);
+   if(!Number.isFinite(ts)||Math.abs(Date.now()-ts)>30000)throw Error('Stale source timestamp');
+   if(!Array.isArray(data.results))throw Error('Invalid response');
+   const items=data.results.flatMap(x=>(x.signals||[]).map(s=>({asset:x.asset,...s})));
+   const errors=data.results.filter(x=>x.error);
+   items.sort((a,b)=>b.quality_score-a.quality_score);
+   out.innerHTML=items.length?items.map(s=>'<div class="pro-market"><div><b>'+esc(s.asset)+'</b> · '+esc(s.ticker)+'<small>'+esc(s.stage)+' · '+esc((s.reasons||[]).join('; '))+'</small></div><div><b class="pro-state">'+esc(s.signal)+'</b><small>Quote quality '+esc(s.quality_score)+'/100</small></div></div>').join(''):'No valid active markets returned.';
+   if(errors.length)out.insertAdjacentHTML('beforeend','<p>Unavailable feeds: '+errors.map(x=>esc(x.asset)).join(', ')+'</p>');
+   lastOk=Date.now();status.textContent='● LIVE RESEARCH';status.className='pill green';
+  }catch(e){status.textContent='● DATA UNAVAILABLE';status.className='pill red';out.textContent='Scanner unavailable: '+e.message+'. No trading signal is issued.';}
+ }
+ update();setInterval(()=>{if(!document.hidden)update();else if(Date.now()-lastOk>30000){const s=document.getElementById('proStatus');s.textContent='● PAUSED';s.className='pill red';}},15000);
 })();
 </script></body></html>
