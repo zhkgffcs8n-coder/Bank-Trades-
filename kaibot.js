@@ -4,7 +4,7 @@ const el=id=>document.getElementById(id);
 const start=el('kaiStart'),stop=el('kaiStop'),status=el('kaiState'),output=el('kaiLog');
 if(!start||!stop||!status||!output)return;
 let active=false,busy=false,day=new Date().toDateString(),spent=0;
-const samples=new Map(),attempted=new Set(),exitNotified=new Set();
+const samples=new Map(),attempted=new Set(),exitNotified=new Set(),reentrySeen=new Set();
 const key='banktrades.paper.v2.'+window.__BANK_TRADES_USER_ID__;
 const log=msg=>{const line=document.createElement('div');line.className='rank';line.textContent=new Date().toLocaleTimeString()+' · '+msg;output.prepend(line);while(output.children.length>15)output.lastChild.remove()};
 const quote=(m,k)=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN;
@@ -50,7 +50,13 @@ async function cycle(){
   await syncCloud();
   spent=load().trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);
   for(const row of data.results||[]){
-   const m=row.market;if(!m||!m.ticker||attempted.has(m.ticker))continue;
+   const m=row.market;if(!m||!m.ticker)continue;
+   const priorTrades=load().trades.filter(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER');
+   const priorClosed=priorTrades.filter(t=>t.status==='CLOSED');
+   const isReentry=priorClosed.length>0;
+   if(priorTrades.some(t=>t.status==='OPEN'||t.status==='SETTLED'))continue;
+   if(!isReentry&&attempted.has(m.ticker))continue;
+   if(isReentry&&reentrySeen.has(m.ticker))continue;
    const time=Date.parse(m.expires_at)-Date.now();if(!Number.isFinite(time)||time<360000||time>930000)continue;
    const yb=quote(m,'yes_bid'),ya=quote(m,'yes_ask'),nb=quote(m,'no_bid'),na=quote(m,'no_ask');
    if(![yb,ya,nb,na].every(Number.isFinite)||Math.min(yb,ya,nb,na)<=0||Math.max(yb,ya,nb,na)>=100||ya<yb||na<nb||Math.max(ya-yb,na-nb)>3)continue;
@@ -65,15 +71,17 @@ async function cycle(){
     if(btcEvidence.direction!==side||Math.abs(btcEvidence.bull-btcEvidence.bear)<2){status.textContent='BTC PAPER: Kalshi and BTCUSD indicators disagree; no BTC trade';continue;}
    }
    const ask=side==='up'?ya:na;if(ask<35||ask>80)continue;
+   if(isReentry){const last=priorClosed[priorClosed.length-1];if(!last||String(last.side).toLowerCase()!==side)continue;if(Date.now()-Number(last.closedAt||last.at)<30000)continue;if(time<420000)continue;if(Math.abs(change)<4)continue;if(isBTC){const lock=window.__BANK_TRADES_BTC_LOCK__;if(!lock||Date.now()-Number(lock.at)>90000||lock.direction!==side||lock.flipCandidate||lock.quality<65)continue;}}
    const max=Math.min(1000,Math.max(1,Number(el('kaiMax').value)||50));
    const qty=Math.min(10000,Math.floor(Math.min(max,load().cash)/(ask/100))),cost=qty*ask/100;
    if(!qty||cost>1000)continue;
    if(!navigator.locks)throw Error('Safe paper-ledger locking is unavailable');
-   await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(cost>1000)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);return}
+   await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(cost>1000)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER'&&(t.status==='OPEN'||t.status==='SETTLED'))){attempted.add(m.ticker);return}
    book.cash=Math.round((book.cash-cost)*100)/100;
-   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
-   save(book);queueMicrotask(()=>syncCloud().catch(()=>{}));window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
-   log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
+   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',entryType:isReentry?'REENTRY':'INITIAL',reentryAfter:isReentry?priorClosed[priorClosed.length-1]?.closedAt:null,evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
+   save(book);queueMicrotask(()=>syncCloud().catch(()=>{}));window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);if(isReentry)reentrySeen.add(m.ticker);spent+=cost;
+   const prefix=isReentry?'SIMULATED RE-ENTRY ':'SIMULATED BUY ';log(prefix+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
+   if(isReentry)window.dispatchEvent(new CustomEvent('banktrades:kai-reentry',{detail:{ticker:m.ticker,asset:row.asset,side,ask,qty,cost}}));
    });
   }
   status.textContent='PAPER BOT ON · Virtual cash $'+load().cash.toFixed(2)+' / $1,000';
