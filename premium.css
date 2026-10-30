@@ -37,3 +37,69 @@ header{grid-column:1/-1;margin:0 0 16px;padding:4px 0 16px}
 @media(min-width:1600px){.premium-market-strip{grid-template-columns:repeat(8,minmax(0,1fr))}}
 @media(max-width:1250px){main{grid-template-columns:145px minmax(0,1fr);gap:0 12px}.premium-grid{grid-template-columns:1fr 1fr}.terminal-analysis.card{grid-column:1/-1}.terminal-analysis .metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.terminal-analysis .metric{display:block}.terminal-analysis .toolbar button{font-size:11px}.terminal-analysis .signal{font-size:23px}.terminal-analysis p{font-size:12px}}
 @media(max-width:800px){main{display:block;padding:12px 12px 80px}header{gap:10px;align-items:center;margin-bottom:10px}.brand{font-size:20px}.tag{font-size:8px;letter-spacing:.6px}.pill{font-size:9px;padding:7px;white-space:nowrap}.terminal-sidebar{border:0;padding:0;margin-bottom:14px}.sidebar-caption,.sidebar-note{display:none}.terminal-nav{display:flex;overflow:auto;gap:6px;padding-bottom:5px}.terminal-nav a{white-space:nowrap;font-size:11px;padding:9px;border:1px solid #293748}.terminal-heading h1{font-size:18px}.terminal-heading p{font-size:10px}.terminal-link{font-size:9px;padding:8px}.premium-market-strip{grid-template-columns:repeat(4,minmax(125px,1fr));overflow:auto;padding-bottom:5px}.premium-grid{grid-template-columns:1fr}.premium-chart{height:260px}.premium-table{min-width:0;font-size:11px}.premium-table th{font-size:9px}.premium-table td{padding:10px 4px}.terminal-analysis.card{grid-column:auto}.terminal-analysis .metrics{grid-template-columns:repeat(3,minmax(0,1fr))}.terminal-analysis .metric small{font-size:8px}.terminal-analysis .metric b{font-size:11px}.columns{grid-template-columns:1fr}.premium-panel .between{flex-wrap:wrap}.premium-panel h2{margin-bottom:0}.terminal-analysis .signal{font-size:26px}.terminal-analysis p{font-size:12px}}
+
+/* BANK TRADES PRO — PREMIUM DASHBOARD UPGRADE */
+
+:root {
+  --gold: #f3c65e;
+  --green: #36e2a0;
+  --red: #ff627e;
+}
+
+body {
+  background: #03070e;
+}
+
+.premium-panel,
+.terminal-analysis.card {
+  background: linear-gradient(145deg, #101927, #070c15);
+  border: 1px solid #293647;
+  box-shadow: 0 12px 28px #0006;
+}
+
+.premium-tile {
+  background: linear-gradient(135deg, #142033, #090f19);
+  border: 1px solid #303b4b;
+}
+
+.premium-action.up { color: var(--green); }
+.premium-action.down { color: var(--red); }
+
+@media (min-width: 1251px) {
+  main {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .premium-grid {
+    grid-template-columns: 1.18fr 1fr 0.72fr;
+  }
+  .premium-market-strip {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 800px) {
+  main { padding: 12px 12px 85px; }
+  .terminal-nav {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+  }
+  .terminal-nav a {
+    white-space: nowrap;
+    min-height: 44px;
+  }
+  .premium-market-strip {
+    display: flex;
+    overflow-x: auto;
+    gap: 9px;
+  }
+  .premium-tile {
+    flex: 0 0 155px;
+  }
+  .premium-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .premium-panel { padding: 14px; }
+  .premium-chart { height: 270px; }
+}
