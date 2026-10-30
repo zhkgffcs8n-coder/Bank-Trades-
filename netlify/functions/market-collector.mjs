@@ -18,6 +18,22 @@ export default async()=>{
   await db.setJSON('samples/'+asset+'/'+bucket,record);
   await db.setJSON('latest/'+asset,record);
  }catch{}}));
+ // Label recently expired sampled contracts from official finalized market records.
+ try{
+  const listed=await db.list({prefix:'latest/',limit:20});
+  const latest=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+  for(const rec of latest){
+   if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
+   const labelKey='outcomes/'+rec.ticker;
+   if(await db.get(labelKey,{type:'json'}))continue;
+   try{
+    const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
+    const value=Number(m?.settlement_value_dollars),result=m?.result;
+    const finalized=m?.status==='finalized'&&m?.market_type==='binary'&&m?.is_provisional!==true&&['yes','no'].includes(result)&&value===(result==='yes'?1:0);
+    if(finalized)await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record'});
+   }catch{}
+  }
+ }catch{}
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };
