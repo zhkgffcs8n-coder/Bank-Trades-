@@ -76,7 +76,7 @@ function exitFor(m,stale){
 function show(){
  const r=current(),m=r?.market,now=Date.now(),stale=!fetched||(now-fetched)>30000;
  $('title').textContent=selected+(m?' · '+(m.title||m.ticker):' · No verified open market');
- $('left').textContent=m?Math.max(0,Math.floor((expiryMs(m)-now)/60))+'m':'—';
+ $('left').textContent=m?Math.max(0,Math.floor((expiryMs(m)-now)/60000))+'m':'—';
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  $('yes').textContent=fmt(yb)+' / '+fmt(ya);$('no').textContent=fmt(nb)+' / '+fmt(na);
  let reason='';if(stale)reason='Feed stale or unavailable. Do not trade from this quote.';
