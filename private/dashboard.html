@@ -193,14 +193,14 @@ let book=safe(),markets=[];
 const money=v=>'$'+Number(v).toFixed(2);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(book))}catch{}}
 function render(){
- $('paperSummary').textContent='VIRTUAL CASH '+money(book.cash)+' · Open paper positions '+book.trades.filter(t=>t.status!=='CLOSED').length+' · Closed P/L '+money(book.trades.reduce((sum,t)=>sum+(Number(t.pnl)||0),0))+' before fees · No real orders';
+ $('paperSummary').textContent='VIRTUAL CASH '+money(book.cash)+' · Open paper positions '+book.trades.filter(t=>t.status==='OPEN').length+' · Closed P/L '+money(book.trades.reduce((sum,t)=>sum+(Number(t.pnl)||0),0))+' before fees · No real orders';
  $('paperLedger').textContent='';
  for(const t of book.trades.slice(-12).reverse()){
  const el=document.createElement('div');el.className='pro-market';
  const label=document.createElement('span');label.textContent=t.asset+' '+t.side.toUpperCase()+' · '+t.qty+' contracts @ '+t.ask.toFixed(1)+'¢';
  const info=document.createElement('small');info.textContent='Simulated '+new Date(t.at).toLocaleString()+' · '+t.ticker+' · '+(t.status||'OPEN');
  el.append(label,info);
- if(t.status==='CLOSED'){const outcome=document.createElement('small');outcome.textContent='Closed at '+t.exitBid.toFixed(1)+'¢ · P/L '+money(t.pnl)+' before fees';el.append(outcome)}else{
+ if(t.status==='CLOSED'||t.status==='SETTLED'){const outcome=document.createElement('small');outcome.textContent=t.status==='SETTLED'?'Kalshi settlement '+t.settlement+' · Virtual P/L '+money(t.pnl)+' before fees':'Closed at '+t.exitBid.toFixed(1)+'¢ · P/L '+money(t.pnl)+' before fees';el.append(outcome)}else{
  const close=document.createElement('button');close.textContent='SIMULATE SELL AT BID';close.onclick=async()=>{close.disabled=true;try{
   await refresh();const row=markets.find(r=>r.market.ticker===t.ticker),m=row?.market;
   const k=t.side==='up'?'yes_bid':'no_bid',raw=m?.[k+'_dollars'],bid=raw!=null?Number(raw)*100:Number(m?.[k]);
