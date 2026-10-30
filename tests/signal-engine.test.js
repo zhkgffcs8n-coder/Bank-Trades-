@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {analyzeMarket,rankMarkets}=require('../netlify/functions/signal-engine');
+const now=Date.parse('2026-10-29T20:00:00Z');
+const market={ticker:'KXBTC15M-TEST',expires_at:new Date(now+600000).toISOString(),yes_bid:45,yes_ask:48,no_bid:52,no_ask:55};
+const valid=analyzeMarket(market,now);
+assert.equal(valid.stage,'DATA READY');
+assert.equal(valid.signal,'AVOID');
+assert.equal(valid.estimated_win_probability,null);
+assert.ok(valid.quality_score>0);
+assert.equal(analyzeMarket({...market,yes_ask:70},now).stage,'DATA REJECTED');
+assert.equal(analyzeMarket({...market,yes_bid:90},now).stage,'DATA REJECTED');
+assert.equal(analyzeMarket({...market,expires_at:new Date(now+20000).toISOString()},now).stage,'DATA REJECTED');
+assert.equal(analyzeMarket({...market,no_ask:null},now).stage,'DATA REJECTED');
+assert.equal(rankMarkets([market,{...market,ticker:'BAD',yes_ask:90}],now)[0].ticker,market.ticker);
+console.log('Signal engine guardrail tests passed');
