@@ -76,7 +76,7 @@ if(host){
  let botBusy=false;
  async function reconcileBot(){
   if(botBusy||document.hidden||!navigator.locks)return;let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};
-  const due=(ledger?.trades||[]).filter(t=>t.source==='KAIBOT PAPER'&&t.status==='OPEN'&&t.ticker&&Date.now()-t.at>60000).slice(0,8);
+  const due=(ledger?.trades||[]).filter(t=>t.status!=='CLOSED'&&t.status!=='SETTLED'&&t.ticker&&Date.now()-t.at>60000).slice(0,8);
   if(!due.length){renderBot();return}botBusy=true;
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
   try{
@@ -85,7 +85,7 @@ if(host){
    await navigator.locks.request(paperKey,()=>{
     let b;try{b=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};if(!b||!Array.isArray(b.trades)||!Number.isFinite(b.cash))return;
     let changed=false;
-    for(const t of b.trades){if(t.source!=='KAIBOT PAPER'||t.status!=='OPEN')continue;
+    for(const t of b.trades){if(t.status==='CLOSED'||t.status==='SETTLED'||!t.ticker)continue;
      const result=d.results?.find(x=>x.ticker===t.ticker);if(!result?.finalized||!['yes','no'].includes(result.result))continue;
      const won=(t.side==='up'&&result.result==='yes')||(t.side==='down'&&result.result==='no');
      const payout=won?t.qty:0;const cost=Number(t.cost);if(!Number.isFinite(cost)||!Number.isFinite(payout)||!Number.isInteger(t.qty)||t.qty<=0)continue;
