@@ -8,7 +8,19 @@ export default async()=>{
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN')){
-  const o=await hdb.get('outcomes/'+t.ticker,{type:'json'});if(!o)continue;
+  let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
+  if(!['yes','no'].includes(String(o?.result||'').toLowerCase())){
+   try{
+    const official=await get(base+'/markets/'+encodeURIComponent(t.ticker));
+    const market=official?.market;
+    const result=String(market?.result||'').toLowerCase();
+    if(['yes','no'].includes(result)&&['settled','finalized'].includes(String(market?.status||'').toLowerCase())){
+     o={result,source:'Kalshi official finalized market',verifiedAt:now};
+     await hdb.setJSON('outcomes/'+t.ticker,o);
+    }
+   }catch(e){console.warn('KaiBot settlement lookup unavailable',t.ticker,String(e))}
+  }
+  if(!['yes','no'].includes(String(o?.result||'').toLowerCase()))continue;
   const won=(t.side==='up'&&o.result==='yes')||(t.side==='down'&&o.result==='no'),payout=won?t.qty:0;
   ledger.cash=Math.round((ledger.cash+payout)*100)/100;t.status='SETTLED';t.settlement=o.result;t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
  }
