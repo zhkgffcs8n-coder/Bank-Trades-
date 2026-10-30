@@ -8,6 +8,8 @@ if(host){
  const detail=document.createElement('p');detail.className='premium-foot';host.append(detail);
  const breakdown=document.createElement('div');breakdown.className='premium-foot';host.append(breakdown);
  const recent=document.createElement('div');recent.className='premium-foot';host.append(recent);
+ const diagnostics=document.createElement('div');diagnostics.className='premium-foot';host.append(diagnostics);
+
  const exportButton=document.createElement('button');exportButton.textContent='EXPORT RESEARCH RESULTS / BACKUP';host.append(exportButton);
  const storageNote=document.createElement('p');storageNote.className='premium-foot';storageNote.textContent='Stored in this browser only. Export backups regularly; clearing site data or changing devices can erase history. Accuracy uses finalized signals only, not paper-trade profit.';host.append(storageNote);
  const save=()=>{try{localStorage.setItem(key,JSON.stringify(state));}catch{detail.textContent='Device storage unavailable. Research results are not saved.';}};
@@ -20,12 +22,26 @@ if(host){
   for(const [asset,v] of [...byAsset.entries()].sort((a,b)=>a[0].localeCompare(b[0]))){const p=document.createElement('p');const n=v.wins+v.losses;p.textContent=asset+' · '+v.wins+' W / '+v.losses+' L · '+(100*v.wins/n).toFixed(1)+'% ('+n+' settled)';breakdown.append(p)}
   recent.replaceChildren();const rh=document.createElement('strong');rh.textContent='LAST FINALIZED SIGNALS';recent.append(rh);
   for(const o of settled.slice(-8).reverse()){const p=document.createElement('p');p.textContent=new Date(o.at).toLocaleString()+' · '+o.asset+' · '+(o.action==='BUY YES'?'BUY UP':'BUY DOWN')+' · '+(o.outcome===1?'WIN':'LOSS')+' · '+o.ticker;recent.append(p)}
+  diagnostics.replaceChildren();
+  const heading=document.createElement('strong');heading.textContent='RECENT ACCURACY & CALIBRATION';diagnostics.append(heading);
+  const recentSettled=settled.slice(-50),recentWins=recentSettled.filter(o=>o.outcome===1).length;
+  const n=recentSettled.length;
+  const z=1.96,rate50=n?recentWins/n:0,den=1+z*z/Math.max(n,1);
+  const lower=n?(rate50+z*z/(2*n)-z*Math.sqrt(rate50*(1-rate50)/n+z*z/(4*n*n)))/den:0;
+  const upper=n?(rate50+z*z/(2*n)+z*Math.sqrt(rate50*(1-rate50)/n+z*z/(4*n*n)))/den:0;
+  const rec=document.createElement('p');rec.textContent=n?'Last '+n+' finalized signals: '+recentWins+' W / '+(n-recentWins)+' L · '+(100*rate50).toFixed(1)+'% observed · 95% Wilson interval '+(100*lower).toFixed(0)+'–'+(100*upper).toFixed(0)+'%':'No recent finalized signals yet';diagnostics.append(rec);
+  const caution=document.createElement('p');caution.textContent=settled.length<30?'LOW SAMPLE: fewer than 30 finalized signals; do not rely on the win rate.':settled.length<100?'LIMITED SAMPLE: fewer than 100 finalized signals; uncertainty remains high.':'Historical outcomes do not guarantee future results; correlated signals can exaggerate apparent precision.';diagnostics.append(caution);
+  const bins=[{lo:0,hi:.25},{lo:.25,hi:.5},{lo:.5,hi:.75},{lo:.75,hi:1.00001}];
+  for(const b of bins){const group=settled.filter(o=>Number.isFinite(o.prediction)&&o.prediction>=b.lo&&o.prediction<b.hi);if(!group.length)continue;const predicted=group.reduce((s,o)=>s+o.prediction,0)/group.length;const actual=group.filter(o=>o.outcome===1).length/group.length;const p=document.createElement('p');p.textContent='Predicted '+Math.round(b.lo*100)+'–'+Math.round(Math.min(1,b.hi)*100)+'%: '+group.length+' settled · mean forecast '+(100*predicted).toFixed(1)+'% vs observed '+(100*actual).toFixed(1)+'%';diagnostics.append(p)}
+  const recentBrier=recentSettled.length?recentSettled.reduce((s,o)=>s+(o.prediction-o.outcome)**2,0)/recentSettled.length:null;
+  const recentBase=recentSettled.length?recentSettled.reduce((s,o)=>s+(o.baseline-o.outcome)**2,0)/recentSettled.length:null;
+  const score=document.createElement('p');score.textContent=recentBrier===null?'Recent forecast error: not available':'Last '+n+' Brier error '+recentBrier.toFixed(4)+' vs market-price baseline '+recentBase.toFixed(4)+' (lower is better)'+(recentBrier<recentBase?' · research forecast lower error':' · no demonstrated improvement');diagnostics.append(score);
   detail.textContent=m.count?`Prospective Brier score ${(m.brier/m.count).toFixed(4)} · entry-ask baseline ${(m.baselineBrier/m.count).toFixed(4)} (lower is better). This device only. Uncalibrated; correlated samples; no guaranteed improvement. Research model does not control orders.`:'Logs predictions before results arrive, then updates a small online model only after finalized binary settlement. No synthetic wins. Runs while this page is open. Does not control orders.';
  }
  window.addEventListener('banktrades:signals',e=>{
   for(const s of e.detail||[]){
    if(s.action==='WAIT'||!s.ticker||!validFeatures(s.features)||!Number.isFinite(s.ask)||s.ask<=0||s.ask>=1||!Number.isFinite(s.expiresAt)||s.expiresAt<=Date.now()||state.observations.some(o=>o.ticker===s.ticker))continue;
-   if(state.observations.length>=1000)continue;
+   if(state.observations.length>=1000){const oldIndex=state.observations.findIndex(o=>o.outcome===0||o.outcome===1);if(oldIndex<0)continue;state.observations.splice(oldIndex,1);}
    state.observations.push({ticker:s.ticker,asset:s.asset,action:s.action,at:Date.now(),expiresAt:s.expiresAt,features:s.features,baseline:s.ask,prediction:predict(state.model,s.ask,s.features),modelVersion:state.model.count});
   }save();render();
  });
