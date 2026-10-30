@@ -42,3 +42,9 @@
   for = "/dashboard"
   [headers.values]
     Cache-Control = "private, no-store"
+
+[[redirects]]
+  from = "/api/market-history"
+  to = "/.netlify/functions/market-history"
+  status = 200
+  force = true
