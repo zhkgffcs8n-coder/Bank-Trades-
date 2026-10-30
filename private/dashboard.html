@@ -71,7 +71,10 @@ function signalFor(asset,m,stale){
  const first=recent[0].v,last=recent[4].v;
  const momentum=last-first,dir=momentum>.025?'YES':momentum<-.025?'NO':null;
  const sideAsk=dir==='YES'?ya:na,sideBid=dir==='YES'?yb:nb;
- if(!dir||sideAsk>.88||sideAsk<.12)return {action:'WAIT',score:0,reason:'No meaningful short-term quote momentum or price outside guardrails'};
+ if(!dir)return {action:'WAIT',score:0,reason:'No meaningful short-term quote momentum'};
+ if(left<360)return {action:'WAIT',score:0,reason:'Late entry blocked: fewer than 6 minutes remain; momentum alone is not a reliable edge'};
+ if(sideAsk<.35||sideAsk>.80)return {action:'WAIT',score:0,reason:'Entry blocked: selected contract ask outside conservative 35–80¢ research band ('+(sideAsk*100).toFixed(1)+'¢)'};
+ if(spread>.03)return {action:'WAIT',score:0,reason:'Entry blocked: spread above 3¢; momentum may not cover trading costs'};
  const score=Math.min(90,Math.round(40+Math.abs(momentum)*300+Math.max(0,.06-spread)*160));
  return {action:'BUY '+dir,score,reason:'Experimental momentum signal: '+(momentum*100).toFixed(1)+'¢ over recent samples; spread '+(spread*100).toFixed(1)+'¢. NOT a proven probability edge; verify before trading.',side:dir,ask:sideAsk,bid:sideBid,expiresAt:expiryMs(m),features:[1,Math.min(1,Math.abs(momentum)/.1),Math.min(1,spread/.06),Math.min(1,left/930)]};
 }
