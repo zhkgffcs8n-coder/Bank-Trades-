@@ -22,11 +22,24 @@ function analyzeMarket(m,now=Date.now()){
   if(quotes.upBid===0||quotes.downBid===0)reasons.push('Insufficient two-sided liquidity');
  }
  const quality=reasons.length?0:Math.max(0,Math.min(100,Math.round(100-3*((quotes.upAsk-quotes.upBid)+(quotes.downAsk-quotes.downBid)))));
- return {ticker,signal:'AVOID',stage:reasons.length?'DATA REJECTED':'DATA READY',quality_score:quality,
+ return {ticker,signal:reasons.length?'WAIT':'HOLD',stage:reasons.length?'DATA REJECTED':'DATA READY',quality_score:quality,
   estimated_win_probability:null,seconds_left:Number.isFinite(remaining)?Math.max(0,Math.floor(remaining)):null,
   quotes,reasons:reasons.length?reasons:['Directional signals require validated historical data']};
 }
 function rankMarkets(markets,now=Date.now()){
  return markets.map(m=>analyzeMarket(m,now)).sort((a,b)=>b.quality_score-a.quality_score||a.ticker.localeCompare(b.ticker));
 }
-module.exports={analyzeMarket,rankMarkets};
+// Shared paper-only position guidance; never infer a BUY from spread quality alone.
+function positionAlert(m,position,now=Date.now()){
+ const market=analyzeMarket(m,now);
+ if(!position)return {...market,signal:'WAIT',reasons:[...market.reasons,'No position; entry requires independently validated directional evidence']};
+ if(market.stage!=='DATA READY')return {...market,signal:'WAIT',reasons:[...market.reasons,'Exit quote unavailable; review position manually']};
+ const side=String(position.side||'').toLowerCase();
+ const bid=side==='up'?market.quotes.upBid:side==='down'?market.quotes.downBid:NaN;
+ const entry=Number(position.ask);
+ if(!Number.isFinite(entry)||entry<=0||!Number.isFinite(bid))return {...market,signal:'WAIT',reasons:['Missing entry or executable exit bid']};
+ const roi=(bid-entry)/entry;
+ const signal=roi<=-.12?'SELL FAST':'HOLD';
+ return {...market,signal,unrealized_roi:roi,reasons:[signal==='SELL FAST'?'Paper stop-loss threshold crossed; executable bid may change':'Paper position open; no stop-loss threshold crossed']};
+}
+module.exports={analyzeMarket,rankMarkets,positionAlert};
