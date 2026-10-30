@@ -86,6 +86,7 @@ async function loadSharedSignals(){
   if(!Number.isFinite(time)||Math.abs(Date.now()-time)>45000||!Array.isArray(data.results))throw Error('Stale shared feed');
   sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
+  if(data.performance)window.dispatchEvent(new CustomEvent('banktrades:paper-performance',{detail:data.performance}));
   announceAllEntries();
  }catch(e){sharedSignals.clear();sharedFetched=0}
 }
