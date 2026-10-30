@@ -1,3 +1,4 @@
+import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
 import {getStore} from '@netlify/blobs';
 
@@ -18,6 +19,21 @@ export default async()=>{
   const record={asset,ticker:m.ticker,t:bucket,expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   await db.setJSON('samples/'+asset+'/'+bucket,record);
   await db.setJSON('latest/'+asset,record);
+  // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
+  try{
+   const comparisonKey='comparison/v1/'+m.ticker;
+   if(!await db.get(comparisonKey,{type:'json'})){
+    const history=await db.list({prefix:'samples/'+asset+'/',limit:30});
+    const records=(await Promise.all(history.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
+    const candidate=paperSignal(m,records,null,now,null);
+    if(['BUY UP','BUY DOWN'].includes(candidate.action)){
+     const a={action:candidate.action,side:candidate.side,ask:candidate.ask,score:candidate.score};
+     const b=Number(candidate.score)>=75&&Number(candidate.ask)<=65?{...a}:{action:'WAIT',reason:'Upgraded conservative quality gate'};
+     await db.setJSON(comparisonKey,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,engines:{original:a,upgraded:b},status:'PENDING',version:1});
+    }
+   }
+  }catch(e){console.warn('Shadow comparison collection failed',asset,String(e))}
+
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
    const model=await db.get('training/model',{type:'json'})||initialModel();
@@ -49,6 +65,22 @@ export default async()=>{
      await db.delete('pending/'+rec.ticker);
     }
    }catch{}
+  }
+  // Resolve the same observed contracts for both strategies using official finalized outcomes.
+  const comparisons=await db.list({prefix:'comparison/v1/',limit:1000});
+  for(const item of comparisons.blobs){
+   const rec=await db.get(item.key,{type:'json'});
+   if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
+   const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
+   if(!['yes','no'].includes(outcome?.result))continue;
+   for(const engine of Object.values(rec.engines||{})){
+    if(!['up','down'].includes(engine.side)||engine.action==='WAIT')continue;
+    const won=(engine.side==='up')===(outcome.result==='yes');
+    engine.pnl=Number(((won?1:0)-Number(engine.ask)/100).toFixed(4));
+    engine.won=won;engine.resolved=true;
+   }
+   rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
+   await db.setJSON(item.key,rec);
   }
   await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,mode:'PAPER RESEARCH'});
  }catch(e){console.error('Training update failed',String(e))}
