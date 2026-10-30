@@ -3,8 +3,7 @@
     "@netlify/blobs": "^11.1.7",
     "@netlify/identity": "^2.0.0",
     "esbuild": "^0.28.2",
-    "stripe": "^23.0.0",
-    "web-push": "^3.6.7"
+    "stripe": "^23.0.0"
   },
   "name": "bank-trades-pro",
   "version": "1.0.0",
