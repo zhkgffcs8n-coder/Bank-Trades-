@@ -4,7 +4,7 @@ const base='https://api.elections.kalshi.com/trade-api/v2',db=()=>getStore({name
 const q=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}finally{clearTimeout(t)}}
 export default async()=>{
- const s=db(),state=await s.get('state',{type:'json'});if(!state?.running)return new Response(null,{status:204});
+ const s=db(),state=await s.get('state',{type:'json'});
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN')){
@@ -24,6 +24,7 @@ export default async()=>{
   const won=(t.side==='up'&&o.result==='yes')||(t.side==='down'&&o.result==='no'),payout=won?t.qty:0;
   ledger.cash=Math.round((ledger.cash+payout)*100)/100;t.status='SETTLED';t.settlement=o.result;t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
  }
+ if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.ticker));
  for(const [asset,series] of Object.entries(SERIES)){
   try{
