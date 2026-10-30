@@ -131,6 +131,34 @@ exports.handler=async event=>{
         research_only:true,calibrated_probabilities:false,results});
     }
 
+    if(q.mode==='commodities'){
+      // Search live Kalshi events by commodity keywords rather than assuming series tickers.
+      const names=['GOLD','SILVER','PLATINUM','PALLADIUM','COPPER','OIL','NATURAL GAS'];
+      const matches=[];
+      let cursor='';
+      for(let page=0;page<4;page++){
+        const params=new URLSearchParams({status:'open',limit:'200',with_nested_markets:'true'});
+        if(cursor)params.set('cursor',cursor);
+        const data=await get(base+'/events?'+params.toString(),6500);
+        for(const e of data.events||[]){
+          const title=String(e.title||'');
+          const hit=names.find(n=>new RegExp('\\b'+n.replace(' ','\\s+')+'\\b','i').test(title));
+          if(!hit)continue;
+          const markets=(e.markets||[]).filter(m=>m.status==='active'||m.status==='open').map(m=>({
+            ticker:m.ticker,title:m.title,yes_bid:m.yes_bid,yes_ask:m.yes_ask,
+            no_bid:m.no_bid,no_ask:m.no_ask,close_time:m.close_time,
+            expiration_time:m.expiration_time,volume:m.volume
+          }));
+          if(markets.length)matches.push({commodity:hit,event_ticker:e.event_ticker,title,markets});
+        }
+        cursor=data.cursor||'';
+        if(!cursor)break;
+      }
+      return reply(200,{source:'Kalshi public events API',fetched_at:new Date().toISOString(),
+        search_scope:'First 800 currently open events; results are not exhaustive',
+        commodities:names,events:matches,research_only:true});
+    }
+
     if(q.mode==='orderbook'){
       const ticker=String(q.ticker||'');
 
