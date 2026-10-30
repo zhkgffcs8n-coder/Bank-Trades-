@@ -1,7 +1,7 @@
 (()=>{
 'use strict';
 const uid=window.__BANK_TRADES_USER_ID__;if(!uid)return;
-const key='banktrades.paper.v1.'+uid;
+const key='banktrades.paper.v2.'+uid;
 const style=document.createElement('style');style.textContent=`
 #btAlert{position:fixed;top:env(safe-area-inset-top,0px);left:50%;transform:translateX(-50%);width:min(96vw,620px);z-index:2147483000;background:#101925;color:white;border:2px solid #e8b954;box-shadow:0 12px 55px #000b;border-radius:0 0 18px 18px;padding:12px 15px;display:none;font:700 15px system-ui}
 #btAlert strong{display:block;font-size:clamp(19px,5vw,29px);letter-spacing:.03em}
@@ -21,7 +21,7 @@ function alertNow(kind,message,id){if(id===dismissed)return;if(id!==lastAlert){l
 const host=document.getElementById('pro-paper');if(!host)return;
 const panel=document.createElement('section');panel.id='btPaperStats';const heading=document.createElement('h3');heading.textContent='KAIBOT · LIVE KALSHI PAPER PERFORMANCE';const metrics=document.createElement('div');metrics.className='btMetrics';const table=document.createElement('table');panel.append(heading,metrics,table);host.insertBefore(panel,host.querySelector('#paperLedger'));
 const money=n=>'$'+(Number(n)||0).toFixed(2);
-const read=()=>{try{const b=JSON.parse(localStorage.getItem(key));return b&&Array.isArray(b.trades)?b:{cash:10000,trades:[]}}catch{return {cash:10000,trades:[]}}};
+const read=()=>{try{const b=JSON.parse(localStorage.getItem(key));return b&&Array.isArray(b.trades)?b:{cash:1000,trades:[]}}catch{return {cash:1000,trades:[]}}};
 const quote=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
 async function refresh(){
  try{const response=await fetch('/api/data?mode=markets',{cache:'no-store'});if(!response.ok)throw Error('feed unavailable');const data=await response.json();if(!Number.isFinite(Date.parse(data.fetched_at))||Date.now()-Date.parse(data.fetched_at)>30000)throw Error('stale feed');quotes=new Map((data.results||[]).filter(x=>x.market?.ticker).map(x=>[x.market.ticker,x.market]));lastFetch=Date.now()}catch{quotes=new Map();lastFetch=0}
