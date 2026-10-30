@@ -17,20 +17,25 @@ export default async()=>{
   const record={asset,ticker:m.ticker,t:bucket,expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   await db.setJSON('samples/'+asset+'/'+bucket,record);
   await db.setJSON('latest/'+asset,record);
+  await db.setJSON('pending/'+m.ticker,{ticker:m.ticker,asset,expiresAt:m._expiry});
  }catch{}}));
- // Label recently expired sampled contracts from official finalized market records.
+ // Track every sampled contract, not just the latest contract for each asset.
+ // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
-  const listed=await db.list({prefix:'latest/',limit:20});
-  const latest=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-  for(const rec of latest){
+  const listed=await db.list({prefix:'pending/',limit:1000});
+  const pending=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+  for(const rec of pending){
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
    const labelKey='outcomes/'+rec.ticker;
-   if(await db.get(labelKey,{type:'json'}))continue;
+   if(await db.get(labelKey,{type:'json'})){await db.delete('pending/'+rec.ticker);continue;}
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
     const value=Number(m?.settlement_value_dollars),result=m?.result;
     const finalized=m?.status==='finalized'&&m?.market_type==='binary'&&m?.is_provisional!==true&&['yes','no'].includes(result)&&value===(result==='yes'?1:0);
-    if(finalized)await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record'});
+    if(finalized){
+     await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record'});
+     await db.delete('pending/'+rec.ticker);
+    }
    }catch{}
   }
  }catch{}
