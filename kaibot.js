@@ -70,3 +70,4 @@ async function cycle(){
 start.addEventListener('click',()=>{active=true;samples.clear();status.textContent='PAPER BOT ON · collecting market samples';log('Paper bot started');cycle()});
 stop.addEventListener('click',()=>{active=false;status.textContent='BOT OFF';log('Bot stopped')});
 setInterval(cycle,12000);
+})();
