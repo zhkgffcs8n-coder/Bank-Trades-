@@ -4,6 +4,12 @@ if(host){
  const key='banktrades.learning.v1.'+window.__BANK_TRADES_USER_ID__;
  let state={model:initialModel(),observations:[]};
  try{const saved=JSON.parse(localStorage.getItem(key));if(saved?.model?.weights?.length===4&&saved.model.weights.every(Number.isFinite)&&Array.isArray(saved.observations))state=saved;}catch{}
+ const sharedStatus=document.createElement('p');sharedStatus.className='premium-foot';sharedStatus.textContent='Shared prediction feed: connecting. Research training remains separate until verified feature snapshots and finalized labels are available.';host.append(sharedStatus);
+ window.addEventListener('banktrades:shared-signals',event=>{
+  const signals=Array.isArray(event.detail)?event.detail:[];
+  const buys=signals.filter(s=>s.action==='BUY UP'||s.action==='BUY DOWN');
+  sharedStatus.textContent='SHARED KAIBOT SIGNAL FEED · '+signals.length+' markets · '+buys.length+' experimental BUY alerts · '+signals.filter(s=>s.action==='WAIT').length+' WAIT. Same server predictions as live dashboard; no duplicate learner samples. No live-money orders.';
+ });
  const panel=document.createElement('div');panel.className='notice';host.append(panel);
  const detail=document.createElement('p');detail.className='premium-foot';host.append(detail);
  const breakdown=document.createElement('div');breakdown.className='premium-foot';host.append(breakdown);
