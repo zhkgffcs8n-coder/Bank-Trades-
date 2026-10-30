@@ -40,7 +40,7 @@ export default async()=>{
    // BTC remains disabled for automatic paper entries pending independent validation.
    if(asset==='BTC')continue;
    const max=Math.min(1000,Math.max(1,Number(state.maxSpend)||50)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
-   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{momentum:change,agreement,reversals,spread:Math.max(ya-yb,na-nb),secondsLeft:(m._e-now)/1000}});
+   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,secondsLeft:(m._e-now)/1000}});
   }catch{}
  }
  ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:true});
