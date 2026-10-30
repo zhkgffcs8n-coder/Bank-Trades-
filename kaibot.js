@@ -10,6 +10,18 @@ const log=msg=>{const line=document.createElement('div');line.className='rank';l
 const quote=(m,k)=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN;
 const load=()=>{try{const b=JSON.parse(localStorage.getItem(key));if(b&&Number.isFinite(b.cash)&&Array.isArray(b.trades))return b}catch{}return {cash:1000,trades:[]}};
 function save(b){localStorage.setItem(key,JSON.stringify(b))}
+async function syncCloud(){
+ const book=load();
+ for(const trade of book.trades.filter(t=>t.source==='KAIBOT PAPER'&&t.status==='OPEN'&&t.cloudSaved!==true&&Date.now()-Number(t.at)<7*86400000).slice(0,10)){
+  if(!trade.id)trade.id='paper_'+String(trade.at)+'_'+String(trade.ticker).replace(/[^a-zA-Z0-9_-]/g,'_').slice(0,50);
+  try{
+   const res=await fetch('/.netlify/functions/paper-history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:trade.id,ticker:trade.ticker,asset:trade.asset,side:trade.side,qty:trade.qty,ask:trade.ask,cost:trade.cost,at:trade.at})});
+   if(!res.ok)break;
+   const latest=load(),found=latest.trades.find(t=>t.at===trade.at&&t.ticker===trade.ticker&&t.source==='KAIBOT PAPER');
+   if(found){found.id=trade.id;found.cloudSaved=true;save(latest)}
+  }catch{break}
+ }
+}
 async function cycle(){
  if(!active||busy||document.hidden)return;
  busy=true;
@@ -35,6 +47,7 @@ async function cycle(){
     window.dispatchEvent(new CustomEvent('banktrades:kai-exit',{detail:{ticker:t.ticker,asset:t.asset,side:t.side,entry:t.ask,bid,qty:t.qty,gross}}));
    }
   }
+  await syncCloud();
   spent=load().trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);
   for(const row of data.results||[]){
    const m=row.market;if(!m||!m.ticker||attempted.has(m.ticker))continue;
@@ -59,7 +72,7 @@ async function cycle(){
    await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(cost>1000)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);return}
    book.cash=Math.round((book.cash-cost)*100)/100;
    book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
-   save(book);window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
+   save(book);queueMicrotask(()=>syncCloud().catch(()=>{}));window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
    log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
    });
   }
