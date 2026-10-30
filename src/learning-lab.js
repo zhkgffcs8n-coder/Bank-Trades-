@@ -10,6 +10,16 @@ if(host){
   const buys=signals.filter(s=>s.action==='BUY UP'||s.action==='BUY DOWN');
   sharedStatus.textContent='SHARED KAIBOT SIGNAL FEED · '+signals.length+' markets · '+buys.length+' experimental BUY alerts · '+signals.filter(s=>s.action==='WAIT').length+' WAIT. Same server predictions as live dashboard; no duplicate learner samples. No live-money orders.';
  });
+ const serverTraining=document.createElement('p');serverTraining.className='premium-foot';serverTraining.textContent='SERVER RESEARCH TRAINING · loading verified settlement statistics';host.append(serverTraining);
+ async function refreshServerTraining(){
+  try{
+   const response=await fetch('/.netlify/functions/market-history?asset=BTC',{cache:'no-store'});
+   if(!response.ok)throw Error('status '+response.status);
+   const data=await response.json(),t=data.training;
+   serverTraining.textContent=t?'SHARED SERVER RESEARCH · '+t.count+' finalized predictions · model Brier '+(Number.isFinite(t.brier)?t.brier.toFixed(4):'N/A')+' · market baseline '+(Number.isFinite(t.baselineBrier)?t.baselineBrier.toFixed(4):'N/A')+' · '+(t.validated?'research validation threshold met':'validation incomplete')+' · paper-only':'SHARED SERVER RESEARCH · awaiting first verified training update';
+  }catch{serverTraining.textContent='SHARED SERVER RESEARCH · status temporarily unavailable';}
+ }
+ refreshServerTraining();setInterval(refreshServerTraining,60000);
  const paperPerformance=document.createElement('div');paperPerformance.className='premium-foot';host.append(paperPerformance);
  window.addEventListener('banktrades:paper-performance',event=>{
   const stats=event.detail,overall=stats?.overall;
