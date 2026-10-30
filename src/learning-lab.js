@@ -154,7 +154,7 @@ if(host){
    if(!response.ok)throw Error('HTTP '+response.status);
    const data=await response.json();
    const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
-   const settled=trades.filter(t=>t.status==='SETTLED');
+   const settled=trades.filter(t=>t.status==='SETTLED'||t.status==='CLOSED');
    const resolved=settled.filter(t=>typeof t.pnl==='number'&&Number.isFinite(t.pnl));
    const wins=resolved.filter(t=>t.pnl>0).length;
    const losses=resolved.filter(t=>t.pnl<0).length;
