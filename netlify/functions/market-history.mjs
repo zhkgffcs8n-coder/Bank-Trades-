@@ -9,5 +9,6 @@ export default async req=>{
  const cutoff=Date.now()-4*60*60*1000,records=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
  for(const ticker of tickers){const o=await db.get('outcomes/'+ticker,{type:'json'});if(o)outcomes[ticker]=o}
- return json({asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ const training=await db.get('training/status',{type:'json'});
+ return json({training,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
