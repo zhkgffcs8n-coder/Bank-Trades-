@@ -76,10 +76,18 @@ if(host){
    let response;try{response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timer)}
    if(!response.ok)throw Error('HTTP '+response.status);
    const data=await response.json(),trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
-   const settled=trades.filter(t=>t.status==='SETTLED'),wins=settled.filter(t=>Number(t.pnl)>0).length,losses=settled.filter(t=>Number(t.pnl)<0).length,even=settled.length-wins-losses;
+   const settled=trades.filter(t=>t.status==='SETTLED'),wins=settled.filter(t=>Number(t.pnl)>0).length,losses=settled.filter(t=>Number(t.pnl)<0).length;
    const pending=trades.filter(t=>t.status==='OPEN'||t.status==='PENDING').length;
    const pnl=settled.reduce((sum,t)=>sum+(Number(t.pnl)||0),0);
-   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS · '+settled.length+' settled · '+wins+' wins / '+losses+' losses'+(even?' / '+even+' break-even':'')+' · '+pending+' open · virtual realized P/L 
+   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS · '+settled.length+' settled · '+wins+' wins / '+losses+' losses · '+pending+' open · virtual realized P/L $'+pnl.toFixed(2)+' before fees · '+(data.state?.running?'BOT ON':'BOT OFF');
+   serverHistory.replaceChildren();
+   for(const t of trades.slice().sort((a,b)=>Number(b.settledAt||b.at)-Number(a.settledAt||a.at)).slice(0,15)){
+    const line=document.createElement('p');line.textContent=String(t.asset||t.ticker||'MARKET')+' · '+String(t.side||'').toUpperCase()+' · '+String(t.status||'UNKNOWN')+' · '+String(t.ticker||'');serverHistory.append(line);
+   }
+  }catch(e){serverSummary.textContent='SERVER KAIBOT RESULTS UNAVAILABLE · '+e.message}
+  finally{serverBusy=false}
+ }
+ refreshServerResults();setInterval(refreshServerResults,15000);window.addEventListener('pageshow',refreshServerResults);
  const botResults=document.createElement('div');botResults.className='notice';host.append(botResults);
  const botHistory=document.createElement('div');botHistory.className='premium-foot';host.append(botHistory);
  function renderBot(){
