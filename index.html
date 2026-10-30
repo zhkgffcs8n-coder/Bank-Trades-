@@ -45,13 +45,14 @@ let rows=[],selected='BTC',fetched=0,auto=true,voice=false,history={},lastSpoken
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const val=(m,k)=>{if(!m)return null;const dollars=m[k+'_dollars'];if(dollars!==undefined&&dollars!==null){const n=Number(dollars);return Number.isFinite(n)?n:null}const n=Number(m[k]);return m[k]===undefined||m[k]===null||!Number.isFinite(n)?null:n/100};
 const fmt=n=>n==null?'—':(n*100).toFixed(1)+'¢';
+const expiryMs=m=>{if(!m)return NaN;for(const k of ['expected_expiration_time','expiration_time','close_time']){const t=Date.parse(m[k]);if(Number.isFinite(t))return t}return NaN};
 const say=s=>{if(!voice||!('speechSynthesis'in window)||s===lastSpoken)return;lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.05;window.speechSynthesis.speak(u)};
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
 
 function signalFor(asset,m,stale){
  if(stale||!m)return {action:'WAIT',score:0,reason:'Stale or missing data'};
- const left=(Date.parse(m.close_time)-Date.now())/1000;
+ const left=(expiryMs(m)-Date.now())/1000;
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  if(left<75||left>930||[ya,yb,na,nb].some(x=>x==null||x<=0||x>=1))return {action:'WAIT',score:0,reason:'Expired, too little time, or incomplete quotes'};
  const spread=Math.max(ya-yb,na-nb),h=(history[asset]||[]).filter(x=>x.t>=Date.now()-180000 && x.t>=Date.parse(m.open_time||0));
@@ -75,13 +76,13 @@ function exitFor(m,stale){
 function show(){
  const r=current(),m=r?.market,now=Date.now(),stale=!fetched||(now-fetched)>30000;
  $('title').textContent=selected+(m?' · '+(m.title||m.ticker):' · No verified open market');
- $('left').textContent=m?Math.max(0,Math.floor((Date.parse(m.close_time)-now)/60))+'m':'—';
+ $('left').textContent=m?Math.max(0,Math.floor((expiryMs(m)-now)/60))+'m':'—';
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  $('yes').textContent=fmt(yb)+' / '+fmt(ya);$('no').textContent=fmt(nb)+' / '+fmt(na);
  let reason='';if(stale)reason='Feed stale or unavailable. Do not trade from this quote.';
  else if(!m)reason='No verified open contract for this series.';
  else if([ya,yb,na,nb].some(x=>x==null))reason='Incomplete two-sided quotes. Cannot evaluate an entry.';
- else if(Date.parse(m.close_time)<=now)reason='Contract closed.';
+ else if(expiryMs(m)<=now)reason='Contract closed.';
  else reason='Live quotes verified, but no independently validated directional edge. WAIT for a tested signal; spread alone cannot predict the winner.';
  const sig=signalFor(selected,m,stale);
  $('signal').textContent=sig.action;$('reason').textContent=sig.action==='WAIT'?reason+' '+sig.reason:sig.reason;
@@ -102,7 +103,7 @@ function draw(){
  ctx.fillStyle='#b5c9e4';ctx.font='12px system-ui';ctx.fillText(fmt(pts[pts.length-1].v),10,18);
 }
 function render(){
- $('coins').innerHTML=assets.map(a=>{const r=rows.find(x=>x.asset===a),m=r?.market,ask=val(m,'yes_ask');return `<button class="coin ${selected===a?'active':''}" data-asset="${a}"><strong>${a}</strong><small>${m?fmt(ask)+' YES ask':'No verified contract'}</small><small>${m?'Closes '+esc(new Date(m.close_time||m.expiration_time).toLocaleTimeString()):r?.error?'Feed error':'Unavailable'}</small></button>`}).join('');
+ $('coins').innerHTML=assets.map(a=>{const r=rows.find(x=>x.asset===a),m=r?.market,ask=val(m,'yes_ask');return `<button class="coin ${selected===a?'active':''}" data-asset="${a}"><strong>${a}</strong><small>${m?fmt(ask)+' YES ask':'No verified contract'}</small><small>${m?'Closes '+esc(new Date(expiryMs(m)).toLocaleTimeString()):r?.error?'Feed error':'Unavailable'}</small></button>`}).join('');
  document.querySelectorAll('[data-asset]').forEach(b=>b.onclick=()=>{selected=b.dataset.asset;show();render();draw();$('book').textContent='Load depth for '+selected});
  const ranking=rows.filter(x=>x.market).map(r=>{const a=val(r.market,'yes_ask'),b=val(r.market,'yes_bid');return {...r,spread:a!=null&&b!=null&&a>=b?a-b:null}}).filter(x=>x.spread!=null).sort((a,b)=>a.spread-b.spread);
  const candidates=rows.filter(r=>r.market).map(r=>({...r,sig:signalFor(r.asset,r.market,Date.now()-fetched>30000)})).filter(r=>r.sig.action!=='WAIT').sort((a,b)=>b.sig.score-a.sig.score);
