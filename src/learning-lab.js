@@ -49,7 +49,7 @@ if(host){
   if(!byAsset.size){const p=document.createElement('p');p.textContent='No finalized outcomes recorded on this device yet.';breakdown.append(p)}
   for(const [asset,v] of [...byAsset.entries()].sort((a,b)=>a[0].localeCompare(b[0]))){const p=document.createElement('p');const n=v.wins+v.losses;p.textContent=asset+' · '+v.wins+' W / '+v.losses+' L · '+(100*v.wins/n).toFixed(1)+'% ('+n+' settled)';breakdown.append(p)}
   recent.replaceChildren();const rh=document.createElement('strong');rh.textContent='LAST FINALIZED SIGNALS';recent.append(rh);
-  for(const o of settled.slice(-8).reverse()){const p=document.createElement('p');p.textContent=new Date(o.at).toLocaleString()+' · '+o.asset+' · '+(o.action==='BUY YES'?'BUY UP':'BUY DOWN')+' · '+(o.outcome===1?'WIN':'LOSS')+' · '+o.ticker;recent.append(p)}
+  for(const o of settled.slice(-8).reverse()){const p=document.createElement('p');p.textContent=new Date(o.at).toLocaleString()+' · '+o.asset+' · '+(['BUY YES','BUY UP'].includes(o.action)?'BUY UP':'BUY DOWN')+' · '+(o.outcome===1?'WIN':'LOSS')+' · '+o.ticker;recent.append(p)}
   diagnostics.replaceChildren();
   const heading=document.createElement('strong');heading.textContent='RECENT ACCURACY & CALIBRATION';diagnostics.append(heading);
   const recentSettled=settled.slice(-50),recentWins=recentSettled.filter(o=>o.outcome===1).length;
@@ -74,11 +74,11 @@ if(host){
  }
  window.addEventListener('banktrades:signals',e=>{
   for(const s of e.detail||[]){
-   if(s.action==='WAIT'||!s.ticker||!validFeatures(s.features)||!Number.isFinite(s.ask)||s.ask<=0||s.ask>=1||!Number.isFinite(s.expiresAt)||s.expiresAt<=Date.now()||state.observations.some(o=>o.ticker===s.ticker))continue;
+   if(!['BUY UP','BUY DOWN','BUY YES','BUY NO'].includes(s.action)||!s.ticker||!validFeatures(s.features)||!Number.isFinite(s.ask)||s.ask<=0||s.ask>=1||!Number.isFinite(s.expiresAt)||s.expiresAt<=Date.now()||state.observations.some(o=>o.ticker===s.ticker))continue;
    if(state.observations.length>=1000){const oldIndex=state.observations.findIndex(o=>o.outcome===0||o.outcome===1);if(oldIndex<0)continue;state.observations.splice(oldIndex,1);}
    const lock=s.asset==='BTC'?window.__BANK_TRADES_BTC_LOCK__:null,secondsLeft=Math.max(0,(s.expiresAt-Date.now())/1000),spread=Number(s.spread??s?.meta?.spread),momentum=Number(s.momentum??s.features?.[0]),entry=s.ask;
    const context={entryBand:entry<.45?'35–44¢':entry<.6?'45–59¢':'60¢+',timeBand:secondsLeft<360?'<6m':secondsLeft<600?'6–10m':'10m+',spreadBand:Number.isFinite(spread)?(spread<=.01?'≤1¢':spread<=.03?'2–3¢':'>3¢'):'unknown',momentumBand:Number.isFinite(momentum)?(Math.abs(momentum)<.25?'low':Math.abs(momentum)<.6?'medium':'high'):'unknown',lockBand:lock&&Date.now()-Number(lock.at)<90000?(lock.lockCandidate?'candidate':'tracking'):'none',indicatorBand:lock&&Number.isFinite(lock.quality)?(lock.quality>=75?'strong':lock.quality>=55?'mixed':'weak'):'unknown',regime:Number.isFinite(momentum)?(Math.abs(momentum)>=.6?'trend':Math.abs(momentum)<=.2?'flat':'transition'):'unknown',secondsLeft,spread:Number.isFinite(spread)?spread:null,momentum:Number.isFinite(momentum)?momentum:null,lockQuality:lock?.quality??null};
-   state.observations.push({ticker:s.ticker,asset:s.asset,action:s.action,at:Date.now(),expiresAt:s.expiresAt,features:s.features,baseline:s.ask,prediction:predict(state.model,s.ask,s.features),modelVersion:state.model.count,context});
+   state.observations.push({ticker:s.ticker,asset:s.asset,action:s.action,at:Date.now(),expiresAt:s.expiresAt,features:s.features,baseline:['BUY DOWN','BUY NO'].includes(s.action)?1-s.ask:s.ask,prediction:predict(state.model,['BUY DOWN','BUY NO'].includes(s.action)?1-s.ask:s.ask,s.features),modelVersion:state.model.count,context});
   }save();render();
  });
  let busy=false;
@@ -88,7 +88,7 @@ if(host){
    const r=await fetch('/api/data?mode=outcomes&tickers='+encodeURIComponent(pending.map(o=>o.ticker).join(',')),{cache:'no-store',signal:c.signal});if(!r.ok)throw Error('Outcome feed HTTP '+r.status);
    const data=await r.json();if(Math.abs(Date.now()-Date.parse(data.fetched_at))>30000)throw Error('Stale outcome response');
    for(const o of pending){o.checkedAt=Date.now();const result=data.results?.find(r=>r.ticker===o.ticker);if(!result?.finalized||!['yes','no'].includes(result.result))continue;
-    const y=(o.action==='BUY YES')===(result.result==='yes')?1:0;
+    const y=(['BUY UP','BUY YES'].includes(o.action))===(result.result==='yes')?1:0;
     state.model=learn(state.model,o,y);o.outcome=y;o.finalizedAt=result.settledAt;o.measuredAt=Date.now();
    }save();render();
   }catch(e){detail.textContent='Settlement checks paused: '+e.message+'. Pending outcomes are not counted as wins or losses.';}finally{clearTimeout(timer);busy=false;}
