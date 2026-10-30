@@ -133,6 +133,22 @@ if(host){
 }+pnl.toFixed(2):'P/L unavailable')+' · '+String(t.ticker||'');history.append(line);
    }
    serverSummary.after(history);
+   // Unified verified-market scoreboard: use server paper ledger as the canonical trade result source.
+   // Do not train the prospective prediction model from these trades: they lack stored pre-outcome forecasts.
+   const combined=host.querySelector('[data-unified-results]')||document.createElement('div');
+   combined.dataset.unifiedResults='true';combined.className='notice';
+   const resolved=settled.filter(t=>Number.isFinite(Number(t.pnl)));
+   const winCount=resolved.filter(t=>Number(t.pnl)>0).length;
+   const lossCount=resolved.filter(t=>Number(t.pnl)<0).length;
+   const ties=resolved.length-winCount-lossCount;
+   const totalPnl=resolved.reduce((sum,t)=>sum+Number(t.pnl),0);
+   combined.textContent='UNIFIED KALSHI PAPER RESULTS · '+resolved.length+' settled · '+winCount+' wins / '+lossCount+' losses'+(ties?' / '+ties+' break-even':'')+' · '+(winCount+lossCount?(100*winCount/(winCount+lossCount)).toFixed(1)+'%':'N/A')+' win rate · virtual P/L 
+  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
+ }
+ refreshServerResults();setInterval(refreshServerResults,15000);
+ render();outcomes();setInterval(outcomes,30000);
+}+totalPnl.toFixed(2)+' · '+pending+' open · verified market outcomes, simulated entries';
+   host.prepend(combined);
   }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
  }
  refreshServerResults();setInterval(refreshServerResults,15000);
