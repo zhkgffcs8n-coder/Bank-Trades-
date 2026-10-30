@@ -29,6 +29,13 @@ async function cycle(){
    const h=samples.get(m.ticker)||[];h.push({t:Date.now(),v:(yb+ya)/2});while(h.length>12)h.shift();samples.set(m.ticker,h);
    if(h.length<6||h[h.length-1].t-h[0].t<50000)continue;
    const change=h[h.length-1].v-h[0].v,side=change>3?'up':change< -3?'down':null;if(!side)continue;
+   const isBTC=String(row.asset||'').toUpperCase()==='BTC'||/BTC/i.test(String(row.asset||''));
+   let btcEvidence=null;
+   if(isBTC){
+    btcEvidence=window.__BANK_TRADES_BTC_EVIDENCE__;
+    if(!btcEvidence||!Number.isFinite(btcEvidence.at)||Date.now()-btcEvidence.at>90000||!Number.isFinite(btcEvidence.candleAt)||Date.now()-btcEvidence.candleAt>180000){status.textContent='BTC PAPER: waiting for fresh independent BTCUSD chart confirmation';continue;}
+    if(btcEvidence.direction!==side||Math.abs(btcEvidence.bull-btcEvidence.bear)<2){status.textContent='BTC PAPER: Kalshi and BTCUSD indicators disagree; no BTC trade';continue;}
+   }
    const ask=side==='up'?ya:na;if(ask<35||ask>80)continue;
    const max=Math.min(20,Math.max(1,Number(el('kaiMax').value)||5));
    const qty=Math.min(5,Math.floor(max/(ask/100))),cost=qty*ask/100;
@@ -36,7 +43,7 @@ async function cycle(){
    if(!navigator.locks)throw Error('Safe paper-ledger locking is unavailable');
    await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(spent+cost>25)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);return}
    book.cash=Math.round((book.cash-cost)*100)/100;
-   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN'});
+   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
    save(book);window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
    log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
    });
