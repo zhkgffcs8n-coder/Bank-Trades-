@@ -45,7 +45,7 @@ let rows=[],selected='BTC',fetched=0,auto=true,voice=false,history={},lastSpoken
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const val=(m,k)=>{if(!m)return null;const dollars=m[k+'_dollars'];if(dollars!==undefined&&dollars!==null){const n=Number(dollars);return Number.isFinite(n)?n:null}const n=Number(m[k]);return m[k]===undefined||m[k]===null||!Number.isFinite(n)?null:n/100};
 const fmt=n=>n==null?'—':(n*100).toFixed(1)+'¢';
-const expiryMs=m=>{if(!m)return NaN;for(const k of ['expected_expiration_time','expiration_time','close_time']){const t=Date.parse(m[k]);if(Number.isFinite(t))return t}return NaN};
+const expiryMs=m=>m&&m.expires_at?Date.parse(m.expires_at):NaN;
 const say=s=>{if(!voice||!('speechSynthesis'in window)||s===lastSpoken)return;lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.05;window.speechSynthesis.speak(u)};
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
