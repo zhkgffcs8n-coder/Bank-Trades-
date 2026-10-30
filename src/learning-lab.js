@@ -141,11 +141,11 @@ if(host){
    serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' wins, '+losses+' losses, '+pending+' open.';
    combined.textContent='UNIFIED KALSHI PAPER RESULTS: '+resolved.length+' settled, '+wins+' wins / '+losses+' losses, '+ties+' break-even, '+(wins+losses?(100*wins/(wins+losses)).toFixed(1)+'%':'N/A')+' win rate, virtual P/L $'+totalPnl.toFixed(2)+'. Live market outcomes; simulated trades.';
    history.replaceChildren();
-   const title=document.createElement('strong');title.textContent='SERVER PAPER TRADE HISTORY (latest 20)';history.append(title);
+   const title=document.createElement('strong');title.textContent='SERVER PAPER SETTLEMENTS AND SIMULATED EXITS (latest 20)';history.append(title);
    for(const t of settled.slice(-20).reverse()){
     const line=document.createElement('p');
     const pnl=typeof t.pnl==='number'&&Number.isFinite(t.pnl)?t.pnl:null;
-    line.textContent=String(t.asset||'UNKNOWN')+' / '+String(t.side||'').toUpperCase()+' / '+(pnl===null?'UNKNOWN':pnl>0?'WIN':pnl<0?'LOSS':'BREAK EVEN')+' / '+(pnl===null?'P/L unavailable':'virtual P/L $'+pnl.toFixed(2))+' / '+String(t.ticker||'');
+    line.textContent=String(t.asset||'UNKNOWN')+' / '+String(t.side||'').toUpperCase()+' / '+(pnl===null?'UNKNOWN':pnl>0?'WIN':pnl<0?'LOSS':'BREAK EVEN')+' / '+(pnl===null?'P/L unavailable':'virtual P/L $'+pnl.toFixed(2))+' / '+String(t.ticker||'')+(t.status==='CLOSED'?' / SIMULATED EXIT '+String(t.exitReason||''):'');
     history.append(line);
    }
   }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message;combined.textContent='';history.replaceChildren();}
