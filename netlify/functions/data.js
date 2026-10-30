@@ -16,10 +16,10 @@ exports.handler=async event=>{
     const d=await get(u);
     const now=Date.now();
     const arr=(d.markets||[]).filter(m=>{
-      const close=Date.parse(m.close_time);
-      const remaining=close-now;
-      return (m.status==='active'||m.status==='open') && Number.isFinite(close) && remaining>0 && remaining<=16*60*1000;
-    }).sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time));
+      const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time);
+      const remaining=expiry-now;
+      return (m.status==='active'||m.status==='open') && Number.isFinite(expiry) && remaining>0 && remaining<=16*60*1000;
+    }).sort((a,b)=>Date.parse(a.expected_expiration_time||a.expiration_time||a.close_time)-Date.parse(b.expected_expiration_time||b.expiration_time||b.close_time));
     return {asset,series,market:arr[0]||null,available:true};
    }catch(e){return {asset,series,market:null,available:false,error:String(e.message).slice(0,100)}}
   }));
