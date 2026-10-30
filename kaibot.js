@@ -63,6 +63,9 @@ async function cycle(){
    const h=samples.get(m.ticker)||[];h.push({t:Date.now(),v:(yb+ya)/2});while(h.length>12)h.shift();samples.set(m.ticker,h);
    if(h.length<6||h[h.length-1].t-h[0].t<50000)continue;
    const change=h[h.length-1].v-h[0].v,side=change>3?'up':change< -3?'down':null;if(!side)continue;
+   const moves=h.slice(1).map((p,i)=>p.v-h[i].v);const agreement=moves.filter(x=>side==='up'?x>0:x<0).length/moves.length;
+   const reversals=moves.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(moves[i])&&Math.abs(x)>.4&&Math.abs(moves[i])>.4).length;
+   if(agreement<.65||reversals>2)continue;
    const isBTC=String(row.asset||'').toUpperCase()==='BTC'||/BTC/i.test(String(row.asset||''));
    let btcEvidence=null;
    if(isBTC){
@@ -78,7 +81,7 @@ async function cycle(){
    if(!navigator.locks)throw Error('Safe paper-ledger locking is unavailable');
    await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(cost>1000)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER'&&(t.status==='OPEN'||t.status==='SETTLED'))){attempted.add(m.ticker);return}
    book.cash=Math.round((book.cash-cost)*100)/100;
-   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',entryType:isReentry?'REENTRY':'INITIAL',reentryAfter:isReentry?priorClosed[priorClosed.length-1]?.closedAt:null,evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
+   book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN',entryType:isReentry?'REENTRY':'INITIAL',reentryAfter:isReentry?priorClosed[priorClosed.length-1]?.closedAt:null,signalQuality:{momentum:change,agreement,reversals,spread:Math.max(ya-yb,na-nb),secondsLeft:time/1000},evidence:btcEvidence?{source:btcEvidence.source,at:btcEvidence.at,candleAt:btcEvidence.candleAt,direction:btcEvidence.direction,bull:btcEvidence.bull,bear:btcEvidence.bear,rsi:btcEvidence.rsi,macdHistogram:btcEvidence.macdHistogram}:null});
    save(book);queueMicrotask(()=>syncCloud().catch(()=>{}));window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);if(isReentry)reentrySeen.add(m.ticker);spent+=cost;
    const prefix=isReentry?'SIMULATED RE-ENTRY ':'SIMULATED BUY ';log(prefix+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
    if(isReentry)window.dispatchEvent(new CustomEvent('banktrades:kai-reentry',{detail:{ticker:m.ticker,asset:row.asset,side,ask,qty,cost}}));
