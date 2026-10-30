@@ -27,8 +27,8 @@ export default async()=>{
   if(t.status==='CLOSED'){
    // A simulated early exit has already returned its proceeds to cash. Never pay it twice.
    // Classify the actual paper exit P/L, not the later market outcome.
-   if(!Number.isFinite(t.pnl))continue;
-   t.settlement=t.pnl>0?'WIN':t.pnl<0?'LOSS':'TIE';
+   if(!Number.isFinite(Number(t.pnl)))continue;
+   t.settlement=Number(t.pnl)>0?'WIN':Number(t.pnl)<0?'LOSS':'TIE';
    t.marketResult=o.result;t.outcomeVerifiedAt=now;
   }else{
    ledger.cash=Math.round((ledger.cash+payout)*100)/100;
@@ -52,7 +52,7 @@ export default async()=>{
    const proceeds=Math.round(Number(t.qty)*bid)/100;
    t.status='CLOSED';t.exitReason=reason;t.exitBid=bid;t.exitedAt=now;
    t.pnl=Math.round((proceeds-Number(t.cost))*100)/100;
-   t.paperExitOnly=true;
+   t.paperExitOnly=true;t.settlement=t.pnl>0?'WIN':t.pnl<0?'LOSS':'TIE';t.settledAt=now;
    ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;
   }catch(e){console.warn('Paper exit quote unavailable',t.ticker,String(e))}
  }
@@ -63,15 +63,18 @@ export default async()=>{
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const research={model:await hdb.get('training/model',{type:'json'}),status:training};
  const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.asset));
+ const recentlyTraded=new Set(ledger.trades.filter(x=>Number(x.at)>now-15*60*1000).map(x=>x.asset));
  for(const [asset,series] of Object.entries(SERIES)){
   try{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset))continue;
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset)||recentlyTraded.has(asset)||ledger.trades.some(t=>t.ticker===m.ticker))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Read the same paper-only signal rules as the dashboard; preserve execution as a separate step.
    const signal=gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats);
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    if(signal.action!=='BUY UP'&&signal.action!=='BUY DOWN')continue;
+   // Conservative paper-only quality gate: require stronger agreement and narrow spreads.
+   if(Number(signal.score)<75||Number(signal.ask)>65)continue;
    const side=signal.side,ask=signal.ask;
    // BTC remains disabled for automatic paper entries pending independent validation.
    if(asset==='BTC')continue;
