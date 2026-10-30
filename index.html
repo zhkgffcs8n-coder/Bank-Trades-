@@ -51,7 +51,7 @@ function current(){return rows.find(x=>x.asset===selected)}
 
 function signalFor(asset,m,stale){
  if(stale||!m)return {action:'WAIT',score:0,reason:'Stale or missing data'};
- const left=(Date.parse(m.close_time||m.expiration_time)-Date.now())/1000;
+ const left=(Date.parse(m.close_time)-Date.now())/1000;
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  if(left<75||left>930||[ya,yb,na,nb].some(x=>x==null||x<=0||x>=1))return {action:'WAIT',score:0,reason:'Expired, too little time, or incomplete quotes'};
  const spread=Math.max(ya-yb,na-nb),h=(history[asset]||[]).filter(x=>x.t>=Date.now()-180000 && x.t>=Date.parse(m.open_time||0));
@@ -75,13 +75,13 @@ function exitFor(m,stale){
 function show(){
  const r=current(),m=r?.market,now=Date.now(),stale=!fetched||(now-fetched)>30000;
  $('title').textContent=selected+(m?' · '+(m.title||m.ticker):' · No verified open market');
- $('left').textContent=m?Math.max(0,Math.floor((Date.parse(m.close_time||m.expiration_time)-now)/60))+'m':'—';
+ $('left').textContent=m?Math.max(0,Math.floor((Date.parse(m.close_time)-now)/60))+'m':'—';
  const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
  $('yes').textContent=fmt(yb)+' / '+fmt(ya);$('no').textContent=fmt(nb)+' / '+fmt(na);
  let reason='';if(stale)reason='Feed stale or unavailable. Do not trade from this quote.';
  else if(!m)reason='No verified open contract for this series.';
  else if([ya,yb,na,nb].some(x=>x==null))reason='Incomplete two-sided quotes. Cannot evaluate an entry.';
- else if(Date.parse(m.close_time||m.expiration_time)<=now)reason='Contract closed.';
+ else if(Date.parse(m.close_time)<=now)reason='Contract closed.';
  else reason='Live quotes verified, but no independently validated directional edge. WAIT for a tested signal; spread alone cannot predict the winner.';
  const sig=signalFor(selected,m,stale);
  $('signal').textContent=sig.action;$('reason').textContent=sig.action==='WAIT'?reason+' '+sig.reason:sig.reason;
