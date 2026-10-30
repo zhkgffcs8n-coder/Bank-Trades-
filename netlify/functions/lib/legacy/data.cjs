@@ -51,6 +51,20 @@ exports.handler=async event=>{
   const q=event.queryStringParameters||{};
 
   try{
+    if(q.mode==='outcomes'){
+      const tickers=[...new Set(String(q.tickers||'').split(','))];
+      if(!tickers.length||tickers.length>8||tickers.some(t=>!/^[A-Z0-9-]{6,100}$/.test(t)||!Object.values(SERIES).some(s=>t.startsWith(s+'-'))))return reply(400,{error:'Invalid supported market tickers'});
+      const results=await Promise.all(tickers.map(async ticker=>{
+        try{
+          const {market:m}=await get(base+'/markets/'+encodeURIComponent(ticker));
+          if(m?.ticker!==ticker)throw Error('Mismatched market');
+          const value=Number(m.settlement_value_dollars),result=m.result;
+          const finalized=m.settlement_value_dollars!=null&&m.status==='finalized'&&m.market_type==='binary'&&m.is_provisional!==true&&['yes','no'].includes(result)&&Number.isFinite(Date.parse(m.settlement_ts))&&value===(result==='yes'?1:0);
+          return {ticker,finalized,result:finalized?result:null,settledAt:finalized?m.settlement_ts:null};
+        }catch{return {ticker,finalized:false,result:null,error:'Outcome unavailable'};}
+      }));
+      return reply(200,{fetched_at:new Date().toISOString(),source:'Kalshi finalized market records',results});
+    }
     if((q.mode||'markets')==='markets'){
       const results=await Promise.all(
         Object.entries(SERIES).map(async([asset,series])=>{
@@ -122,7 +136,7 @@ exports.handler=async event=>{
       return reply(200,{ticker,fetched_at:new Date().toISOString(),period_minutes:1,source:'Kalshi contract candles',candlesticks:d.candlesticks||[]});
     }
     if(q.mode==='signals'){
-      const {rankMarkets}=require('./signal-engine');
+      const {rankMarkets}=require('./signal-engine.cjs');
       const results=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
         try{
           const url=base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'});

@@ -9,8 +9,9 @@ const banner=document.createElement('div');banner.setAttribute('role','status');
 const heading=document.createElement('h2');heading.textContent='ON-SCREEN ALERTS';
 const alertPanel=document.createElement('section');alertPanel.className='card';alertPanel.append(heading);$('liveTerminal').after(alertPanel);
 const entries=document.createElement('div');alertPanel.append(entries);
-let journal=[];try{journal=JSON.parse(localStorage.getItem('banktrades.observations.v1')||'[]');if(!Array.isArray(journal))journal=[]}catch{}
-const save=()=>{try{localStorage.setItem('banktrades.observations.v1',JSON.stringify(journal.slice(-200)))}catch{}};
+const journalKey='banktrades.observations.v1.'+window.__BANK_TRADES_USER_ID__;
+let journal=[];try{journal=JSON.parse(localStorage.getItem(journalKey)||'[]');if(!Array.isArray(journal))journal=[]}catch{}
+const save=()=>{try{localStorage.setItem(journalKey,JSON.stringify(journal.slice(-200)))}catch{}};
 const quote=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
 const label=a=>a.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');
 function observations(){

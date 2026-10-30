@@ -5,7 +5,7 @@ const start=el('kaiStart'),stop=el('kaiStop'),status=el('kaiState'),output=el('k
 if(!start||!stop||!status||!output)return;
 let active=false,busy=false,day=new Date().toDateString(),spent=0;
 const samples=new Map(),attempted=new Set();
-const key='banktrades.paper.v1';
+const key='banktrades.paper.v1.'+window.__BANK_TRADES_USER_ID__;
 const log=msg=>{const line=document.createElement('div');line.className='rank';line.textContent=new Date().toLocaleTimeString()+' · '+msg;output.prepend(line);while(output.children.length>15)output.lastChild.remove()};
 const quote=(m,k)=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN;
 const load=()=>{try{const b=JSON.parse(localStorage.getItem(key));if(b&&Number.isFinite(b.cash)&&Array.isArray(b.trades))return b}catch{}return {cash:10000,trades:[]}};
@@ -33,11 +33,13 @@ async function cycle(){
    const max=Math.min(20,Math.max(1,Number(el('kaiMax').value)||5));
    const qty=Math.min(5,Math.floor(max/(ask/100))),cost=qty*ask/100;
    if(!qty||spent+cost>25)continue;
-   const book=load();if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);continue}
+   if(!navigator.locks)throw Error('Safe paper-ledger locking is unavailable');
+   await navigator.locks.request(key,()=>{const book=load();spent=book.trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);if(spent+cost>25)return;if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);return}
    book.cash=Math.round((book.cash-cost)*100)/100;
    book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN'});
    save(book);window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
    log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
+   });
   }
   status.textContent='PAPER BOT ON · Virtual daily spend $'+spent.toFixed(2)+' / $25';
  }catch(e){status.textContent='BOT PAUSED · '+e.message;log('No trade: '+e.message)}

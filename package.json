@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "@netlify/blobs": "^11.1.7",
+    "@netlify/identity": "^2.0.0",
+    "esbuild": "^0.28.2",
+    "stripe": "^23.0.0"
+  },
+  "name": "bank-trades-pro",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.15.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test:membership": "node --test tests/membership.test.mjs",
+    "test": "node --test tests/*.test.mjs"
+  }
+}
