@@ -8,6 +8,12 @@ async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort()
 export default async()=>{
  const s=db(),state=await s.get('state',{type:'json'});
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
+ // Reconcile historical simulated early exits from recorded executable bids without paying cash twice.
+ for(const t of ledger.trades.filter(x=>x.status==='CLOSED'&&!x.paperExitOnly)){
+  if(Number.isFinite(Number(t.exitBid))&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))){
+   t.paperExitOnly=true;t.settlement=Number(t.pnl)>0?'WIN':Number(t.pnl)<0?'LOSS':'TIE';t.settledAt=t.exitedAt||now;
+  }
+ }
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN'||(x.status==='CLOSED'&&!['WIN','LOSS'].includes(x.settlement)))){
   let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
