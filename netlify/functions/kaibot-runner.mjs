@@ -46,6 +46,8 @@ export default async()=>{
    ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;
   }catch(e){console.warn('Paper exit quote unavailable',t.ticker,String(e))}
  }
+ const training=await hdb.get('training/status',{type:'json'});
+ await s.setJSON('research-training-status',training||{count:0,validated:false,mode:'PAPER RESEARCH'});
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
