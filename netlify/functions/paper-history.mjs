@@ -1,9 +1,14 @@
 import {getStore} from '@netlify/blobs';
-import {verifyRequestOrigin} from '@netlify/identity';
 import {member,json,errorResponse,fail} from './lib/access.mjs';
 
 const db=()=>getStore({name:'bank-trades-paper-history',consistency:'strong'});
 const safeId=v=>typeof v==='string'&&/^[a-zA-Z0-9_-]{12,100}$/.test(v);
+function requireSameOrigin(req){
+ const origin=req.headers.get('origin');
+ if(!origin)return;
+ let expected;try{expected=new URL(req.url).origin}catch{fail(400,'Invalid request URL')}
+ if(origin!==expected)fail(403,'Cross-site request blocked');
+}
 export default async function(req){
  try{
   if(!['GET','POST'].includes(req.method))fail(405,'Method not allowed');
@@ -14,7 +19,7 @@ export default async function(req){
    const records=await Promise.all(listed.blobs.map(async b=>store.get(b.key,{type:'json'})));
    return json({records:records.filter(Boolean).sort((a,b)=>a.receivedAt-b.receivedAt),hasMore:!!listed.cursor});
   }
-  verifyRequestOrigin(req);
+  requireSameOrigin(req);
   const raw=await req.text();if(raw.length>6000)fail(413,'Record too large');
   let t;try{t=JSON.parse(raw)}catch{fail(400,'Invalid JSON')}
   if(!safeId(t?.id)||typeof t.ticker!=='string'||! /^[A-Za-z0-9_-]{1,120}$/.test(t.ticker)||!['up','down'].includes(t.side))fail(400,'Invalid paper trade');
