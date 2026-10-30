@@ -14,7 +14,12 @@ exports.handler=async event=>{
    try{
     const u=base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'});
     const d=await get(u);
-    const arr=(d.markets||[]).filter(m=>(m.status==='active'||m.status==='open')&&Date.parse(m.close_time||m.latest_expiration_time)>Date.now()).sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time));
+    const now=Date.now();
+    const arr=(d.markets||[]).filter(m=>{
+      const close=Date.parse(m.close_time);
+      const remaining=close-now;
+      return (m.status==='active'||m.status==='open') && Number.isFinite(close) && remaining>0 && remaining<=16*60*1000;
+    }).sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time));
     return {asset,series,market:arr[0]||null,available:true};
    }catch(e){return {asset,series,market:null,available:false,error:String(e.message).slice(0,100)}}
   }));
