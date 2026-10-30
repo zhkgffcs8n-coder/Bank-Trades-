@@ -113,6 +113,14 @@ exports.handler=async event=>{
       });
     }
 
+    if(q.mode==='candles'){
+      const asset=String(q.asset||'').toUpperCase(),ticker=String(q.ticker||'');
+      if(!SERIES[asset]||!ticker.startsWith(SERIES[asset]+'-')||!/^[A-Z0-9-]{6,100}$/.test(ticker))return reply(400,{error:'Invalid market'});
+      const end=Math.floor(Date.now()/1000),start=end-3600;
+      const params=new URLSearchParams({start_ts:String(start),end_ts:String(end),period_interval:'1'});
+      const d=await get(base+'/series/'+encodeURIComponent(SERIES[asset])+'/markets/'+encodeURIComponent(ticker)+'/candlesticks?'+params);
+      return reply(200,{ticker,fetched_at:new Date().toISOString(),period_minutes:1,source:'Kalshi contract candles',candlesticks:d.candlesticks||[]});
+    }
     if(q.mode==='signals'){
       const {rankMarkets}=require('./signal-engine');
       const results=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{

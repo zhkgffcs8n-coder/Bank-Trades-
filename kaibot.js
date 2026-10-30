@@ -20,6 +20,7 @@ async function cycle(){
   if(!res.ok)throw Error('Feed HTTP '+res.status);
   const data=await res.json();
   if(!Number.isFinite(Date.parse(data.fetched_at))||Math.abs(Date.now()-Date.parse(data.fetched_at))>25000)throw Error('Stale feed');
+  spent=load().trades.filter(t=>t.source==='KAIBOT PAPER'&&new Date(t.at).toDateString()===today).reduce((sum,t)=>sum+(Number(t.cost)||0),0);
   for(const row of data.results||[]){
    const m=row.market;if(!m||!m.ticker||attempted.has(m.ticker))continue;
    const time=Date.parse(m.expires_at)-Date.now();if(!Number.isFinite(time)||time<75000||time>930000)continue;
@@ -35,7 +36,7 @@ async function cycle(){
    const book=load();if(book.cash<cost||book.trades.some(t=>t.ticker===m.ticker&&t.source==='KAIBOT PAPER')){attempted.add(m.ticker);continue}
    book.cash=Math.round((book.cash-cost)*100)/100;
    book.trades.push({asset:row.asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,source:'KAIBOT PAPER',status:'OPEN'});
-   save(book);attempted.add(m.ticker);spent+=cost;
+   save(book);window.dispatchEvent(new Event('banktrades:paper'));attempted.add(m.ticker);spent+=cost;
    log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
   }
   status.textContent='PAPER BOT ON · Virtual daily spend $'+spent.toFixed(2)+' / $25';

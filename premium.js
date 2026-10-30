@@ -7,7 +7,7 @@ window.addEventListener('banktrades:signals',event=>{engineSignals=event.detail;
 function price(m,k){if(!m)return NaN;return m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN}
 function cell(tr,v){const td=document.createElement('td');td.textContent=v;tr.append(td);return td}
 function chart(){
- const c=$('premiumChart');if(!c)return;
+ const c=$('premiumChart');if(!c||c.dataset.candles==='true')return;
  const rect=c.getBoundingClientRect(),w=Math.max(200,rect.width),h=Math.max(160,rect.height),dpr=Math.min(devicePixelRatio||1,2);
  c.width=w*dpr;c.height=h*dpr;const ctx=c.getContext('2d');ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);
  ctx.strokeStyle='#283748';ctx.lineWidth=1;
