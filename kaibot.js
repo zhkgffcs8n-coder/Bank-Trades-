@@ -22,6 +22,15 @@ async function syncCloud(){
   }catch{break}
  }
 }
+async function hydrateSamples(){
+ await Promise.all(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'].map(async asset=>{try{
+  const r=await fetch('/api/market-history?asset='+encodeURIComponent(asset),{cache:'no-store'});if(!r.ok)return;
+  const d=await r.json();if(!Array.isArray(d.records)||!d.records.length)return;
+  const ticker=d.records[d.records.length-1]?.ticker;
+  const h=d.records.filter(x=>x.ticker===ticker&&Number.isFinite(x.t)&&Number.isFinite(x.yesMid)).slice(-12).map(x=>({t:x.t,v:x.yesMid}));
+  if(h.length)samples.set(ticker,h);
+ }catch{}}));
+}
 async function cycle(){
  if(!active||busy||document.hidden)return;
  busy=true;
@@ -91,7 +100,7 @@ async function cycle(){
  }catch(e){status.textContent='BOT PAUSED · '+e.message;log('No trade: '+e.message)}
  finally{busy=false}
 }
-start.addEventListener('click',()=>{active=true;samples.clear();status.textContent='PAPER BOT ON · collecting market samples';log('Paper bot started');cycle()});
+start.addEventListener('click',async()=>{active=true;samples.clear();status.textContent='PAPER BOT ON · loading persistent market history';log('Paper bot started');await hydrateSamples();status.textContent='PAPER BOT ON · persistent history loaded';cycle()});
 stop.addEventListener('click',()=>{active=false;status.textContent='BOT OFF';log('Bot stopped')});
 setInterval(cycle,12000);
 })();
