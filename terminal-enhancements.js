@@ -32,6 +32,15 @@ function draw(){
  points.forEach(p=>{c.strokeStyle=c.fillStyle=p.c>=p.o?'#32e4a0':'#ff5774';c.beginPath();c.moveTo(x(p.t),y(p.h));c.lineTo(x(p.t),y(p.l));c.stroke();c.fillRect(x(p.t)-bar/2,Math.min(y(p.o),y(p.c)),bar,Math.max(1,Math.abs(y(p.c)-y(p.o))))});
  let ema=points[0].c;c.strokeStyle='#f5c455';c.beginPath();points.forEach((p,i)=>{ema=i?p.c/3+ema*2/3:p.c;i?c.lineTo(x(p.t),y(ema)):c.moveTo(x(p.t),y(ema))});c.stroke();
  const tail=points.slice(-15);let rsi='—';if(tail.length===15){let gain=0,loss=0;tail.slice(1).forEach((p,i)=>{const diff=p.c-tail[i].c;gain+=Math.max(0,diff);loss+=Math.max(0,-diff)});rsi=(gain+loss===0?50:100*gain/(gain+loss)).toFixed(1)}
+ const emaCalc=(length)=>{let v=points[0].c;return points.map((p,i)=>v=i?v+(p.c-v)*2/(length+1):p.c)};
+ const e9=emaCalc(9),e21=emaCalc(21),e50=emaCalc(50);
+ for(const [series,color] of [[e9,'#39d5e8'],[e21,'#f5aa35'],[e50,'#dc73e8']]){c.strokeStyle=color;c.lineWidth=1.7;c.beginPath();series.forEach((v,i)=>i?c.lineTo(x(points[i].t),y(v)):c.moveTo(x(points[i].t),y(v)));c.stroke();c.lineWidth=1}
+ const highPivot=Math.max(...points.slice(-Math.min(points.length,15)).map(p=>p.h));
+ const lowPivot=Math.min(...points.slice(-Math.min(points.length,15)).map(p=>p.l));
+ for(const [price,color] of [[highPivot,'#ff8091'],[lowPivot,'#50e6b4']]){c.strokeStyle=color;c.setLineDash([5,5]);c.beginPath();c.moveTo(8,y(price));c.lineTo(w-pad,y(price));c.stroke();c.setLineDash([])}
+ const last=points[points.length-1],prior=points.slice(-11,-1);
+ if(prior.length>=5){const priorLow=Math.min(...prior.map(p=>p.l)),priorHigh=Math.max(...prior.map(p=>p.h));const sweepLow=last.l<priorLow&&last.c>priorLow,sweepHigh=last.h>priorHigh&&last.c<priorHigh;
+  if(sweepLow||sweepHigh){c.fillStyle=sweepLow?'#50e6b4':'#ff8091';c.font='bold 11px system-ui';c.fillText(sweepLow?'LOW SWEEP':'HIGH SWEEP',Math.max(8,x(last.t)-75),Math.max(14,Math.min(h-38,y(last.c)+(sweepLow?18:-12))))}}
  metrics.textContent='EMA 5: '+(points.length>=5?ema.toFixed(1)+'¢':'warming up')+' · RSI 14 (simple): '+rsi+' · Descriptive indicators only';
  c.fillStyle='#91a3bb';c.fillText(new Date(points[0].t*1000).toLocaleTimeString(),8,h-8);
 }
