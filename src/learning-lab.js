@@ -119,7 +119,20 @@ if(host){
    const wins=settled.filter(t=>Number(t.pnl)>0).length;
    const losses=settled.filter(t=>Number(t.pnl)<0).length;
    const pending=trades.filter(t=>t.status==='OPEN'||t.status==='PENDING').length;
-   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' wins, '+losses+' losses, '+pending+' open. Separate from research model outcomes.';
+   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' profitable, '+losses+' unprofitable, '+pending+' open. These are simulated trades, not prospective Learning Lab predictions.';
+   const oldServerHistory=host.querySelector('[data-server-paper-history]');if(oldServerHistory)oldServerHistory.remove();
+   const history=document.createElement('div');history.dataset.serverPaperHistory='true';history.className='premium-foot';
+   const title=document.createElement('strong');title.textContent='SERVER PAPER TRADE HISTORY (latest 20)';history.append(title);
+   for(const t of trades.filter(t=>t.status==='SETTLED').slice(-20).reverse()){
+    const line=document.createElement('p');const pnl=Number(t.pnl);
+    line.textContent=String(t.asset||'UNKNOWN')+' · '+String(t.side||'').toUpperCase()+' · '+(Number.isFinite(pnl)?(pnl>0?'WIN':pnl<0?'LOSS':'BREAK EVEN'):'RESULT UNKNOWN')+' · '+(Number.isFinite(pnl)?'virtual P/L 
+  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
+ }
+ refreshServerResults();setInterval(refreshServerResults,15000);
+ render();outcomes();setInterval(outcomes,30000);
+}+pnl.toFixed(2):'P/L unavailable')+' · '+String(t.ticker||'');history.append(line);
+   }
+   serverSummary.after(history);
   }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
  }
  refreshServerResults();setInterval(refreshServerResults,15000);
