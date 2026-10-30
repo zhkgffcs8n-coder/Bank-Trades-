@@ -41,6 +41,44 @@ if(host){
    }save();render();
   }catch(e){detail.textContent='Settlement checks paused: '+e.message+'. Pending outcomes are not counted as wins or losses.';}finally{clearTimeout(timer);busy=false;}
  }
+ const paperKey='banktrades.paper.v1.'+window.__BANK_TRADES_USER_ID__;
+ const botResults=document.createElement('div');botResults.className='notice';host.append(botResults);
+ const botHistory=document.createElement('div');botHistory.className='premium-foot';host.append(botHistory);
+ function renderBot(){
+  let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{}
+  const trades=Array.isArray(ledger?.trades)?ledger.trades.filter(t=>t.source==='KAIBOT PAPER'):[];
+  const resolved=trades.filter(t=>t.settlement==='WIN'||t.settlement==='LOSS');const wins=resolved.filter(t=>t.settlement==='WIN').length;
+  const open=trades.filter(t=>t.status==='OPEN').length;
+  botResults.textContent='KAIBOT PAPER RESULTS · '+wins+' wins / '+(resolved.length-wins)+' losses · '+open+' awaiting settlement · '+(resolved.length?(100*wins/resolved.length).toFixed(1)+'%':'N/A')+' settled win rate';
+  botHistory.replaceChildren();for(const t of trades.slice(-10).reverse()){const p=document.createElement('p');p.textContent=t.asset+' '+t.side.toUpperCase()+' · '+t.qty+' @ '+t.ask.toFixed(1)+'¢ · '+(t.settlement||t.status||'OPEN')+(Number.isFinite(t.pnl)?' · virtual P/L {const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ render();outcomes();setInterval(outcomes,30000);
+}
++t.pnl.toFixed(2):'')+' · '+t.ticker;botHistory.append(p)}
+ }
+ let botBusy=false;
+ async function reconcileBot(){
+  if(botBusy||document.hidden||!navigator.locks)return;let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};
+  const due=(ledger?.trades||[]).filter(t=>t.source==='KAIBOT PAPER'&&t.status==='OPEN'&&t.ticker&&Date.now()-t.at>60000).slice(0,8);
+  if(!due.length){renderBot();return}botBusy=true;
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
+  try{
+   const r=await fetch('/api/data?mode=outcomes&tickers='+encodeURIComponent([...new Set(due.map(t=>t.ticker))].join(',')),{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('Settlement feed '+r.status);
+   const d=await r.json();if(!Number.isFinite(Date.parse(d.fetched_at))||Math.abs(Date.now()-Date.parse(d.fetched_at))>30000)throw Error('Stale settlement feed');
+   await navigator.locks.request(paperKey,()=>{
+    let b;try{b=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};if(!b||!Array.isArray(b.trades)||!Number.isFinite(b.cash))return;
+    let changed=false;
+    for(const t of b.trades){if(t.source!=='KAIBOT PAPER'||t.status!=='OPEN')continue;
+     const result=d.results?.find(x=>x.ticker===t.ticker);if(!result?.finalized||!['yes','no'].includes(result.result))continue;
+     const won=(t.side==='up'&&result.result==='yes')||(t.side==='down'&&result.result==='no');
+     const payout=won?t.qty:0;const cost=Number(t.cost);if(!Number.isFinite(cost)||!Number.isFinite(payout)||!Number.isInteger(t.qty)||t.qty<=0)continue;
+     t.status='SETTLED';t.settlement=won?'WIN':'LOSS';t.settlementResult=result.result;t.settledAt=result.settledAt||Date.now();t.pnl=Math.round((payout-cost)*100)/100;t.payout=payout;b.cash=Math.round((b.cash+payout)*100)/100;changed=true;
+    }
+    if(changed){localStorage.setItem(paperKey,JSON.stringify(b));window.dispatchEvent(new Event('banktrades:paper'))}
+   });renderBot();
+  }catch(e){botResults.textContent='KAIBOT settlement verification pending: '+e.message+' · no result assumed';}finally{clearTimeout(timer);botBusy=false}
+ }
+ window.addEventListener('banktrades:paper',renderBot);
+ renderBot();reconcileBot();setInterval(reconcileBot,30000);
  exportButton.onclick=()=>{const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  render();outcomes();setInterval(outcomes,30000);
 }
