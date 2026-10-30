@@ -20,7 +20,16 @@ if(host){
   const h=document.createElement('strong');h.textContent='SHARED SERVER PAPER PERFORMANCE · VERIFIED SETTLEMENTS';paperPerformance.append(h);
   const total=document.createElement('p');total.textContent=overall.trades+' resolved · '+overall.wins+' W / '+overall.losses+' L · '+pct(overall.winRate)+' wins · paper P/L $'+overall.netPnl.toFixed(2)+' · ROI '+pct(overall.roi);paperPerformance.append(total);
   for(const [name,v] of groups){const row=document.createElement('p');row.textContent=name+' · '+v.trades+' trades · '+v.wins+'W/'+v.losses+'L · ROI '+pct(v.roi)+' · paper P/L $'+v.netPnl.toFixed(2);paperPerformance.append(row)}
-  for(const [label,groups] of [['ENTRY PRICE',stats.byEntryBand],['EXIT REASON',stats.byExitReason]]){if(!groups)continue;const head=document.createElement('strong');head.textContent='PAPER LOSS ANALYSIS · '+label;paperPerformance.append(head);for(const [name,v] of Object.entries(groups)){if(!v.trades)continue;const line=document.createElement('p');line.textContent=name+' · '+v.trades+' resolved · '+v.wins+'W/'+v.losses+'L · ROI '+pct(v.roi)+' · P/L 
+  for(const [label,groups] of [['ENTRY PRICE',stats.byEntryBand],['EXIT REASON',stats.byExitReason]]){
+   if(!groups)continue;
+   const head=document.createElement('strong');head.textContent='PAPER LOSS ANALYSIS · '+label;paperPerformance.append(head);
+   for(const [name,v] of Object.entries(groups)){
+    if(!v.trades)continue;
+    const line=document.createElement('p');line.textContent=name+' · '+v.trades+' resolved · '+v.wins+'W/'+v.losses+'L · ROI '+pct(v.roi)+' · P/L $'+v.netPnl.toFixed(2);
+    paperPerformance.append(line);
+   }
+  }
+  const note=document.createElement('p');note.textContent='Paper fills and slippage are simulated. Research training requires finalized market outcomes.';paperPerformance.append(note);
  });
  const panel=document.createElement('div');panel.className='notice';host.append(panel);
  const detail=document.createElement('p');detail.className='premium-foot';host.append(detail);
