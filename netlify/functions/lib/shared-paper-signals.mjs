@@ -1,4 +1,5 @@
-export function paperSignal(m,records=[],position=null,now=Date.now()){
+import {predict,validFeatures} from '../../../src/research-model.mjs';
+export function paperSignal(m,records=[],position=null,now=Date.now(),research=null){
  const q=k=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
  const yb=q('yes_bid'),ya=q('yes_ask'),nb=q('no_bid'),na=q('no_ask');
  const expires=Date.parse(m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
@@ -16,10 +17,15 @@ export function paperSignal(m,records=[],position=null,now=Date.now()){
  if(a.length<4||a.at(-1).t-a[0].t<120000)return {...base,reason:'Collecting at least four scheduled samples'};
  const changes=a.slice(1).map((r,i)=>(r.yesMid-a[i].yesMid)*100),momentum=changes.reduce((s,x)=>s+x,0);
  const side=momentum>3?'up':momentum< -3?'down':null;
- if(!side)return {...base,reason:'No directional momentum'};
+ const baseline=Math.max(.02,Math.min(.98,(yb+ya)/200));
+ const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,spread/10)),Math.max(-1,Math.min(1,left/900)),Math.max(-1,Math.min(1,(yb-nb)/100))];
+ let researchForecast=null;
+ try{if(research?.model&&validFeatures(features))researchForecast=predict(research.model,baseline,features)}catch{}
+
+ if(!side)return {...base,reason:'No directional momentum',researchForecast};
  const agreement=changes.filter(x=>side==='up'?x>0:x<0).length/changes.length;
  const reversals=changes.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(changes[i])&&Math.abs(x)>.4&&Math.abs(changes[i])>.4).length;
  const ask=side==='up'?ya:na;
- if(agreement<.65||reversals>2||ask<35||ask>80)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria'};
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length};
+ if(agreement<.65||reversals>2||ask<35||ask>80)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast};
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length,researchForecast,researchValidated:Boolean(research?.status?.validated),researchMode:'observation only; does not change entry decisions'};
 }
