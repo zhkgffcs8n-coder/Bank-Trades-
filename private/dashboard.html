@@ -67,30 +67,23 @@ async function preloadHistory(){
  }catch{}}));
 }
 
-function signalFor(asset,m,stale){
- if(stale||!m)return {action:'WAIT',score:0,reason:'Stale or missing data'};
- const left=(expiryMs(m)-Date.now())/1000;
- const ya=val(m,'yes_ask'),yb=val(m,'yes_bid'),na=val(m,'no_ask'),nb=val(m,'no_bid');
- if(!Number.isFinite(left)||left<75||left>930||[ya,yb,na,nb].some(x=>x==null||x<=0||x>=1))return {action:'WAIT',score:0,reason:'Expired, too little time, or incomplete quotes'};
- if(ya<yb||na<nb)return {action:'WAIT',score:0,reason:'Crossed or invalid order book'};
- const spread=Math.max(ya-yb,na-nb),h=(history[asset]||[]).filter(x=>x.t>=Date.now()-180000 && x.t>=(Number.isFinite(Date.parse(m.open_time))?Date.parse(m.open_time):0) && x.ticker===m.ticker);
- if(spread>.06||h.length<5)return {action:'WAIT',score:0,reason:h.length<5?'Collecting five live quote samples':'Spread too wide'};
- const recent=h.slice(-5);
- if(recent[4].t-recent[0].t<36000||recent.some((p,i)=>i&&p.t-recent[i-1].t>25000))return {action:'WAIT',score:0,reason:'Collecting continuous recent samples'};
- const first=recent[0].v,last=recent[4].v;
- const momentum=last-first,dir=momentum>.025?'YES':momentum<-.025?'NO':null;
- const sideAsk=dir==='YES'?ya:na,sideBid=dir==='YES'?yb:nb;
- if(!dir)return {action:'WAIT',score:0,reason:'No meaningful short-term quote momentum'};
- if(left<360)return {action:'WAIT',score:0,reason:'Late entry blocked: fewer than 6 minutes remain; momentum alone is not a reliable edge'};
- if(sideAsk<.35||sideAsk>.80)return {action:'WAIT',score:0,reason:'Entry blocked: selected contract ask outside conservative 35–80¢ research band ('+(sideAsk*100).toFixed(1)+'¢)'};
- if(spread>.03)return {action:'WAIT',score:0,reason:'Entry blocked: spread above 3¢; momentum may not cover trading costs'};
- const steps=recent.slice(1).map((p,i)=>p.v-recent[i].v),agreement=steps.filter(x=>dir==='YES'?x>0:x<0).length/steps.length;
- if(agreement<.65)return {action:'WAIT',score:0,reason:asset+' WAIT: recent quote path is too noisy for a directional entry'};
- const reversals=steps.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(steps[i])&&Math.abs(x)>.004&&Math.abs(steps[i])>.004).length;
- if(reversals>2)return {action:'WAIT',score:0,reason:asset+' WAIT: repeated short-term reversals detected'};
- const score=Math.min(92,Math.round(38+Math.abs(momentum)*300+Math.max(0,.06-spread)*160+agreement*8));
- return {action:'BUY '+dir,score,reason:asset+' multi-factor signal: '+(momentum*100).toFixed(1)+'¢ momentum · '+Math.round(agreement*100)+'% directional sample agreement · '+(spread*100).toFixed(1)+'¢ spread. Evidence score, not win probability; validate with settled paper rounds.',side:dir,ask:sideAsk,bid:sideBid,expiresAt:expiryMs(m),spread,momentum,agreement,features:[1,Math.min(1,Math.abs(momentum)/.1),Math.min(1,spread/.06),Math.min(1,left/930)]};
+let sharedSignals=new Map(),sharedFetched=0;
+async function loadSharedSignals(){
+ try{
+  const r=await fetch('/.netlify/functions/shared-signals',{cache:'no-store'});
+  if(!r.ok)throw Error('HTTP '+r.status);
+  const data=await r.json(),time=Date.parse(data.fetched_at);
+  if(!Number.isFinite(time)||Math.abs(Date.now()-time)>45000||!Array.isArray(data.results))throw Error('Stale shared feed');
+  sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;
+  window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
+ }catch(e){sharedSignals.clear();sharedFetched=0}
 }
+function signalFor(asset,m,stale){
+ const s=sharedSignals.get(asset);
+ if(stale||!m||Date.now()-sharedFetched>45000||!s||s.ticker!==m.ticker)return {action:'WAIT',score:0,reason:'Shared signal unavailable or stale'};
+ return {...s,ask:Number.isFinite(s.ask)?s.ask/100:null};
+}
+
 function exitFor(m,stale){
  const side=$('side').value,entry=Number($('entry').value)/100,qty=Number($('qty').value),fees=Number($('fees').value);
  if(!m||stale||!Number.isFinite(entry)||entry<=0||entry>=1||!Number.isInteger(qty)||qty<1||!Number.isFinite(fees)||fees<0)return 'HOLD / SELL UNAVAILABLE — enter a valid position and obtain fresh quotes.';
@@ -143,7 +136,7 @@ function render(){
 }
 async function refresh(){
  if(busy)return;busy=true;$('health').textContent='● UPDATING';
- try{const d=await api('/api/data?mode=markets');if(!Array.isArray(d.results))throw Error('Invalid feed response');
+ try{const [d]=await Promise.all([api('/api/data?mode=markets'),loadSharedSignals()]);if(!Array.isArray(d.results))throw Error('Invalid feed response');
  const sourceTime=Date.parse(d.fetched_at);if(!Number.isFinite(sourceTime)||Math.abs(Date.now()-sourceTime)>25000)throw Error('Stale or invalid source timestamp');
  rows=d.results;fetched=sourceTime;window.dispatchEvent(new CustomEvent('banktrades:quotes',{detail:{rows,fetched}}));
  $('count').textContent=rows.filter(x=>x.market).length+'/8';$('updated').textContent=new Date(fetched).toLocaleTimeString();
