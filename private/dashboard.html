@@ -57,6 +57,15 @@ const say=(s,urgent=false)=>{if(!voice||document.hidden||!('speechSynthesis'in w
 const direction=a=>a.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
+async function preloadHistory(){
+ await Promise.all(assets.map(async asset=>{try{
+  const d=await api('/api/market-history?asset='+encodeURIComponent(asset));
+  if(!Array.isArray(d.records)||!d.records.length)return;
+  const latestTicker=d.records[d.records.length-1]?.ticker;
+  const saved=d.records.filter(x=>x.ticker===latestTicker&&Number.isFinite(x.t)&&Number.isFinite(x.yesMid)).map(x=>({t:x.t,v:x.yesMid,ticker:x.ticker}));
+  if(saved.length)history[asset]=saved.slice(-180);
+ }catch{}}));
+}
 
 function signalFor(asset,m,stale){
  if(stale||!m)return {action:'WAIT',score:0,reason:'Stale or missing data'};
@@ -155,7 +164,7 @@ $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://
 window.addEventListener('resize',draw);
 window.addEventListener('banktrades:select',event=>{if(!assets.includes(event.detail))return;selected=event.detail;render();if(voice)$('voice').textContent='🔊 VOICE ON · '+selected});
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
-refresh();
+preloadHistory().finally(refresh);
 })();
 </script><script>
 (()=>{'use strict';
