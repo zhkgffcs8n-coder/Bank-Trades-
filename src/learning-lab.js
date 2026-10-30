@@ -6,10 +6,12 @@ if(host){
  try{const saved=JSON.parse(localStorage.getItem(key));if(saved?.model?.weights?.length===4&&saved.model.weights.every(Number.isFinite)&&Array.isArray(saved.observations))state=saved;}catch{}
  const panel=document.createElement('div');panel.className='notice';host.append(panel);
  const detail=document.createElement('p');detail.className='premium-foot';host.append(detail);
- const exportButton=document.createElement('button');exportButton.textContent='EXPORT RESEARCH RESULTS';host.append(exportButton);
+ const exportButton=document.createElement('button');exportButton.textContent='EXPORT RESEARCH RESULTS / BACKUP';host.append(exportButton);
+ const storageNote=document.createElement('p');storageNote.className='premium-foot';storageNote.textContent='Stored in this browser only. Export backups regularly; clearing site data or changing devices can erase history. Accuracy uses finalized signals only, not paper-trade profit.';host.append(storageNote);
  const save=()=>{try{localStorage.setItem(key,JSON.stringify(state));}catch{detail.textContent='Device storage unavailable. Research results are not saved.';}};
  function render(){const m=state.model,pending=state.observations.filter(o=>o.outcome==null).length;
-  panel.textContent=`SETTLEMENT LEARNER · ${m.count} finalized outcomes learned · ${pending} pending · VALIDATION INCOMPLETE`;
+  const settled=state.observations.filter(o=>o.outcome===0||o.outcome===1);const wins=settled.filter(o=>o.outcome===1).length;const losses=settled.length-wins;const rate=settled.length?(100*wins/settled.length).toFixed(1)+'%':'not available';
+  panel.textContent='SETTLEMENT LEARNER · '+settled.length+' settled · '+wins+' wins / '+losses+' losses · '+rate+' observed accuracy · '+pending+' pending · VALIDATION INCOMPLETE';
   detail.textContent=m.count?`Prospective Brier score ${(m.brier/m.count).toFixed(4)} · entry-ask baseline ${(m.baselineBrier/m.count).toFixed(4)} (lower is better). This device only. Uncalibrated; correlated samples; no guaranteed improvement. Research model does not control orders.`:'Logs predictions before results arrive, then updates a small online model only after finalized binary settlement. No synthetic wins. Runs while this page is open. Does not control orders.';
  }
  window.addEventListener('banktrades:signals',e=>{
