@@ -63,18 +63,10 @@ async function cycle(){
    log('SIMULATED BUY '+side.toUpperCase()+' '+row.asset+' · '+qty+' at '+ask.toFixed(1)+'¢');
    });
   }
-  status.textContent='PAPER BOT ON · Virtual balance 
+  status.textContent='PAPER BOT ON · Virtual cash $'+load().cash.toFixed(2)+' / $1,000';
  }catch(e){status.textContent='BOT PAUSED · '+e.message;log('No trade: '+e.message)}
  finally{busy=false}
 }
 start.addEventListener('click',()=>{active=true;samples.clear();status.textContent='PAPER BOT ON · collecting market samples';log('Paper bot started');cycle()});
 stop.addEventListener('click',()=>{active=false;status.textContent='BOT OFF';log('Bot stopped')});
 setInterval(cycle,12000);
-})()+load().cash.toFixed(2)+' / $1,000';
- }catch(e){status.textContent='BOT PAUSED · '+e.message;log('No trade: '+e.message)}
- finally{busy=false}
-}
-start.addEventListener('click',()=>{active=true;samples.clear();status.textContent='PAPER BOT ON · collecting market samples';log('Paper bot started');cycle()});
-stop.addEventListener('click',()=>{active=false;status.textContent='BOT OFF';log('Bot stopped')});
-setInterval(cycle,12000);
-})()
