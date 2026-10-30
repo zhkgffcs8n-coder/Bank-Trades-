@@ -66,123 +66,6 @@ if(host){
    }save();render();
   }catch(e){detail.textContent='Settlement checks paused: '+e.message+'. Pending outcomes are not counted as wins or losses.';}finally{clearTimeout(timer);busy=false;}
  }
- const serverSummary=document.createElement('div');serverSummary.className='notice';host.append(serverSummary);
- const serverHistory=document.createElement('div');serverHistory.className='premium-foot';host.append(serverHistory);
- let serverBusy=false;
- async function refreshServerResults(){
-  if(serverBusy)return;serverBusy=true;
-  try{
-   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
-   let response;try{response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timer)}
-   if(!response.ok)throw Error('HTTP '+response.status);
-   const data=await response.json(),trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
-   const settled=trades.filter(t=>t.status==='SETTLED'),wins=settled.filter(t=>Number(t.pnl)>0).length,losses=settled.filter(t=>Number(t.pnl)<0).length;
-   const pending=trades.filter(t=>t.status==='OPEN'||t.status==='PENDING').length;
-   const pnl=settled.reduce((sum,t)=>sum+(Number(t.pnl)||0),0);
-   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS · '+settled.length+' settled · '+wins+' wins / '+losses+' losses · '+pending+' open · virtual realized P/L $'+pnl.toFixed(2)+' before fees · '+(data.state?.running?'BOT ON':'BOT OFF');
-   serverHistory.replaceChildren();
-   for(const t of trades.slice().sort((a,b)=>Number(b.settledAt||b.at)-Number(a.settledAt||a.at)).slice(0,15)){
-    const line=document.createElement('p');line.textContent=String(t.asset||t.ticker||'MARKET')+' · '+String(t.side||'').toUpperCase()+' · '+String(t.status||'UNKNOWN')+' · '+String(t.ticker||'');serverHistory.append(line);
-   }
-  }catch(e){serverSummary.textContent='SERVER KAIBOT RESULTS UNAVAILABLE · '+e.message}
-  finally{serverBusy=false}
- }
- refreshServerResults();setInterval(refreshServerResults,15000);window.addEventListener('pageshow',refreshServerResults);
- const botResults=document.createElement('div');botResults.className='notice';host.append(botResults);
- const botHistory=document.createElement('div');botHistory.className='premium-foot';host.append(botHistory);
- function renderBot(){
-  let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{}
-  const trades=Array.isArray(ledger?.trades)?ledger.trades:[];
-  const resolved=trades.filter(t=>t.settlement==='WIN'||t.settlement==='LOSS');const wins=resolved.filter(t=>t.settlement==='WIN').length;
-  const open=trades.filter(t=>t.status==='OPEN').length;
-  const pnl=trades.filter(t=>t.status==='SETTLED'||t.status==='CLOSED').reduce((sum,t)=>sum+(Number.isFinite(Number(t.pnl))?Number(t.pnl):0),0);const manual=trades.filter(t=>t.source!=='KAIBOT PAPER').length;const bot=trades.length-manual;
-  botResults.textContent='VERIFIED PAPER LEDGER · '+wins+' settled wins / '+(resolved.length-wins)+' settled losses · '+open+' awaiting settlement · '+(resolved.length?(100*wins/resolved.length).toFixed(1)+'%':'N/A')+' settled win rate · Virtual realized P/L '+pnl.toFixed(2)+' before fees · '+bot+' KaiBot / '+manual+' manual trades · local device + authenticated cloud entry backup';
-  botHistory.replaceChildren();
-  for(const t of trades.slice(-10).reverse()){
-   const p=document.createElement('p');
-   p.textContent=t.asset+' '+String(t.side).toUpperCase()+' · '+t.qty+' @ '+Number(t.ask).toFixed(1)+'¢ · '+(t.settlement||t.status||'OPEN')+(Number.isFinite(t.pnl)?' · virtual P/L $'+t.pnl.toFixed(2):'')+' · '+t.ticker;
-   botHistory.append(p);
-  }
- }
- let botBusy=false;
- async function reconcileBot(){
-  if(botBusy||document.hidden||!navigator.locks)return;let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};
-  const due=(ledger?.trades||[]).filter(t=>t.status!=='CLOSED'&&t.status!=='SETTLED'&&t.ticker&&Date.now()-t.at>60000).slice(0,8);
-  if(!due.length){renderBot();return}botBusy=true;
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
-  try{
-   const r=await fetch('/api/data?mode=outcomes&tickers='+encodeURIComponent([...new Set(due.map(t=>t.ticker))].join(',')),{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('Settlement feed '+r.status);
-   const d=await r.json();if(!Number.isFinite(Date.parse(d.fetched_at))||Math.abs(Date.now()-Date.parse(d.fetched_at))>30000)throw Error('Stale settlement feed');
-   await navigator.locks.request(paperKey,()=>{
-    let b;try{b=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};if(!b||!Array.isArray(b.trades)||!Number.isFinite(b.cash))return;
-    let changed=false;
-    for(const t of b.trades){if(t.status==='CLOSED'||t.status==='SETTLED'||!t.ticker)continue;
-     const result=d.results?.find(x=>x.ticker===t.ticker);if(!result?.finalized||!['yes','no'].includes(result.result))continue;
-     const won=(t.side==='up'&&result.result==='yes')||(t.side==='down'&&result.result==='no');
-     const payout=won?t.qty:0;const cost=Number(t.cost);if(!Number.isFinite(cost)||!Number.isFinite(payout)||!Number.isInteger(t.qty)||t.qty<=0)continue;
-     t.status='SETTLED';t.settlement=won?'WIN':'LOSS';t.settlementResult=result.result;t.settledAt=result.settledAt||Date.now();t.pnl=Math.round((payout-cost)*100)/100;t.payout=payout;b.cash=Math.round((b.cash+payout)*100)/100;changed=true;
-    }
-    if(changed){localStorage.setItem(paperKey,JSON.stringify(b));window.dispatchEvent(new Event('banktrades:paper'))}
-   });renderBot();
-  }catch(e){botResults.textContent='KAIBOT settlement verification pending: '+e.message+' · no result assumed';}finally{clearTimeout(timer);botBusy=false}
- }
- window.addEventListener('banktrades:paper',renderBot);
- renderBot();reconcileBot();setInterval(reconcileBot,30000);
- exportButton.onclick=()=>{const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- render();outcomes();setInterval(outcomes,30000);
-}+pnl.toFixed(2)+' before fees · '+(data.state?.running?'BOT ON':'BOT OFF');
-   serverHistory.replaceChildren();
-   for(const t of trades.slice().sort((a,b)=>Number(b.settledAt||b.at)-Number(a.settledAt||a.at)).slice(0,15)){
-    const line=document.createElement('p');line.textContent=String(t.asset||t.ticker||'MARKET')+' · '+String(t.side||'').toUpperCase()+' · '+String(t.status||'UNKNOWN')+(Number.isFinite(Number(t.pnl))?' · virtual P/L 
- const botResults=document.createElement('div');botResults.className='notice';host.append(botResults);
- const botHistory=document.createElement('div');botHistory.className='premium-foot';host.append(botHistory);
- function renderBot(){
-  let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{}
-  const trades=Array.isArray(ledger?.trades)?ledger.trades:[];
-  const resolved=trades.filter(t=>t.settlement==='WIN'||t.settlement==='LOSS');const wins=resolved.filter(t=>t.settlement==='WIN').length;
-  const open=trades.filter(t=>t.status==='OPEN').length;
-  const pnl=trades.filter(t=>t.status==='SETTLED'||t.status==='CLOSED').reduce((sum,t)=>sum+(Number.isFinite(Number(t.pnl))?Number(t.pnl):0),0);const manual=trades.filter(t=>t.source!=='KAIBOT PAPER').length;const bot=trades.length-manual;
-  botResults.textContent='VERIFIED PAPER LEDGER · '+wins+' settled wins / '+(resolved.length-wins)+' settled losses · '+open+' awaiting settlement · '+(resolved.length?(100*wins/resolved.length).toFixed(1)+'%':'N/A')+' settled win rate · Virtual realized P/L '+pnl.toFixed(2)+' before fees · '+bot+' KaiBot / '+manual+' manual trades · local device + authenticated cloud entry backup';
-  botHistory.replaceChildren();
-  for(const t of trades.slice(-10).reverse()){
-   const p=document.createElement('p');
-   p.textContent=t.asset+' '+String(t.side).toUpperCase()+' · '+t.qty+' @ '+Number(t.ask).toFixed(1)+'¢ · '+(t.settlement||t.status||'OPEN')+(Number.isFinite(t.pnl)?' · virtual P/L $'+t.pnl.toFixed(2):'')+' · '+t.ticker;
-   botHistory.append(p);
-  }
- }
- let botBusy=false;
- async function reconcileBot(){
-  if(botBusy||document.hidden||!navigator.locks)return;let ledger;try{ledger=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};
-  const due=(ledger?.trades||[]).filter(t=>t.status!=='CLOSED'&&t.status!=='SETTLED'&&t.ticker&&Date.now()-t.at>60000).slice(0,8);
-  if(!due.length){renderBot();return}botBusy=true;
-  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),12000);
-  try{
-   const r=await fetch('/api/data?mode=outcomes&tickers='+encodeURIComponent([...new Set(due.map(t=>t.ticker))].join(',')),{cache:'no-store',signal:controller.signal});if(!r.ok)throw Error('Settlement feed '+r.status);
-   const d=await r.json();if(!Number.isFinite(Date.parse(d.fetched_at))||Math.abs(Date.now()-Date.parse(d.fetched_at))>30000)throw Error('Stale settlement feed');
-   await navigator.locks.request(paperKey,()=>{
-    let b;try{b=JSON.parse(localStorage.getItem(paperKey)||'null')}catch{};if(!b||!Array.isArray(b.trades)||!Number.isFinite(b.cash))return;
-    let changed=false;
-    for(const t of b.trades){if(t.status==='CLOSED'||t.status==='SETTLED'||!t.ticker)continue;
-     const result=d.results?.find(x=>x.ticker===t.ticker);if(!result?.finalized||!['yes','no'].includes(result.result))continue;
-     const won=(t.side==='up'&&result.result==='yes')||(t.side==='down'&&result.result==='no');
-     const payout=won?t.qty:0;const cost=Number(t.cost);if(!Number.isFinite(cost)||!Number.isFinite(payout)||!Number.isInteger(t.qty)||t.qty<=0)continue;
-     t.status='SETTLED';t.settlement=won?'WIN':'LOSS';t.settlementResult=result.result;t.settledAt=result.settledAt||Date.now();t.pnl=Math.round((payout-cost)*100)/100;t.payout=payout;b.cash=Math.round((b.cash+payout)*100)/100;changed=true;
-    }
-    if(changed){localStorage.setItem(paperKey,JSON.stringify(b));window.dispatchEvent(new Event('banktrades:paper'))}
-   });renderBot();
-  }catch(e){botResults.textContent='KAIBOT settlement verification pending: '+e.message+' · no result assumed';}finally{clearTimeout(timer);botBusy=false}
- }
- window.addEventListener('banktrades:paper',renderBot);
- renderBot();reconcileBot();setInterval(reconcileBot,30000);
- exportButton.onclick=()=>{const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- render();outcomes();setInterval(outcomes,30000);
-}+Number(t.pnl).toFixed(2):'')+' · '+String(t.ticker||'');serverHistory.append(line);
-   }
-  }catch(e){serverSummary.textContent='SERVER KAIBOT RESULTS UNAVAILABLE · '+e.message+' · no wins or losses assumed';}
-  finally{serverBusy=false}
- }
- refreshServerResults();setInterval(refreshServerResults,15000);
- window.addEventListener('pageshow',refreshServerResults);
  const paperKey='banktrades.paper.v2.'+window.__BANK_TRADES_USER_ID__;
  const botResults=document.createElement('div');botResults.className='notice';host.append(botResults);
  const botHistory=document.createElement('div');botHistory.className='premium-foot';host.append(botHistory);
@@ -225,5 +108,20 @@ if(host){
  window.addEventListener('banktrades:paper',renderBot);
  renderBot();reconcileBot();setInterval(reconcileBot,30000);
  exportButton.onclick=()=>{const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
+ const serverSummary=document.createElement('p');serverSummary.className='notice';host.append(serverSummary);
+ async function refreshServerResults(){
+  try{
+   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   const data=await response.json();
+   const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
+   const settled=trades.filter(t=>t.status==='SETTLED');
+   const wins=settled.filter(t=>Number(t.pnl)>0).length;
+   const losses=settled.filter(t=>Number(t.pnl)<0).length;
+   const pending=trades.filter(t=>t.status==='OPEN'||t.status==='PENDING').length;
+   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' wins, '+losses+' losses, '+pending+' open. Separate from research model outcomes.';
+  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
+ }
+ refreshServerResults();setInterval(refreshServerResults,15000);
  render();outcomes();setInterval(outcomes,30000);
 }
