@@ -136,10 +136,10 @@ exports.handler=async event=>{
       const names=['GOLD','SILVER','PLATINUM','PALLADIUM','COPPER','OIL','NATURAL GAS'];
       const matches=[];
       let cursor='';
-      for(let page=0;page<4;page++){
+      for(let page=0;page<2;page++){
         const params=new URLSearchParams({status:'open',limit:'200',with_nested_markets:'true'});
         if(cursor)params.set('cursor',cursor);
-        const data=await get(base+'/events?'+params.toString(),6500);
+        const data=await get(base+'/events?'+params.toString(),4500);
         for(const e of data.events||[]){
           const title=String(e.title||'');
           const hit=names.find(n=>new RegExp('\\b'+n.replace(' ','\\s+')+'\\b','i').test(title));
@@ -155,7 +155,7 @@ exports.handler=async event=>{
         if(!cursor)break;
       }
       return reply(200,{source:'Kalshi public events API',fetched_at:new Date().toISOString(),
-        search_scope:'First 800 currently open events; results are not exhaustive',
+        search_scope:'First 400 currently open events; results are not exhaustive',
         commodities:names,events:matches,research_only:true});
     }
 
