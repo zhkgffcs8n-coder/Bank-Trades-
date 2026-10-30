@@ -1,3 +1,4 @@
+import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2',db=()=>getStore({name:'bank-trades-server-kaibot',consistency:'strong'}),hist=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
@@ -31,12 +32,12 @@ export default async()=>{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
    const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(m.ticker))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
-   if(records.length<3)continue;const first=records[0].yesMid*100,last=records.at(-1).yesMid*100,change=last-first,side=change>3?'up':change< -3?'down':null;if(!side)continue;
-   const moves=records.slice(1).map((x,i)=>x.yesMid*100-records[i].yesMid*100),agreement=moves.filter(x=>side==='up'?x>0:x<0).length/moves.length;
-   const reversals=moves.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(moves[i])&&Math.abs(x)>.4&&Math.abs(moves[i])>.4).length;if(agreement<.65||reversals>2)continue;
-   const yb=q(m,'yes_bid'),ya=q(m,'yes_ask'),nb=q(m,'no_bid'),na=q(m,'no_ask');if(![yb,ya,nb,na].every(Number.isFinite)||ya<yb||na<nb||Math.max(ya-yb,na-nb)>3)continue;
-   const ask=side==='up'?ya:na;if(ask<35||ask>80)continue;
-   // Server version deliberately waits on BTC until independent BTC evidence is also server-side.
+   // Read the same paper-only signal rules as the dashboard; preserve execution as a separate step.
+   const signal=paperSignal(m,records,null,now);
+   await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
+   if(signal.action!=='BUY UP'&&signal.action!=='BUY DOWN')continue;
+   const side=signal.side,ask=signal.ask;
+   // BTC remains disabled for automatic paper entries pending independent validation.
    if(asset==='BTC')continue;
    const max=Math.min(1000,Math.max(1,Number(state.maxSpend)||50)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{momentum:change,agreement,reversals,spread:Math.max(ya-yb,na-nb),secondsLeft:(m._e-now)/1000}});
