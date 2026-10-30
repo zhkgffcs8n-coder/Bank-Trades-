@@ -82,6 +82,19 @@ export default async()=>{
    rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
    await db.setJSON(item.key,rec);
   }
+  // Persist a transparent side-by-side report; one hypothetical contract per BUY.
+  const all=await db.list({prefix:'comparison/v1/',limit:1000});
+  const rows=(await Promise.all(all.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+  const report={at:now,version:1,totalObserved:rows.length,pending:rows.filter(r=>r.status==='PENDING').length,truncated:!!all.cursor,engines:{}};
+  for(const name of ['original','upgraded']){
+   const trades=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.[name]?.resolved).sort((a,b)=>a.at-b.at);
+   let equity=0,peak=0,maxDrawdown=0;
+   for(const row of trades){equity+=row.engines[name].pnl;peak=Math.max(peak,equity);maxDrawdown=Math.max(maxDrawdown,peak-equity)}
+   const pnl=trades.reduce((sum,row)=>sum+row.engines[name].pnl,0);
+   const invested=trades.reduce((sum,row)=>sum+Number(row.engines[name].ask)/100,0);
+   report.engines[name]={trades:trades.length,wins:trades.filter(row=>row.engines[name].won).length,losses:trades.filter(row=>!row.engines[name].won).length,winRate:trades.length?trades.filter(row=>row.engines[name].won).length/trades.length:null,netPnl:Number(pnl.toFixed(4)),roi:invested?Number((pnl/invested).toFixed(4)):null,maxDrawdown:Number(maxDrawdown.toFixed(4)),method:'One hypothetical contract per signal; binary settlement, entry ask; excludes fees, slippage and early exits'};
+  }
+  await db.setJSON('comparison/report-v1',report);
   await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,mode:'PAPER RESEARCH'});
  }catch(e){console.error('Training update failed',String(e))}
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
