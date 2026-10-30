@@ -68,6 +68,16 @@ async function preloadHistory(){
 }
 
 let sharedSignals=new Map(),sharedFetched=0;
+const announcedEntries=new Set();
+function announceAllEntries(force=false){
+ if(!voice||document.hidden||Date.now()-sharedFetched>45000)return;
+ const entries=assets.map(asset=>sharedSignals.get(asset)).filter(s=>s&&['BUY UP','BUY DOWN'].includes(s.action)&&s.ticker);
+ const fresh=entries.filter(s=>force||!announcedEntries.has(s.ticker+':'+s.action));
+ if(!fresh.length){if(force)say('Voice alerts enabled. No verified entry alerts right now.',true);return;}
+ fresh.forEach(s=>announcedEntries.add(s.ticker+':'+s.action));
+ say(fresh.map(s=>s.asset+'. '+s.action+'. Experimental paper signal.').join(' '),true);
+}
+
 async function loadSharedSignals(){
  try{
   const r=await fetch('/.netlify/functions/shared-signals',{cache:'no-store'});
@@ -76,6 +86,7 @@ async function loadSharedSignals(){
   if(!Number.isFinite(time)||Math.abs(Date.now()-time)>45000||!Array.isArray(data.results))throw Error('Stale shared feed');
   sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
+  announceAllEntries();
  }catch(e){sharedSignals.clear();sharedFetched=0}
 }
 function signalFor(asset,m,stale){
@@ -108,7 +119,7 @@ function show(){
  const sig=signalFor(selected,m,stale);
  $('signal').textContent=direction(sig.action);$('reason').textContent=sig.action==='WAIT'?reason+' '+sig.reason:sig.reason;
  const signalKey=selected+':'+(m?.ticker||'none')+':'+sig.action;
- if(signalKey!==prevSignal){say(sig.action==='WAIT'?selected+'. Wait. '+sig.reason:selected+'. '+direction(sig.action)+'. Ask '+Math.round(sig.ask*100)+' cents. Experimental.',sig.action==='WAIT');prevSignal=signalKey}
+ if(signalKey!==prevSignal){prevSignal=signalKey}
  const liveSignals=rows.map(row=>({asset:row.asset,ticker:row.market?.ticker,...signalFor(row.asset,row.market,stale)}));
  window.dispatchEvent(new CustomEvent('banktrades:signals',{detail:liveSignals}));
 
@@ -149,7 +160,7 @@ async function refresh(){
 }
 $('refresh').onclick=refresh;
 $('auto').onclick=()=>{auto=!auto;$('auto').textContent='AUTO REFRESH '+(auto?'ON':'OFF')};
-$('voice').onclick=()=>{if(!('speechSynthesis'in window)){$('voice').textContent='VOICE UNSUPPORTED';return}voice=!voice;$('voice').textContent=voice?'🔊 VOICE ON · '+selected:'🔇 VOICE OFF';if(voice){say('Voice on. '+selected+'. Experimental alerts. Keep this page open.',true);prevSignal=''}else window.speechSynthesis.cancel()};
+$('voice').onclick=()=>{if(!('speechSynthesis'in window)){$('voice').textContent='VOICE UNSUPPORTED';return}voice=!voice;$('voice').textContent=voice?'🔊 VOICE ON · ALL MARKETS':'🔇 VOICE OFF';if(voice){announcedEntries.clear();announceAllEntries(true)}else window.speechSynthesis.cancel()};
 $('depthBtn').onclick=async()=>{const m=current()?.market;if(!m){$('book').textContent='No open market';return}$('book').textContent='Loading…';try{const d=await api('/api/data?mode=orderbook&ticker='+encodeURIComponent(m.ticker));$('book').textContent=JSON.stringify(d.orderbook,null,2).slice(0,3500)}catch(e){$('book').textContent='Depth unavailable: '+e.message}};
 $('spotBtn').onclick=async()=>{try{const d=await api('/api/data?mode=spot&asset='+selected);$('spot').textContent='Coinbase '+selected+' spot: $'+Number(d.price).toLocaleString()+' · NOT Kalshi settlement oracle'}catch(e){$('spot').textContent='Spot unavailable: '+e.message}};
 $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://kalshi.com/markets/'+encodeURIComponent(m.event_ticker||m.ticker),'_blank','noopener')};
