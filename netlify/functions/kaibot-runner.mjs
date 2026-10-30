@@ -51,6 +51,7 @@ export default async()=>{
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
+ const research={model:await hdb.get('training/model',{type:'json'}),status:training};
  const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.asset));
  for(const [asset,series] of Object.entries(SERIES)){
   try{
@@ -58,7 +59,7 @@ export default async()=>{
    const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Read the same paper-only signal rules as the dashboard; preserve execution as a separate step.
-   const signal=gatePaperEntry({...paperSignal(m,records,null,now),asset},stats);
+   const signal=gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats);
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    if(signal.action!=='BUY UP'&&signal.action!=='BUY DOWN')continue;
    const side=signal.side,ask=signal.ask;
