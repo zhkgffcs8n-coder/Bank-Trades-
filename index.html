@@ -41,7 +41,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 <section class="card" id="pro"><div class="between"><div><div class="tag">BANK TRADES PRO · MEMBER TERMINAL</div><h2>ALL-MARKET INTELLIGENCE</h2></div><span class="pill" id="proStatus">CHECKING DATA</span></div>
 <div class="pro-tabs" role="tablist" aria-label="Trading platform sections"><button class="active" data-protab="scanner">⚡ LIVE SIGNALS</button><button data-protab="paper">📊 PAPER TRADE</button><button data-protab="real">🔒 AUTO TRADE</button><button data-protab="member">♛ MEMBERSHIP</button><button data-protab="learning">🧠 LEARNING LAB</button></div>
 <div class="pro-panel active" id="pro-scanner"><p>Every supported market is checked independently. Data-quality rankings are not BUY UP/DOWN predictions. Never infer a winning direction from spreads alone.</p><div id="proMarkets">Loading market-wide quality scanner…</div><small>Source: Kalshi public quotes · research only · stale and unavailable markets rejected.</small></div>
-<div class="pro-panel" id="pro-paper"><h2>Paper Trading · Demo</h2><p>Simulation and persistent trade ledger are in development. No fake balances or simulated fills are presented as real performance.</p><div class="notice">PAPER TRADING NOT ACTIVE — no orders are submitted.</div></div>
+<div class="pro-panel" id="pro-paper"><h2>Paper Trading · Demo</h2><p>Practice with a clearly labeled $10,000 virtual starting balance. This is not a backtest or real-money performance.</p><div class="toolbar"><label>Market <select id="paperAsset"></select></label><label>Direction <select id="paperSide"><option value="up">UP</option><option value="down">DOWN</option></select></label><label>Contracts <input id="paperQty" type="number" value="1" min="1" max="100" step="1"></label><button id="paperBuy">SIMULATE BUY</button><button id="paperReset">RESET DEMO</button></div><div id="paperSummary" class="notice">Paper simulation loading…</div><div id="paperLedger"></div><small>Browser-only demo. Fills use indicative asks/bids, not guaranteed executable prices. Stored only on this device. Never represents real Kalshi trades.</small></div>
 <div class="pro-panel" id="pro-real"><h2>Real-Money Auto Trading</h2><div class="notice">LOCKED · Real-money order execution is not implemented. Do not enter Kalshi API keys into this site yet. Secure server-side authentication, key encryption, account isolation, limits and a kill switch are required before launch.</div></div>
 <div class="pro-panel" id="pro-member"><h2>VIP Memberships</h2><div class="pro-grid"><div class="pro-price">WEEKLY<br><b>$50</b><small>per week</small></div><div class="pro-price">MONTHLY<br><b>$60</b><small>per month</small></div><div class="pro-price">ANNUAL<br><b>$600</b><small>per year</small></div></div><p>Secure email registration and billing checkout are not active yet. No payments are accepted through this preview.</p></div>
 <div class="pro-panel" id="pro-learning"><h2>Market Memory &amp; Model Validation</h2><p>Planned: persistent timestamped candles, market outcomes, walk-forward backtests, model calibration and versioned retraining. No historical AI learning or accuracy metric is active yet.</p><div class="notice">MODEL STATUS: NOT TRAINED · PREDICTIONS NOT CALIBRATED</div></div></section>
@@ -171,5 +171,55 @@ refresh();
   }catch(e){status.textContent='● DATA UNAVAILABLE';status.className='pill red';out.textContent='Scanner unavailable: '+e.message+'. No trading signal is issued.';}
  }
  update();setInterval(()=>{if(!document.hidden)update();else if(Date.now()-lastOk>30000){const s=document.getElementById('proStatus');s.textContent='● PAUSED';s.className='pill red';}},15000);
+})();
+</script><script>
+(()=>{'use strict';
+const $=id=>document.getElementById(id);
+const KEY='banktrades.paper.v1',START=10000;
+const safe=()=>{try{const v=JSON.parse(localStorage.getItem(KEY)||'null');return v&&Array.isArray(v.trades)&&Number.isFinite(v.cash)?v:{cash:START,trades:[]}}catch{return {cash:START,trades:[]}}};
+let book=safe(),markets=[];
+const money=v=>'
++v.toFixed(2);
+function save(){try{localStorage.setItem(KEY,JSON.stringify(book))}catch{}}
+function render(){
+ $('paperSummary').textContent='VIRTUAL CASH '+money(book.cash)+' · Open paper positions '+book.trades.length+' · No real orders';
+ $('paperLedger').textContent='';
+ for(const t of book.trades.slice(-12).reverse()){
+ const el=document.createElement('div');el.className='pro-market';
+ const label=document.createElement('span');label.textContent=t.asset+' '+t.side.toUpperCase()+' · '+t.qty+' contracts @ '+t.ask.toFixed(1)+'¢';
+ const info=document.createElement('small');info.textContent='Simulated '+new Date(t.at).toLocaleString()+' · '+t.ticker;
+ el.append(label,info);$('paperLedger').append(el);
+ }
+}
+async function refresh(){
+ try{
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+ let r;try{r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
+ if(!r.ok)throw Error('Market feed offline');
+ const data=await r.json();
+ if(!data.fetched_at||Math.abs(Date.now()-Date.parse(data.fetched_at))>30000)throw Error('Stale feed');
+ markets=(data.results||[]).filter(x=>x.market&&x.market.ticker);
+ const prior=$('paperAsset').value;$('paperAsset').replaceChildren();
+ for(const x of markets){const option=document.createElement('option');option.value=x.asset;option.textContent=x.asset;$('paperAsset').append(option)}
+ if(markets.some(x=>x.asset===prior))$('paperAsset').value=prior;
+ }catch{markets=[];$('paperAsset').replaceChildren();}
+}
+$('paperBuy').addEventListener('click',async()=>{
+ await refresh();
+ const asset=$('paperAsset').value,side=$('paperSide').value,qty=Number($('paperQty').value);
+ const row=markets.find(x=>x.asset===asset);
+ if(!row||!Number.isInteger(qty)||qty<1||qty>100){alert('Fresh market and valid contract quantity required.');return}
+ const m=row.market,k=side==='up'?'yes_ask':'no_ask';
+ const raw=m[k+'_dollars'],ask=raw!=null?Number(raw)*100:Number(m[k]);
+ const expires=Date.parse(m.expires_at||m.expected_expiration_time||m.expiration_time||m.close_time||'');
+ if(!Number.isFinite(ask)||ask<=0||ask>=100||!Number.isFinite(expires)||expires-Date.now()<75000){alert('Price or expiration is not suitable for simulation.');return}
+ const cost=qty*ask/100;
+ if(cost>book.cash){alert('Insufficient virtual cash.');return}
+ book.cash=Math.round((book.cash-cost)*100)/100;
+ book.trades.push({asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost});
+ save();render();
+});
+$('paperReset').addEventListener('click',()=>{if(confirm('Reset virtual demo balance and erase local paper trades?')){book={cash:START,trades:[]};save();render()}});
+render();refresh();setInterval(()=>{if(!document.hidden)refresh()},30000);
 })();
 </script></body></html>
