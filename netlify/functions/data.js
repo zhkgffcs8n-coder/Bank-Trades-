@@ -113,6 +113,24 @@ exports.handler=async event=>{
       });
     }
 
+    if(q.mode==='signals'){
+      const {rankMarkets}=require('./signal-engine');
+      const results=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
+        try{
+          const url=base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'});
+          const d=await get(url);
+          const now=Date.now();
+          const markets=(d.markets||[]).map(m=>{
+            const expiry=nearestExpiry(m,now);
+            return {...m,expires_at:expiry?new Date(expiry).toISOString():null};
+          }).filter(m=>m.expires_at&&Date.parse(m.expires_at)>now&&Date.parse(m.expires_at)-now<=16*60*1000);
+          return {asset,series,signals:rankMarkets(markets,now),error:null};
+        }catch(e){return {asset,series,signals:[],error:String(e.message).slice(0,100)};}
+      }));
+      return reply(200,{source:'Kalshi public API',fetched_at:new Date().toISOString(),
+        research_only:true,calibrated_probabilities:false,results});
+    }
+
     if(q.mode==='orderbook'){
       const ticker=String(q.ticker||'');
 
