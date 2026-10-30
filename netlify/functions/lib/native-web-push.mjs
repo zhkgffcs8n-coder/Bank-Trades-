@@ -1,0 +1,30 @@
+import {createECDH,createPrivateKey,sign,randomBytes,hkdfSync,createCipheriv} from 'node:crypto';
+const b64=b=>Buffer.from(b).toString('base64url');
+const dec=s=>Buffer.from(s,'base64url');
+const hk=(ikm,salt,info,length)=>Buffer.from(hkdfSync('sha256',ikm,salt,Buffer.from(info),length));
+export async function sendPush(subscription,payload){
+ const pub=process.env.WEB_PUSH_VAPID_PUBLIC_KEY,priv=process.env.WEB_PUSH_VAPID_PRIVATE_KEY,subject=process.env.WEB_PUSH_VAPID_SUBJECT;
+ if(!pub||!priv||!subject)throw Error('VAPID keys and subject not configured');
+ const endpoint=new URL(subscription.endpoint);
+ if(endpoint.protocol!=='https:'||!['fcm.googleapis.com','updates.push.services.mozilla.com','web.push.apple.com'].some(x=>endpoint.hostname===x||endpoint.hostname.endsWith('.'+x)))throw Error('Unsupported push endpoint');
+ const vapidPublic=dec(pub),vapidPrivate=dec(priv);
+ if(vapidPublic.length!==65||vapidPrivate.length!==32)throw Error('Invalid VAPID key size');
+ const jwtHeader=b64(JSON.stringify({typ:'JWT',alg:'ES256'}));
+ const jwtBody=b64(JSON.stringify({aud:endpoint.origin,exp:Math.floor(Date.now()/1000)+3600,sub:subject}));
+ const signingKey=createPrivateKey({key:{kty:'EC',crv:'P-256',d:b64(vapidPrivate),x:b64(vapidPublic.subarray(1,33)),y:b64(vapidPublic.subarray(33,65))},format:'jwk'});
+ const signature=sign('sha256',Buffer.from(jwtHeader+'.'+jwtBody),{key:signingKey,dsaEncoding:'ieee-p1363'});
+ const clientPublic=dec(subscription.keys.p256dh),auth=dec(subscription.keys.auth);
+ if(clientPublic.length!==65||auth.length!==16)throw Error('Invalid subscription encryption keys');
+ const ecdh=createECDH('prime256v1');ecdh.generateKeys();
+ const serverPublic=ecdh.getPublicKey(),shared=ecdh.computeSecret(clientPublic);
+ const info=Buffer.concat([Buffer.from('WebPush: info\0'),clientPublic,serverPublic]);
+ const ikm=hk(shared,auth,info,32),salt=randomBytes(16);
+ const key=hk(ikm,salt,'Content-Encoding: aes128gcm\0',16),nonce=hk(ikm,salt,'Content-Encoding: nonce\0',12);
+ const cipher=createCipheriv('aes-128-gcm',key,nonce);
+ const encrypted=Buffer.concat([cipher.update(Buffer.concat([Buffer.from(JSON.stringify(payload)),Buffer.from([2])])),cipher.final(),cipher.getAuthTag()]);
+ const recordSize=Buffer.alloc(4);recordSize.writeUInt32BE(4096);
+ const body=Buffer.concat([salt,recordSize,Buffer.from([serverPublic.length]),serverPublic,encrypted]);
+ const response=await fetch(endpoint,{method:'POST',headers:{TTL:'120','Content-Encoding':'aes128gcm','Content-Type':'application/octet-stream',Authorization:'vapid t='+jwtHeader+'.'+jwtBody+'.'+b64(signature)+', k='+pub},body,signal:AbortSignal.timeout(8000)});
+ if(!response.ok)throw Object.assign(new Error('Push HTTP '+response.status),{status:response.status});
+ return true;
+}
