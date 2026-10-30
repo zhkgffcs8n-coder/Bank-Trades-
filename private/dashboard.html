@@ -195,7 +195,7 @@ preloadHistory().finally(refresh);
    lastOk=Date.now();window.__BANK_TRADES_VERIFIED_AT__=ts;status.textContent='● LIVE RESEARCH';status.className='pill green';
   }catch(e){status.textContent='● DATA UNAVAILABLE';status.className='pill red';out.textContent='Scanner unavailable: '+e.message+'. No trading signal is issued.';}
  }
- update();setInterval(()=>{if(!document.hidden)update();else if(Date.now()-lastOk>30000){const s=document.getElementById('proStatus');s.textContent='● PAUSED';s.className='pill red';}},15000);
+ update();setInterval(()=>{if(!document.hidden)update();else if(Date.now()-lastOk>30000){const s=document.getElementById('proStatus');s.textContent='● SCANNER SUSPENDED IN BACKGROUND · KAIBOT STATUS SEPARATE';s.className='pill';}},15000);
 })();
 </script><script>
 (()=>{'use strict';
