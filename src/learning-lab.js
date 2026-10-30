@@ -50,10 +50,12 @@ if(host){
   const resolved=trades.filter(t=>t.settlement==='WIN'||t.settlement==='LOSS');const wins=resolved.filter(t=>t.settlement==='WIN').length;
   const open=trades.filter(t=>t.status==='OPEN').length;
   botResults.textContent='KAIBOT PAPER RESULTS · '+wins+' wins / '+(resolved.length-wins)+' losses · '+open+' awaiting settlement · '+(resolved.length?(100*wins/resolved.length).toFixed(1)+'%':'N/A')+' settled win rate';
-  botHistory.replaceChildren();for(const t of trades.slice(-10).reverse()){const p=document.createElement('p');p.textContent=t.asset+' '+t.side.toUpperCase()+' · '+t.qty+' @ '+t.ask.toFixed(1)+'¢ · '+(t.settlement||t.status||'OPEN')+(Number.isFinite(t.pnl)?' · virtual P/L {const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
- render();outcomes();setInterval(outcomes,30000);
-}
-+t.pnl.toFixed(2):'')+' · '+t.ticker;botHistory.append(p)}
+  botHistory.replaceChildren();
+  for(const t of trades.slice(-10).reverse()){
+   const p=document.createElement('p');
+   p.textContent=t.asset+' '+String(t.side).toUpperCase()+' · '+t.qty+' @ '+Number(t.ask).toFixed(1)+'¢ · '+(t.settlement||t.status||'OPEN')+(Number.isFinite(t.pnl)?' · virtual P/L $'+t.pnl.toFixed(2):'')+' · '+t.ticker;
+   botHistory.append(p);
+  }
  }
  let botBusy=false;
  async function reconcileBot(){
