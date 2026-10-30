@@ -7,5 +7,7 @@ export default async req=>{
  if(!ASSETS.has(asset))return json({error:'Invalid asset'},400);
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'}),listed=await db.list({prefix:'samples/'+asset+'/',limit:240});
  const cutoff=Date.now()-4*60*60*1000,records=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
- return json({asset,fetched_at:new Date().toISOString(),records,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive'});
+ const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
+ for(const ticker of tickers){const o=await db.get('outcomes/'+ticker,{type:'json'});if(o)outcomes[ticker]=o}
+ return json({asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
