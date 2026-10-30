@@ -109,6 +109,8 @@ if(host){
  renderBot();reconcileBot();setInterval(reconcileBot,30000);
  exportButton.onclick=()=>{const blob=new Blob([JSON.stringify({schema:'banktrades-research-v1',exportedAt:new Date().toISOString(),...state},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='bank-trades-research.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  const serverSummary=document.createElement('p');serverSummary.className='notice';host.append(serverSummary);
+ const combined=document.createElement('div');combined.className='notice';host.append(combined);
+ const history=document.createElement('div');history.className='premium-foot';host.append(history);
  async function refreshServerResults(){
   try{
    const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
@@ -116,40 +118,23 @@ if(host){
    const data=await response.json();
    const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
    const settled=trades.filter(t=>t.status==='SETTLED');
-   const wins=settled.filter(t=>Number(t.pnl)>0).length;
-   const losses=settled.filter(t=>Number(t.pnl)<0).length;
+   const resolved=settled.filter(t=>typeof t.pnl==='number'&&Number.isFinite(t.pnl));
+   const wins=resolved.filter(t=>t.pnl>0).length;
+   const losses=resolved.filter(t=>t.pnl<0).length;
+   const ties=resolved.length-wins-losses;
    const pending=trades.filter(t=>t.status==='OPEN'||t.status==='PENDING').length;
-   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' profitable, '+losses+' unprofitable, '+pending+' open. These are simulated trades, not prospective Learning Lab predictions.';
-   const oldServerHistory=host.querySelector('[data-server-paper-history]');if(oldServerHistory)oldServerHistory.remove();
-   const history=document.createElement('div');history.dataset.serverPaperHistory='true';history.className='premium-foot';
+   const totalPnl=resolved.reduce((sum,t)=>sum+t.pnl,0);
+   serverSummary.textContent='SERVER KAIBOT PAPER RESULTS: '+settled.length+' settled, '+wins+' wins, '+losses+' losses, '+pending+' open.';
+   combined.textContent='UNIFIED KALSHI PAPER RESULTS: '+resolved.length+' settled, '+wins+' wins / '+losses+' losses, '+ties+' break-even, '+(wins+losses?(100*wins/(wins+losses)).toFixed(1)+'%':'N/A')+' win rate, virtual P/L $'+totalPnl.toFixed(2)+'. Live market outcomes; simulated trades.';
+   history.replaceChildren();
    const title=document.createElement('strong');title.textContent='SERVER PAPER TRADE HISTORY (latest 20)';history.append(title);
-   for(const t of trades.filter(t=>t.status==='SETTLED').slice(-20).reverse()){
-    const line=document.createElement('p');const pnl=Number(t.pnl);
-    line.textContent=String(t.asset||'UNKNOWN')+' · '+String(t.side||'').toUpperCase()+' · '+(Number.isFinite(pnl)?(pnl>0?'WIN':pnl<0?'LOSS':'BREAK EVEN'):'RESULT UNKNOWN')+' · '+(Number.isFinite(pnl)?'virtual P/L 
-  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
- }
- refreshServerResults();setInterval(refreshServerResults,15000);
- render();outcomes();setInterval(outcomes,30000);
-}+pnl.toFixed(2):'P/L unavailable')+' · '+String(t.ticker||'');history.append(line);
+   for(const t of settled.slice(-20).reverse()){
+    const line=document.createElement('p');
+    const pnl=typeof t.pnl==='number'&&Number.isFinite(t.pnl)?t.pnl:null;
+    line.textContent=String(t.asset||'UNKNOWN')+' / '+String(t.side||'').toUpperCase()+' / '+(pnl===null?'UNKNOWN':pnl>0?'WIN':pnl<0?'LOSS':'BREAK EVEN')+' / '+(pnl===null?'P/L unavailable':'virtual P/L $'+pnl.toFixed(2))+' / '+String(t.ticker||'');
+    history.append(line);
    }
-   serverSummary.after(history);
-   // Unified verified-market scoreboard: use server paper ledger as the canonical trade result source.
-   // Do not train the prospective prediction model from these trades: they lack stored pre-outcome forecasts.
-   const combined=host.querySelector('[data-unified-results]')||document.createElement('div');
-   combined.dataset.unifiedResults='true';combined.className='notice';
-   const resolved=settled.filter(t=>Number.isFinite(Number(t.pnl)));
-   const winCount=resolved.filter(t=>Number(t.pnl)>0).length;
-   const lossCount=resolved.filter(t=>Number(t.pnl)<0).length;
-   const ties=resolved.length-winCount-lossCount;
-   const totalPnl=resolved.reduce((sum,t)=>sum+Number(t.pnl),0);
-   combined.textContent='UNIFIED KALSHI PAPER RESULTS · '+resolved.length+' settled · '+winCount+' wins / '+lossCount+' losses'+(ties?' / '+ties+' break-even':'')+' · '+(winCount+lossCount?(100*winCount/(winCount+lossCount)).toFixed(1)+'%':'N/A')+' win rate · virtual P/L 
-  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
- }
- refreshServerResults();setInterval(refreshServerResults,15000);
- render();outcomes();setInterval(outcomes,30000);
-}+totalPnl.toFixed(2)+' · '+pending+' open · verified market outcomes, simulated entries';
-   host.prepend(combined);
-  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message}
+  }catch(e){serverSummary.textContent='Server KaiBot results unavailable: '+e.message;combined.textContent='';history.replaceChildren();}
  }
  refreshServerResults();setInterval(refreshServerResults,15000);
  render();outcomes();setInterval(outcomes,30000);
