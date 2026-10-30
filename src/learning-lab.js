@@ -9,6 +9,7 @@ if(host){
  const breakdown=document.createElement('div');breakdown.className='premium-foot';host.append(breakdown);
  const recent=document.createElement('div');recent.className='premium-foot';host.append(recent);
  const diagnostics=document.createElement('div');diagnostics.className='premium-foot';host.append(diagnostics);
+ const walk=document.createElement('div');walk.className='premium-foot';host.append(walk);
 
  const exportButton=document.createElement('button');exportButton.textContent='EXPORT RESEARCH RESULTS / BACKUP';host.append(exportButton);
  const storageNote=document.createElement('p');storageNote.className='premium-foot';storageNote.textContent='Stored in this browser only. Export backups regularly; clearing site data or changing devices can erase history. Accuracy uses finalized signals only, not paper-trade profit.';host.append(storageNote);
@@ -36,13 +37,21 @@ if(host){
   const recentBrier=recentSettled.length?recentSettled.reduce((s,o)=>s+(o.prediction-o.outcome)**2,0)/recentSettled.length:null;
   const recentBase=recentSettled.length?recentSettled.reduce((s,o)=>s+(o.baseline-o.outcome)**2,0)/recentSettled.length:null;
   const score=document.createElement('p');score.textContent=recentBrier===null?'Recent forecast error: not available':'Last '+n+' Brier error '+recentBrier.toFixed(4)+' vs market-price baseline '+recentBase.toFixed(4)+' (lower is better)'+(recentBrier<recentBase?' · research forecast lower error':' · no demonstrated improvement');diagnostics.append(score);
+  walk.replaceChildren();const wh=document.createElement('strong');wh.textContent='WALK-FORWARD BTC VALIDATION';walk.append(wh);
+  const btc=settled.filter(o=>o.asset==='BTC'&&o.context);const trainCut=Math.max(0,btc.length-30),holdout=btc.slice(trainCut);
+  const wp=document.createElement('p');wp.textContent=btc.length<30?'Collecting prospective BTC rounds: '+btc.length+'/30 minimum before adaptive setup recommendations.':('Newest '+holdout.length+' BTC rounds are shown as a rolling holdout window; older observations remain historical training evidence.');walk.append(wp);
+  const dimensions=[['Entry',o=>o.context.entryBand],['Time left',o=>o.context.timeBand],['Spread',o=>o.context.spreadBand],['Momentum',o=>o.context.momentumBand],['Lock',o=>o.context.lockBand],['Indicators',o=>o.context.indicatorBand],['Regime',o=>o.context.regime]];
+  for(const [label,get] of dimensions){const groups=new Map();for(const o of btc){const k=get(o)||'unknown',v=groups.get(k)||{n:0,w:0};v.n++;v.w+=o.outcome;groups.set(k,v)}const eligible=[...groups].filter(([,v])=>v.n>=12).sort((a,b)=>(b[1].w/b[1].n)-(a[1].w/a[1].n));if(!eligible.length)continue;const p=document.createElement('p');p.textContent=label+': '+eligible.map(([k,v])=>k+' '+v.w+'/'+v.n+' ('+(100*v.w/v.n).toFixed(0)+'%)').join(' · ');walk.append(p)}
+  const adaptive=document.createElement('p');if(btc.length<50)adaptive.textContent='ADAPTIVE GATE: observation only — insufficient settled BTC sample to suppress setups.';else{const bad=[];for(const [label,get] of dimensions){const groups=new Map();for(const o of btc.slice(0,-20)){const k=get(o)||'unknown',v=groups.get(k)||{n:0,w:0};v.n++;v.w+=o.outcome;groups.set(k,v)}for(const [k,v] of groups)if(v.n>=20&&v.w/v.n<.45)bad.push(label+'='+k)}adaptive.textContent=bad.length?'RESEARCH WARNING: historically weak tested buckets: '+bad.join(', ')+'. Keep paper-only until holdout confirms.':'No setup bucket has enough evidence to disable under the conservative rule.'}walk.append(adaptive);
   detail.textContent=m.count?`Prospective Brier score ${(m.brier/m.count).toFixed(4)} · entry-ask baseline ${(m.baselineBrier/m.count).toFixed(4)} (lower is better). This device only. Uncalibrated; correlated samples; no guaranteed improvement. Research model does not control orders.`:'Logs predictions before results arrive, then updates a small online model only after finalized binary settlement. No synthetic wins. Runs while this page is open. Does not control orders.';
  }
  window.addEventListener('banktrades:signals',e=>{
   for(const s of e.detail||[]){
    if(s.action==='WAIT'||!s.ticker||!validFeatures(s.features)||!Number.isFinite(s.ask)||s.ask<=0||s.ask>=1||!Number.isFinite(s.expiresAt)||s.expiresAt<=Date.now()||state.observations.some(o=>o.ticker===s.ticker))continue;
    if(state.observations.length>=1000){const oldIndex=state.observations.findIndex(o=>o.outcome===0||o.outcome===1);if(oldIndex<0)continue;state.observations.splice(oldIndex,1);}
-   state.observations.push({ticker:s.ticker,asset:s.asset,action:s.action,at:Date.now(),expiresAt:s.expiresAt,features:s.features,baseline:s.ask,prediction:predict(state.model,s.ask,s.features),modelVersion:state.model.count});
+   const lock=s.asset==='BTC'?window.__BANK_TRADES_BTC_LOCK__:null,secondsLeft=Math.max(0,(s.expiresAt-Date.now())/1000),spread=Number(s.spread??s?.meta?.spread),momentum=Number(s.momentum??s.features?.[0]),entry=s.ask;
+   const context={entryBand:entry<.45?'35–44¢':entry<.6?'45–59¢':'60¢+',timeBand:secondsLeft<360?'<6m':secondsLeft<600?'6–10m':'10m+',spreadBand:Number.isFinite(spread)?(spread<=.01?'≤1¢':spread<=.03?'2–3¢':'>3¢'):'unknown',momentumBand:Number.isFinite(momentum)?(Math.abs(momentum)<.25?'low':Math.abs(momentum)<.6?'medium':'high'):'unknown',lockBand:lock&&Date.now()-Number(lock.at)<90000?(lock.lockCandidate?'candidate':'tracking'):'none',indicatorBand:lock&&Number.isFinite(lock.quality)?(lock.quality>=75?'strong':lock.quality>=55?'mixed':'weak'):'unknown',regime:Number.isFinite(momentum)?(Math.abs(momentum)>=.6?'trend':Math.abs(momentum)<=.2?'flat':'transition'):'unknown',secondsLeft,spread:Number.isFinite(spread)?spread:null,momentum:Number.isFinite(momentum)?momentum:null,lockQuality:lock?.quality??null};
+   state.observations.push({ticker:s.ticker,asset:s.asset,action:s.action,at:Date.now(),expiresAt:s.expiresAt,features:s.features,baseline:s.ask,prediction:predict(state.model,s.ask,s.features),modelVersion:state.model.count,context});
   }save();render();
  });
  let busy=false;
