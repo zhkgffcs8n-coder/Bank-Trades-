@@ -95,6 +95,28 @@ export default async()=>{
    report.engines[name]={trades:trades.length,wins:trades.filter(row=>row.engines[name].won).length,losses:trades.filter(row=>!row.engines[name].won).length,winRate:trades.length?trades.filter(row=>row.engines[name].won).length/trades.length:null,netPnl:Number(pnl.toFixed(4)),roi:invested?Number((pnl/invested).toFixed(4)):null,maxDrawdown:Number(maxDrawdown.toFixed(4)),method:'One hypothetical contract per signal; binary settlement, entry ask; excludes fees, slippage and early exits'};
   }
   await db.setJSON('comparison/report-v1',report);
+  // Shared loss review: update a conservative research-only threshold from resolved
+  // outcomes. The original strategy remains frozen as an unbiased baseline.
+  // Never retrain on unresolved outcomes or automatically loosen risk limits.
+  const resolved=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.original?.resolved).sort((a,b)=>a.at-b.at);
+  const training=resolved.slice(0,-30),holdout=resolved.slice(-30);
+  const candidates=[{score:70,maxAsk:65},{score:75,maxAsk:65},{score:80,maxAsk:60},{score:85,maxAsk:55}];
+  const evaluate=(set,gate)=>{
+   const selected=set.filter(r=>Number(r.engines.original.score)>=gate.score&&Number(r.engines.original.ask)<=gate.maxAsk);
+   const pnl=selected.reduce((n,r)=>n+Number(r.engines.original.pnl),0);
+   const spent=selected.reduce((n,r)=>n+Number(r.engines.original.ask)/100,0);
+   return {trades:selected.length,roi:spent?pnl/spent:null,pnl};
+  };
+  const scored=candidates.map(g=>({...g,train:evaluate(training,g),holdout:evaluate(holdout,g)}));
+  const eligible=scored.filter(g=>g.train.trades>=30&&g.holdout.trades>=15&&g.train.roi>0&&g.holdout.roi>0);
+  eligible.sort((a,b)=>b.holdout.roi-a.holdout.roi);
+  const chosen=eligible[0]||null;
+  await db.setJSON('comparison/research-gate-v1',{
+   at:now,mode:'RESEARCH ONLY',baseline:'original unchanged',trainingCount:training.length,holdoutCount:holdout.length,
+   candidates:scored,proposed:chosen?{score:chosen.score,maxAsk:chosen.maxAsk}:null,
+   note:'Uses past finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
+  });
+
   await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,mode:'PAPER RESEARCH'});
  }catch(e){console.error('Training update failed',String(e))}
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
