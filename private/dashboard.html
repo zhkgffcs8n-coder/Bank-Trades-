@@ -350,7 +350,7 @@ $('paperBuy').addEventListener('click',async()=>{
  const cost=qty*ask/100;
  if(cost>book.cash){alert('Insufficient virtual cash.');return}
  book.cash=Math.round((book.cash-cost)*100)/100;
- book.trades.push({asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost});
+ book.trades.push({asset,side,qty,ask,ticker:m.ticker,at:Date.now(),cost,status:'OPEN'});
  save();render();
  });
 });
