@@ -1,6 +1,7 @@
 import {matchLiveObservation} from '../../src/paired-live-match.mjs';
 import {visibleMarketSamples} from '../../src/history-snapshot.mjs';
 import {pairedDisplay} from '../../src/paired-display.mjs';
+import {pairedWaitDiagnostics} from '../../src/paired-wait-diagnostics.mjs';
 import {getStore} from '@netlify/blobs';
 const ASSETS=new Set(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']);
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -28,6 +29,9 @@ export default async req=>{
  const liveObservation=comparisonPair?.ticker?await db.get('signal-observations/v1/'+comparisonPair.ticker,{type:'json'}):null;
  const pairedLiveMatch=matchLiveObservation(comparisonPair,liveObservation);
  // Status describes the CURRENT contract, even when an older verified result is shown.
+ const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
+ const pairedWait=pairedWaitDiagnostics(latest,rolling,feedTelemetry);
+ const pairedWaitReasons=currentPaired?[]:pairedWait.reasons;
  const pairedStatus=currentPaired?'RECORDED':!pairedTicker?'NO_CURRENT_CONTRACT':'AWAITING_QUALIFIED_SNAPSHOT';
  const training=await db.get('training/status',{type:'json'});
  const comparison=await db.get('comparison/report-v1',{type:'json'});
@@ -35,6 +39,5 @@ export default async req=>{
  const mistakeAnalysis=await db.get('comparison/mistake-analysis-v1',{type:'json'});
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
- const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedShadowPrevious,pairedShadowLatestResolved,pairedLiveMatch,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedShadowPrevious,pairedShadowLatestResolved,pairedLiveMatch,pairedStatus,pairedWaitReasons,pairedSampleCount:pairedWait.sampleCount,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
