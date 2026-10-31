@@ -21,3 +21,16 @@ export function evaluateTeam(s){
  const directional=votes.slice(0,6),up=directional.filter(v=>v.direction==='UP').length;
  return {status:'SHADOW_ONLY',votes,agreement:Math.max(up,6-up)/6,consensus:up===3?'SPLIT':up>3?'UP':'DOWN',baseline,notice:'Experimental correlated heuristics. No trade authorization, no accuracy claim.'};
 }
+
+export function coordinateEngines(signal, settled=[]){
+ const team=evaluateTeam(signal);
+ const valid=settled.filter(x=>x?.verified===true&&[0,1].includes(x.outcome)&&Number.isFinite(x.prediction)&&x.prediction>=0&&x.prediction<=1);
+ const brier=valid.length?valid.reduce((sum,x)=>sum+(x.prediction-x.outcome)**2,0)/valid.length:null;
+ const spread=signal?.spread,age=signal?.ageMs,volume=signal?.volume;
+ const risk={fresh:Number.isFinite(age)&&age>=0&&age<=15000,spreadAcceptable:Number.isFinite(spread)&&spread>=0&&spread<=5,feesKnown:Number.isFinite(signal?.feeEstimate),slippageKnown:Number.isFinite(signal?.slippageEstimate)};
+ const whale={status:Number.isFinite(volume)?'VOLUME_OBSERVED':'UNAVAILABLE',volume:Number.isFinite(volume)?volume:null,unusualActivityVerified:false};
+ const calibration={verifiedCount:valid.length,brier,validated:valid.length>=100};
+ const champion={promoted:false,reason:'Independent forward validation required'};
+ const execution={authorized:false,mode:'PAPER_RESEARCH_ONLY'};
+ return {...team,risk,whale,calibration,champion,execution,sharedLearning:{verifiedCount:valid.length},decision:'WAIT'};
+}
