@@ -136,6 +136,28 @@ export default async()=>{
    if(v.n>=20&&v.pnl<0)breakdown.recommendations.push({type:'REVIEW_ENTRY_BAND',band,reason:'Negative simulated returns in '+band+' entry band; research only'});
   }
   await db.setJSON('comparison/mistake-analysis-v1',breakdown);
+  // Durable lesson journal: one immutable outcome review per resolved contract.
+  // Capture both engines' choices, including correctly avoided losing trades.
+  for(const row of resolved.slice(-150)){
+   const key='comparison/lessons/v1/'+row.ticker;
+   if(await db.get(key,{type:'json'}))continue;
+   const original=row.engines.original,upgraded=row.engines.upgraded;
+   const upgradedEntered=upgraded?.resolved===true;
+   const lesson={ticker:row.ticker,asset:row.asset,signalAt:row.at,verifiedAt:row.resolvedAt,
+    officialOutcome:row.outcome,entry:{ask:original.ask,score:original.score,side:original.side},
+    original:{entered:true,won:original.won,pnl:original.pnl},
+    upgraded:{entered:upgradedEntered,won:upgradedEntered?upgraded.won:null,pnl:upgradedEntered?upgraded.pnl:null},
+    interpretation:original.won?(upgradedEntered?'BOTH_CORRECT':'UPGRADED_MISSED_WIN'):(upgradedEntered?'BOTH_LOST':'UPGRADED_AVOIDED_LOSS'),
+    source:'Official finalized binary market outcome; simulated ask entry, no fees/slippage',version:1};
+   await db.setJSON(key,lesson);
+  }
+  const lessons=resolved.map(row=>({originalWon:row.engines.original.won,upgradedEntered:row.engines.upgraded?.resolved===true}));
+  await db.setJSON('comparison/lesson-summary-v1',{at:now,total:lessons.length,bothWon:lessons.filter(x=>x.originalWon&&x.upgradedEntered).length,
+   bothLost:lessons.filter(x=>!x.originalWon&&x.upgradedEntered).length,
+   avoidedLosses:lessons.filter(x=>!x.originalWon&&!x.upgradedEntered).length,
+   missedWins:lessons.filter(x=>x.originalWon&&!x.upgradedEntered).length,
+   note:'Research labels are not independent model training; future outcomes determine whether proposed changes help.'});
+
   // Prospective candidate registration: freeze each proposal before future outcomes.
   // A candidate is never promoted from the same observations that selected it.
   const registryKey='comparison/prospective-candidate-v1';
