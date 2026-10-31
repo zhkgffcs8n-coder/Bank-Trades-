@@ -36,7 +36,22 @@ if(host){
    const cmp=data.comparison,adaptive=data.adaptiveResearch,mistakes=data.mistakeAnalysis,prospective=data.prospectiveEvaluation,lessons=data.lessonSummary,feed=data.feedTelemetry;
    const fmt=x=>Number.isFinite(x)?(100*x).toFixed(1)+'%':'N/A';
    comparisonPanel.replaceChildren();
-   const heading=document.createElement('strong');heading.textContent='ENGINE A vs ENGINE B · SERVER SHADOW COMPARISON';comparisonPanel.append(heading);
+   const paired=data.pairedShadow;
+   const pairedHead=document.createElement('strong');pairedHead.textContent='PAIRED A+B HYBRID · SAME CONTRACT / QUOTE · SHADOW ONLY';comparisonPanel.append(pairedHead);
+   const pairedLine=document.createElement('p');
+   if(paired){
+    const a=paired.engines?.A,b=paired.engines?.B,h=paired.hybrid;
+    pairedLine.textContent=(paired.ticker||'Unknown contract')+' · A '+(a?.action||'WAIT')+' · B '+(b?.action||'WAIT')+
+     ' · HYBRID '+(h?.researchConsensus?'RESEARCH '+h.researchConsensus:'WAIT')+
+     ' · '+(h?.reason||'Missing explanation')+' · '+(paired.status||'PENDING')+
+     ' · fees/slippage and calibrated confidence unavailable; NO TRADE AUTHORIZATION';
+    if(paired.settlement?.verified){pairedLine.textContent+=' · OFFICIALLY SETTLED '+paired.settlement.result.toUpperCase()+
+      ' · A '+(paired.evaluation?.A?.correct===null?'abstained':paired.evaluation?.A?.correct?'correct':'incorrect')+
+      ' · B '+(paired.evaluation?.B?.correct===null?'abstained':paired.evaluation?.B?.correct?'correct':'incorrect')+
+      ' · hybrid '+(paired.evaluation?.hybrid?.correct===null?'abstained':paired.evaluation?.hybrid?.correct?'correct':'incorrect');}
+   }else pairedLine.textContent='WAIT · no frozen paired A/B snapshot for the latest contract yet; research only';
+   comparisonPanel.append(pairedLine);
+   const heading=document.createElement('strong');heading.textContent='LEGACY A/B GATED PAPER COMPARISON · NOT INDEPENDENT PAIRED PREDICTIONS';comparisonPanel.append(heading);
    if(cmp){for(const name of ['original','upgraded']){const v=cmp.engines?.[name];if(!v)continue;const line=document.createElement('p');line.textContent=(name==='original'?'ENGINE A · ORIGINAL':'ENGINE B · UPGRADED')+' · '+v.trades+' settled · '+v.wins+' W / '+v.losses+' L · win rate '+fmt(v.winRate)+' · simulated net '+Number(v.netPnl).toFixed(2)+' contracts · ROI '+fmt(v.roi)+' · max drawdown '+Number(v.maxDrawdown).toFixed(2);comparisonPanel.append(line)}const meta=document.createElement('p');meta.textContent=cmp.pending+' pending · '+cmp.totalObserved+' observed · '+(cmp.truncated?'report truncated · ':'')+'one-contract hypothetical settlement; excludes fees, slippage and early exits';comparisonPanel.append(meta)}else{const line=document.createElement('p');line.textContent='Waiting for the first server-side comparison report';comparisonPanel.append(line)}
    if(feed){const p=document.createElement('p');const age=Math.max(0,Date.now()-Number(feed.at));p.textContent='DATA HEALTH · '+feed.asset+' · last scheduled sample '+Math.round(age/1000)+'s ago · '+(age>120000?'STALE — do not trust entries':'recent')+' · duplicate suppressed: '+(feed.sampleDuplicate?'yes':'no')+' · quote spread '+Number(feed.quoteSpread).toFixed(2)+'¢';comparisonPanel.append(p)}
    if(lessons){const p=document.createElement('p');p.textContent='SHARED WIN/LOSS LESSONS · '+lessons.total+' reviewed · '+lessons.bothWon+' both won · '+lessons.bothLost+' both lost · '+lessons.avoidedLosses+' losses avoided by Engine B · '+lessons.missedWins+' wins missed by Engine B';comparisonPanel.append(p)}
