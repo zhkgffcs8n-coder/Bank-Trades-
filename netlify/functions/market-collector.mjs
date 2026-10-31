@@ -13,9 +13,9 @@ export default async()=>{
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
-  const m=markets[0];if(!m)return;
+  const m=markets[0];if(!m){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:'No verified open contract'});return;}
   const yesBid=price(m,'yes_bid'),yesAsk=price(m,'yes_ask'),noBid=price(m,'no_bid'),noAsk=price(m,'no_ask');
-  if(![yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||yesAsk<yesBid||noAsk<noBid)return;
+  if(![yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||yesAsk<yesBid||noAsk<noBid){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,ticker:m.ticker,valid:false,error:'Incomplete or crossed bid/ask quotes'});return;}
   const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   const sampleKey='samples/'+asset+'/'+bucket;
   const existing=await db.get(sampleKey,{type:'json'});
@@ -45,7 +45,7 @@ export default async()=>{
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
    await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features)});
   }
- }catch{}}));
+ }catch(e){console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
  // Track every sampled contract, not just the latest contract for each asset.
  // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
