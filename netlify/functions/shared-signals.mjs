@@ -29,12 +29,13 @@ export default async req=>{
     records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
    }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message};}
    const signal=gatePaperEntry({...paperSignal(market,records,activePosition,now,research),asset},stats);
+   const roundAssessment={ticker:market.ticker,asset,expiresAt:market._expiry,evaluatedAt:now,coverage:'EVALUATED',entryQualified:['BUY UP','BUY DOWN'].includes(signal.action),action:signal.action,reason:signal.reason};
    const quote=k=>market[k+'_dollars']!=null?Number(market[k+'_dollars']):market[k]!=null?Number(market[k])/100:NaN;
    const upAsk=quote('yes_ask'),downAsk=quote('no_ask'),upBid=quote('yes_bid'),downBid=quote('no_bid');
    const fairUp=Number.isFinite(upBid)&&Number.isFinite(upAsk)?(upBid+upAsk)/2:NaN;
    const valid=Number.isFinite(upAsk)&&Number.isFinite(downAsk)&&upAsk>0&&downAsk>0&&upAsk<1&&downAsk<1;
    const forecast=valid?{direction:signal.action==='BUY UP'?'UP':signal.action==='BUY DOWN'?'DOWN':Number.isFinite(fairUp)?fairUp>=.5?'UP':'DOWN':null,method:signal.action.startsWith('BUY')?'qualified experimental entry':'quote-implied direction only; not a predictive edge',up:{askCents:Math.round(upAsk*1000)/10,maxProfitPerContract:Math.round((1-upAsk)*1000)/1000,maxLossPerContract:upAsk},down:{askCents:Math.round(downAsk*1000)/10,maxProfitPerContract:Math.round((1-downAsk)*1000)/1000,maxLossPerContract:downAsk},expiresAt:market._expiry,actionable:signal.action.startsWith('BUY')}:null;
-   return {asset,...signal,forecast,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,results});
