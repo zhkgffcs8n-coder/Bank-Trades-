@@ -136,6 +136,24 @@ export default async()=>{
    if(v.n>=20&&v.pnl<0)breakdown.recommendations.push({type:'REVIEW_ENTRY_BAND',band,reason:'Negative simulated returns in '+band+' entry band; research only'});
   }
   await db.setJSON('comparison/mistake-analysis-v1',breakdown);
+  // Prospective candidate registration: freeze each proposal before future outcomes.
+  // A candidate is never promoted from the same observations that selected it.
+  const registryKey='comparison/prospective-candidate-v1';
+  let registry=await db.get(registryKey,{type:'json'});
+  if(!registry&&chosen){
+   registry={createdAt:now,after:resolved.length,gate:{score:chosen.score,maxAsk:chosen.maxAsk},status:'COLLECTING',version:1};
+   await db.setJSON(registryKey,registry);
+  }
+  if(registry){
+   const future=resolved.slice(registry.after);
+   const evalGate=evaluate(future,registry.gate);
+   const baseline=evaluate(future,{score:0,maxAsk:100});
+   const ready=future.length>=100&&evalGate.trades>=30;
+   const better=ready&&evalGate.roi!==null&&baseline.roi!==null&&evalGate.roi>baseline.roi&&evalGate.pnl>0;
+   const evaluation={at:now,version:1,status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:false,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
+   await db.setJSON('comparison/prospective-evaluation-v1',evaluation);
+  }
+
   await db.setJSON('comparison/research-gate-v1',{
    at:now,mode:'RESEARCH ONLY',baseline:'original unchanged',trainingCount:training.length,holdoutCount:holdout.length,
    candidates:scored,proposed:chosen?{score:chosen.score,maxAsk:chosen.maxAsk}:null,
