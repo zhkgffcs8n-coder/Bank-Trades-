@@ -26,5 +26,5 @@ export default async req=>{
    return {asset,...signal,position:position?{side:position.side,ask:position.ask,qty:position.qty,ticker:position.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
  }));
- return json({fetched_at:new Date(now).toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,results});
+ return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,results});
 };
