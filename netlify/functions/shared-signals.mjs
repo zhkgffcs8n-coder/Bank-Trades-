@@ -31,13 +31,13 @@ export default async req=>{
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
    const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
    const market=markets[0];
-   if(!market)return {asset,action:'WAIT',reason:'No verified active contract',ticker:null};
+   if(!market)return {asset,action:'WAIT',reason:'No verified active contract',ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['verified active contract ticker']}};
    const activePosition=position?.ticker===market.ticker?position:null;
    let records=[];
    try{
     const recent=await timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples');
     records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
-   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message};}
+   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable: '+String(e.message)]}};}
    const signal=gatePaperEntry({...paperSignal(market,records,activePosition,now,research),asset},stats);
    // A shadow committee receives real same-contract features and normalized ask,
    // even when the actionable paper signal correctly remains WAIT.
@@ -49,7 +49,7 @@ export default async req=>{
    const valid=Number.isFinite(upAsk)&&Number.isFinite(downAsk)&&upAsk>0&&downAsk>0&&upAsk<1&&downAsk<1;
    const forecast=valid?{direction:signal.action==='BUY UP'?'UP':signal.action==='BUY DOWN'?'DOWN':Number.isFinite(fairUp)?fairUp>=.5?'UP':'DOWN':null,method:signal.action.startsWith('BUY')?'qualified experimental entry':'quote-implied direction only; not a predictive edge',up:{askCents:Math.round(upAsk*1000)/10,maxProfitPerContract:Math.round((1-upAsk)*1000)/1000,maxLossPerContract:upAsk},down:{askCents:Math.round(downAsk*1000)/10,maxProfitPerContract:Math.round((1-downAsk)*1000)/1000,maxLossPerContract:downAsk},expiresAt:market._expiry,actionable:signal.action.startsWith('BUY')}:null;
    return {asset,...signal,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
-  }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
+  }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,learning,results});
 };
