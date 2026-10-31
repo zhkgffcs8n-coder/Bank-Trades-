@@ -243,14 +243,17 @@ export default async()=>{
    const winsFor=(set,gate)=>{const selected=set.filter(r=>Number(r.engines.original.score)>=gate.score&&Number(r.engines.original.ask)<=gate.maxAsk);return {trades:selected.length,wins:selected.filter(r=>r.engines.original.won).length,losses:selected.filter(r=>!r.engines.original.won).length,winRate:selected.length?selected.filter(r=>r.engines.original.won).length/selected.length:null}};
    const candidateAccuracy=winsFor(future,registry.gate),baselineAccuracy=winsFor(future,{score:75,maxAsk:65});
    const accuracyImproved=ready&&candidateAccuracy.trades>=30&&baselineAccuracy.trades>=30&&candidateAccuracy.winRate>baselineAccuracy.winRate;
-   const evaluation={at:now,version:1,accuracy:{candidate:candidateAccuracy,baseline:baselineAccuracy,improved:accuracyImproved,verified:ready&&candidateAccuracy.trades>=30&&baselineAccuracy.trades>=30,method:'Prospective official finalized market labels; selection effects and sample uncertainty remain'},status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:true,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
+   const evaluation={at:now,version:1,accuracy:{candidate:candidateAccuracy,baseline:baselineAccuracy,improved:accuracyImproved,verified:ready&&candidateAccuracy.trades>=30&&baselineAccuracy.trades>=30,method:'Prospective official finalized market labels; selection effects and sample uncertainty remain'},status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:false,notes:'Prospective holdout; no live strategy changes. Fees and slippage are not modeled, so paper promotion is disabled pending independent cost-aware validation.'};
    await db.setJSON('comparison/prospective-evaluation-v1',evaluation);
    // Automatic promotion affects simulated KaiBot entries only. The original stays unchanged.
    // Only allow a strictly tighter gate than the existing 75 score / 65c ceiling.
    const safe=Number(registry.gate.score)>=75&&Number(registry.gate.maxAsk)<=65;
    const activeKey='comparison/active-paper-gate-v1';
    const active=await db.get(activeKey,{type:'json'});
-   if(better&&safe&&!active){
+   // Gross hypothetical returns exclude fees, slippage and fill quality.
+   // Preserve forward evaluation but block automatic paper gate activation.
+   const independentCostValidation=false;
+   if(independentCostValidation&&better&&safe&&!active){
     await db.setJSON(activeKey,{gate:registry.gate,activatedAt:now,afterAt:now,status:'ACTIVE',source:'prospective-verified',mode:'PAPER ONLY'});
    }else if(active?.status==='ACTIVE'){
     const post=resolved.filter(x=>x.at>active.afterAt);
