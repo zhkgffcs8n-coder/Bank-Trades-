@@ -64,7 +64,6 @@ test('B is a separate trend rule rather than copying A or committee vote',()=>{
 
 test('B prefers newest observed quote when minute bucket has conflicting duplicates',()=>{
  const rows=samples([.40,.45,.50,.35]);
- const lastTime=rows.at(-1).t;
  const stale={...rows.at(-1),yesMid:.35,observedAt:now-20000};
  const newest={...rows.at(-1),yesMid:.55,observedAt:now-10000};
  for(const candidate of [[...rows.slice(0,-1),stale,newest],[...rows.slice(0,-1),newest,stale]]){
