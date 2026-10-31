@@ -10,12 +10,19 @@ if(host){
   const buys=signals.filter(s=>s.action==='BUY UP'||s.action==='BUY DOWN');
   sharedStatus.textContent='SHARED KAIBOT SIGNAL FEED · '+signals.length+' markets · '+buys.length+' experimental BUY alerts · '+signals.filter(s=>s.action==='WAIT').length+' WAIT. Same server predictions as live dashboard; no duplicate learner samples. No live-money orders.';
  });
+ const comparisonPanel=document.createElement('div');comparisonPanel.className='premium-foot';host.append(comparisonPanel);
  const serverTraining=document.createElement('p');serverTraining.className='premium-foot';serverTraining.textContent='SERVER RESEARCH TRAINING · loading verified settlement statistics';host.append(serverTraining);
  async function refreshServerTraining(){
   try{
    const response=await fetch('/.netlify/functions/market-history?asset=BTC',{cache:'no-store'});
    if(!response.ok)throw Error('status '+response.status);
    const data=await response.json(),t=data.training;
+   const cmp=data.comparison,adaptive=data.adaptiveResearch;
+   const fmt=x=>Number.isFinite(x)?(100*x).toFixed(1)+'%':'N/A';
+   comparisonPanel.replaceChildren();
+   const heading=document.createElement('strong');heading.textContent='ENGINE A vs ENGINE B · SERVER SHADOW COMPARISON';comparisonPanel.append(heading);
+   if(cmp){for(const name of ['original','upgraded']){const v=cmp.engines?.[name];if(!v)continue;const line=document.createElement('p');line.textContent=(name==='original'?'ENGINE A · ORIGINAL':'ENGINE B · UPGRADED')+' · '+v.trades+' settled · '+v.wins+' W / '+v.losses+' L · win rate '+fmt(v.winRate)+' · simulated net '+Number(v.netPnl).toFixed(2)+' contracts · ROI '+fmt(v.roi)+' · max drawdown '+Number(v.maxDrawdown).toFixed(2);comparisonPanel.append(line)}const meta=document.createElement('p');meta.textContent=cmp.pending+' pending · '+cmp.totalObserved+' observed · '+(cmp.truncated?'report truncated · ':'')+'one-contract hypothetical settlement; excludes fees, slippage and early exits';comparisonPanel.append(meta)}else{const line=document.createElement('p');line.textContent='Waiting for the first server-side comparison report';comparisonPanel.append(line)}
+   if(adaptive){const line=document.createElement('p');line.textContent='SHARED LOSS REVIEW · '+adaptive.trainingCount+' training / '+adaptive.holdoutCount+' recent observations · '+(adaptive.proposed?'Research-only proposed gate: score ≥'+adaptive.proposed.score+', ask ≤'+adaptive.proposed.maxAsk+'¢':'No validated replacement gate proposed')+' · baseline unchanged; no automatic deployment';comparisonPanel.append(line)}
    serverTraining.textContent=t?'SHARED SERVER RESEARCH · '+t.count+' finalized predictions · model Brier '+(Number.isFinite(t.brier)?t.brier.toFixed(4):'N/A')+' · market baseline '+(Number.isFinite(t.baselineBrier)?t.baselineBrier.toFixed(4):'N/A')+' · '+(t.validated?'research validation threshold met':'validation incomplete')+' · paper-only':'SHARED SERVER RESEARCH · awaiting first verified training update';
   }catch{serverTraining.textContent='SHARED SERVER RESEARCH · status temporarily unavailable';}
  }
