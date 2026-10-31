@@ -7,7 +7,7 @@ function syncSignals(){
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const action=sig?.action||'WAIT';
-  cell.textContent=action;
+  cell.textContent=action==='WAIT'&&sig?.roundAssessment?'ROUND CHECKED · WAIT':action;
   cell.title=sig?.reason||'Waiting for shared signal engine';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
