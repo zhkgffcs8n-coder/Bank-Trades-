@@ -1,4 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
+import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
@@ -24,10 +25,11 @@ export default async()=>{
   if(!existing)await db.setJSON(sampleKey,record);
   await db.setJSON('latest/'+asset,record);
   // Maintain a bounded per-asset rolling snapshot; signal readers avoid expensive blob listings.
+  let recent=[];
   try{
    const key='recent/'+asset;
    const prior=await db.get(key,{type:'json'});
-   const recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
+   recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
    recent.push(record);
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
@@ -36,8 +38,9 @@ export default async()=>{
   try{
    const comparisonKey='comparison/v1/'+m.ticker;
    if(!await db.get(comparisonKey,{type:'json'})){
-    const history=await db.list({prefix:'samples/'+asset+'/',limit:30});
-    const records=(await Promise.all(history.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
+    // Use the same fresh contract snapshot as the live signal path. Blob list's
+    // first 30 historical keys are not the latest 30 after the archive grows.
+    const records=recentContractSamples(recent,m.ticker,now);
     const candidate=paperSignal(m,records,null,now,null);
     if(['BUY UP','BUY DOWN'].includes(candidate.action)){
      const a={action:candidate.action,side:candidate.side,ask:candidate.ask,score:candidate.score};
