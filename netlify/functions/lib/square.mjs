@@ -1,6 +1,6 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {fail} from './access-base.mjs';
 
+const fail=(status,message)=>{throw Object.assign(new Error(message),{status});};
 const BASE='https://connect.squareup.com';
 const VERSION='2026-09-16';
 export const squarePlans={
