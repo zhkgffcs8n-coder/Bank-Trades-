@@ -61,7 +61,8 @@ export function pairedShadow(m,records,now=Date.now()){
 }
 
 export function resolvePairedShadow(row,outcome,now=Date.now()){
- if(row?.status!=='PENDING'||!row.ticker||!Number.isFinite(row.at)||!Number.isFinite(row.expiresAt)||row.at>=row.expiresAt)return null;
+ if(row?.status!=='PENDING'||!row.ticker||!Number.isFinite(row.at)||!Number.isFinite(row.expiresAt)||
+    !Number.isFinite(now)||row.at>=row.expiresAt||now<row.expiresAt)return null;
  const result=trustedStoredFinalizedOutcome(outcome,row.ticker);
  if(!result)return null;
  const evaluate=(direction)=>{
