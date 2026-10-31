@@ -23,4 +23,9 @@ test('paper entry and bid exit preserve cash accounting and prevent closing twic
  await close.onclick();
  book=JSON.parse(memory.get('banktrades.paper.v2.tester'));assert.equal(book.cash,999.96);assert.equal(book.trades[0].status,'CLOSED');assert.ok(Math.abs(book.trades[0].pnl+.04)<1e-8);
  await close.onclick();assert.equal(JSON.parse(memory.get('banktrades.paper.v2.tester')).cash,999.96);assert.ok(alerts.includes('Position is already closed.'));assert.ok(locks>=3);
+ // Existing v2 browser entries created before OPEN was stored still count as open.
+ const legacy={...book.trades[0],status:undefined,exitBid:undefined,pnl:undefined};
+ memory.set('banktrades.paper.v2.tester',JSON.stringify({cash:999,trades:[legacy]}));
+ windowEvents['banktrades:paper']();
+ assert.match(els.paperSummary.textContent,/Open paper positions 1/);
 });
