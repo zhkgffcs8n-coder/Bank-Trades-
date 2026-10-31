@@ -47,6 +47,8 @@ test('A/B disagreement never becomes a research consensus',()=>{
 
 test('settlement requires exact trusted outcome; keeps gross and unavailable net distinct',()=>{
  const row=pairedShadow(market,samples([.40,.44,.48,.52]),now);
+ assert.equal(resolvePairedShadow(row,verified,now+299999),null,'no pre-expiry settlement even with a forged verified label');
+ assert.equal(resolvePairedShadow(row,verified,NaN),null,'invalid resolution clock is not evidence');
  assert.equal(resolvePairedShadow(row,{ticker,result:'yes'},now+400000),null);
  assert.equal(resolvePairedShadow(row,{...verified,ticker:'OTHER'},now+400000),null);
  const settled=resolvePairedShadow(row,verified,now+400000);
