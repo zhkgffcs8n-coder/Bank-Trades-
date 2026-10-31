@@ -4,7 +4,7 @@ const fail=(status,message)=>{throw Object.assign(new Error(message),{status});}
 const BASE='https://connect.squareup.com';
 const VERSION='2026-09-16';
 export const squarePlans={
- gold:{label:'🥇 GOLD',amount:7000,cadence:'WEEKLY',interval:'week'},
+ gold:{label:'🥇 GOLD',amount:6000,cadence:'WEEKLY',interval:'week'},
  diamond:{label:'💎 DIAMOND',amount:8000,cadence:'MONTHLY',interval:'month'},
  platinum:{label:'👑 PLATINUM',amount:80000,cadence:'ANNUAL',interval:'year'}
 };
