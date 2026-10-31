@@ -71,17 +71,18 @@ export default async()=>{
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const research={model:await hdb.get('training/model',{type:'json'}),status:training};
- const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.asset));
+ const roundAudit={at:now,running:true,markets:{}};
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
+   roundAudit.markets[asset]={status:'CHECKING'};
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m)continue;const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=3||previous.some(t=>now-Number(t.at)<120000))continue;
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m){roundAudit.markets[asset]={status:'SKIPPED',reason:'No active contract with 2–15.5 minutes remaining'};continue;}roundAudit.markets[asset]={status:'CHECKING',ticker:m.ticker};const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=3||previous.some(t=>now-Number(t.at)<120000)){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Position open, 3-entry limit, or 2-minute cooldown',entries:previous.length};continue;}
    const recent=await hdb.get('recent/'+asset,{type:'json'}).catch(()=>[]),records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
    // A quote-implied direction is not a validated edge and is never a real-money order.
    const yesAsk=q(m,'yes_ask'),noAsk=q(m,'no_ask'),yesBid=q(m,'yes_bid'),noBid=q(m,'no_bid');
-   if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk)continue;
+   if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote'};continue;}
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
    const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
    const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
@@ -89,14 +90,15 @@ export default async()=>{
    const modelUp=Number(signal.probability??signal.prediction);
    const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
    const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
-   if(previous.length&&(!['BUY UP','BUY DOWN'].includes(signal.action)||previous.at(-1).side===side&&Math.abs(ask-Number(previous.at(-1).ask))<5))continue;
-   if(ask<=0||ask>=100)continue;
+   if(previous.length&&(!['BUY UP','BUY DOWN'].includes(signal.action)||previous.at(-1).side===side&&Math.abs(ask-Number(previous.at(-1).ask))<5)){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Re-entry requires fresh qualified signal and meaningful price change',signal:signal.action};continue;}
+   if(ask<=0||ask>=100){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Selected side not tradable'};continue;}
    const entryBasis=['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED PAPER SIGNAL':'UNVALIDATED QUOTE-BASED PAPER TEST';
-   const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
+   const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
+   roundAudit.markets[asset]={status:'ENTERED',ticker:m.ticker,side,ask,entryBasis,entries:previous.length+1};
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
-  }catch(e){console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
+  }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
  }
- ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:true});
+ ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',roundAudit);
  return new Response(null,{status:204});
 };
 export const config={schedule:'* * * * *'};
