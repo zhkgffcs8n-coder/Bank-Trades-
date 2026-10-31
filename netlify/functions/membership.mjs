@@ -19,12 +19,12 @@ export default async(req)=>{
   if(req.method==='POST')verifyRequestOrigin(req);
   const user=await authenticated(),db=store();
   if(req.method==='GET'){
-   const access=await entitlement(user),plans=[];
+   const access=await entitlement(user),plans=[{name:'gold',label:'🥇 GOLD',amount:7000,currency:'USD',interval:'week',intervalCount:1,available:false},{name:'diamond',label:'💎 DIAMOND',amount:8000,currency:'USD',interval:'month',intervalCount:1,available:false},{name:'platinum',label:'👑 PLATINUM',amount:80000,currency:'USD',interval:'year',intervalCount:1,available:false}];
    if(process.env.STRIPE_CHECKOUT_ENABLED==='true' && process.env.STRIPE_WEBHOOK_SECRET && Object.keys(priceIDs()).length){
     const client=stripe();
     for(const [name,id] of Object.entries(priceIDs())){
      const p=await client.prices.retrieve(id);
-     if(p.active&&p.recurring&&p.type==='recurring'&&p.unit_amount!==null)plans.push({name,amount:p.unit_amount,currency:p.currency,interval:p.recurring.interval,intervalCount:p.recurring.interval_count});
+     if(p.active&&p.recurring&&p.type==='recurring'&&p.unit_amount!==null){const target=plans.find(x=>x.name===name);if(target){target.available=true;target.amount=p.unit_amount;target.currency=p.currency;target.interval=p.recurring.interval;target.intervalCount=p.recurring.interval_count;}}
     }
    }
    return json({email:user.email,owner:isOwner(user),access,plans});
