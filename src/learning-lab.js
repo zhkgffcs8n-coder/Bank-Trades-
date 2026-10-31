@@ -1,3 +1,4 @@
+import {coordinateEngines} from './engine-team.mjs';
 import {initialModel,predict,learn,validFeatures} from './research-model.mjs';
 const host=document.getElementById('pro-learning');
 if(host){
@@ -9,6 +10,15 @@ if(host){
   const signals=Array.isArray(event.detail)?event.detail:[];
   const buys=signals.filter(s=>s.action==='BUY UP'||s.action==='BUY DOWN');
   sharedStatus.textContent='SHARED KAIBOT SIGNAL FEED · '+signals.length+' markets · '+buys.length+' experimental BUY alerts · '+signals.filter(s=>s.action==='WAIT').length+' WAIT. Same server predictions as live dashboard; no duplicate learner samples. No live-money orders.';
+ });
+ const committeePanel=document.createElement('p');
+ committeePanel.className='premium-foot';
+ committeePanel.textContent='ENGINE COMMITTEE · waiting for signal data · paper research only';
+ host.append(committeePanel);
+ window.addEventListener('banktrades:signals',event=>{
+  const signals=Array.isArray(event.detail)?event.detail:[];
+  const reports=signals.map(s=>({asset:s.asset||s.ticker||'Market',report:coordinateEngines(s)})).filter(x=>x.report.status==='SHADOW_ONLY');
+  committeePanel.textContent=reports.length?'ENGINE COMMITTEE · '+reports.slice(0,5).map(x=>x.asset+' '+x.report.consensus+' ('+Math.round(x.report.agreement*100)+'% vote agreement)').join(' · ')+' · SHADOW ONLY; agreement is not accuracy':'ENGINE COMMITTEE · awaiting valid signals';
  });
  const comparisonPanel=document.createElement('div');comparisonPanel.className='premium-foot';host.append(comparisonPanel);
  const serverTraining=document.createElement('p');serverTraining.className='premium-foot';serverTraining.textContent='SERVER RESEARCH TRAINING · loading verified settlement statistics';host.append(serverTraining);
