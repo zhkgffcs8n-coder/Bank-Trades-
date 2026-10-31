@@ -51,6 +51,7 @@ if(host){
       ' · hybrid '+(paired.evaluation?.hybrid?.correct===null?'abstained':paired.evaluation?.hybrid?.correct?'correct':'incorrect');}
    }else pairedLine.textContent=data.pairedStatus==='NO_CURRENT_CONTRACT'?'WAIT · no current contract snapshot recorded; research only':'WAIT · collecting sufficient same-contract observations before freezing an A/B pair; research only';
    comparisonPanel.append(pairedLine);
+   if(data.pairedLiveMatch){const matched=document.createElement('p');matched.textContent='PRIMAL VS LIVE SIGNALS · '+data.pairedLiveMatch.status+' · '+data.pairedLiveMatch.reason+' · no shared win credit without exact frozen timestamp/contract/quote; fees, slippage and fills unverified';comparisonPanel.append(matched);}
    if(data.pairedShadowPrevious){const note=document.createElement('p');note.textContent='CURRENT ROUND · '+data.pairedStatus+' · awaiting a new qualified frozen pair; historical outcome is not a current signal';comparisonPanel.append(note);}
    if(data.pairedShadowLatestResolved){
     const old=data.pairedShadowLatestResolved,ev=old.evaluation||{};
