@@ -7,8 +7,9 @@ const timed=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>se
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 export default async req=>{
  if(req.method!=='GET')return json({error:'GET only'},405);
- const db=getStore({name:'bank-trades-market-history',consistency:'strong'}),now=Date.now();
- const paperDb=getStore({name:'bank-trades-server-kaibot',consistency:'strong'});
+ const now=Date.now();
+ let db=null,paperDb=null;
+ try{db=getStore({name:'bank-trades-market-history',consistency:'strong'});paperDb=getStore({name:'bank-trades-server-kaibot',consistency:'strong'});}catch(e){return json({fetched_at:new Date().toISOString(),results:Object.keys(assets).map(asset=>({asset,action:'WAIT',reason:'Signal storage initialization failed: '+String(e.message||e)})),error:'storage_initialization_failed'});}
  let openPositions=[],stats=performance([]);try{const ledger=await timed(paperDb.get('ledger',{type:'json'}),1800,'ledger');stats=performance(ledger?.trades||[]);openPositions=(ledger?.trades||[]).filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));}catch{}
  const research={model:null,status:null};
  await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{})]);
