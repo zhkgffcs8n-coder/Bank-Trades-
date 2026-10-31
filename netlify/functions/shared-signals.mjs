@@ -17,7 +17,10 @@ export default async req=>{
  // the latency-critical signal endpoint to avoid overwhelming Netlify Blobs.
  const learning={mode:'AUTOMATIC PAPER RESEARCH',model:research.status,
   status:research.status?.validated?'MODEL RESEARCH CHECK PASSED':'COLLECTING VERIFIED OUTCOMES',
-  liveRuleAutoPromotion:false,details:'Stored by scheduled collector; not fetched on every live quote refresh'};
+  liveRuleAutoPromotion:false,
+  paperRuleAutoPromotion:true,
+  pipeline:['LIVE OBSERVATION','OFFICIAL SETTLEMENT','ONLINE MODEL UPDATE','PROSPECTIVE PAPER VALIDATION','AUTO PAPER PROMOTION OR ROLLBACK'],
+  details:'Scheduled collector performs learning; live endpoint consumes the latest model without re-reading historical reports on every refresh'};
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
