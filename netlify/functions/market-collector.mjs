@@ -176,7 +176,10 @@ export default async()=>{
    const baseline=evaluate(future,{score:0,maxAsk:100});
    const ready=future.length>=100&&evalGate.trades>=30;
    const better=ready&&evalGate.roi!==null&&baseline.roi!==null&&evalGate.roi>baseline.roi&&evalGate.pnl>0;
-   const evaluation={at:now,version:1,status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:true,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
+   const winsFor=(set,gate)=>{const selected=set.filter(r=>Number(r.engines.original.score)>=gate.score&&Number(r.engines.original.ask)<=gate.maxAsk);return {trades:selected.length,wins:selected.filter(r=>r.engines.original.won).length,losses:selected.filter(r=>!r.engines.original.won).length,winRate:selected.length?selected.filter(r=>r.engines.original.won).length/selected.length:null}};
+   const candidateAccuracy=winsFor(future,registry.gate),baselineAccuracy=winsFor(future,{score:75,maxAsk:65});
+   const accuracyImproved=ready&&candidateAccuracy.trades>=30&&baselineAccuracy.trades>=30&&candidateAccuracy.winRate>baselineAccuracy.winRate;
+   const evaluation={at:now,version:1,accuracy:{candidate:candidateAccuracy,baseline:baselineAccuracy,improved:accuracyImproved,verified:ready&&candidateAccuracy.trades>=30&&baselineAccuracy.trades>=30,method:'Prospective official finalized market labels; selection effects and sample uncertainty remain'},status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:true,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
    await db.setJSON('comparison/prospective-evaluation-v1',evaluation);
    // Automatic promotion affects simulated KaiBot entries only. The original stays unchanged.
    // Only allow a strictly tighter gate than the existing 75 score / 65c ceiling.
