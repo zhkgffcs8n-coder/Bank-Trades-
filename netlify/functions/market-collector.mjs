@@ -92,6 +92,43 @@ export default async()=>{
     }
    }catch{}
   }
+  // Label the first scheduled signal decision per contract against official outcomes.
+  // WAIT is evaluated counterfactually, never counted as an executed trade.
+  try{
+   const listing=await db.list({prefix:'signal-observations/v1/',limit:1000});
+   const observations=(await Promise.all(listing.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+   for(const rec of observations){
+    if(rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
+    const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
+    if(!['yes','no'].includes(outcome?.result))continue;
+    const yesWon=outcome.result==='yes';
+    rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
+    rec.counterfactual={
+     upPnl:Number(((yesWon?100:0)-Number(rec.quote.yesAsk)).toFixed(2)),
+     downPnl:Number(((yesWon?0:100)-Number(rec.quote.noAsk)).toFixed(2)),
+     unit:'cents per hypothetical contract; no fees, slippage or fills'
+    };
+    await db.setJSON('signal-observations/v1/'+rec.ticker,rec);
+   }
+   const resolved=observations.filter(x=>x.status==='RESOLVED'&&x.counterfactual);
+   const summary={at:now,version:1,observed:observations.length,resolved:resolved.length,pending:observations.length-resolved.length,truncated:Boolean(listing.cursor),
+    qualified:{n:0,wins:0,losses:0,pnlCents:0},abstained:{n:0,avoidedLosses:0,missedWins:0},
+    note:'Retrospective first-observation comparison only; no actual fills and no causal proof of strategy improvement.'};
+   for(const rec of resolved){
+    if(rec.decision==='QUALIFIED'){
+     const pnl=rec.action==='BUY UP'?rec.counterfactual.upPnl:rec.counterfactual.downPnl;
+     summary.qualified.n++;summary.qualified.wins+=pnl>0?1:0;summary.qualified.losses+=pnl<=0?1:0;summary.qualified.pnlCents+=pnl;
+    }else{
+     summary.abstained.n++;
+     // Counterfactual is the cheaper quoted side; it is not a model prediction.
+     const hypothetical=Math.min(Number(rec.quote.yesAsk),Number(rec.quote.noAsk))===Number(rec.quote.yesAsk)?rec.counterfactual.upPnl:rec.counterfactual.downPnl;
+     summary.abstained.avoidedLosses+=hypothetical<=0?1:0;
+     summary.abstained.missedWins+=hypothetical>0?1:0;
+    }
+   }
+   summary.qualified.pnlCents=Number(summary.qualified.pnlCents.toFixed(2));
+   await db.setJSON('signal-observations/report-v1',summary);
+  }catch(e){console.warn('Signal outcome comparison unavailable',String(e))}
   // Resolve the same observed contracts for both strategies using official finalized outcomes.
   const comparisons=await db.list({prefix:'comparison/v1/',limit:1000});
   for(const item of comparisons.blobs){
