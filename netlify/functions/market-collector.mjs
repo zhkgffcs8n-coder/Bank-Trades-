@@ -35,13 +35,16 @@ export default async()=>{
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
-  // Freeze A and B from the same timestamped contract/quote BEFORE settlement.
-  // These paired observations are strictly research-only; no order path.
+  // One immutable late-window observation per contract, scored independently
+  // by A and B on the same fetched quote. Research only, never an order.
   try{
-   const key='paired-shadow/v1/'+m.ticker+'/'+bucket;
-   if(!await db.get(key,{type:'json'})){
-    const sameContract=recentContractSamples(recent,m.ticker,now);
-    await db.setJSON(key,pairedShadow(m,sameContract,now));
+   if(m._expiry-now<=300000&&m._expiry-now>180000){
+    const key='paired-shadow/pending/v1/'+m.ticker;
+    const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
+    if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
+     const sameContract=recentContractSamples(recent,m.ticker,now);
+     await db.setJSON(key,pairedShadow(m,sameContract,now));
+    }
    }
   }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
@@ -179,44 +182,23 @@ export default async()=>{
    report.engines[name]={trades:trades.length,wins:trades.filter(row=>row.engines[name].won).length,losses:trades.filter(row=>!row.engines[name].won).length,winRate:trades.length?trades.filter(row=>row.engines[name].won).length/trades.length:null,netPnl:Number(pnl.toFixed(4)),roi:invested?Number((pnl/invested).toFixed(4)):null,maxDrawdown:Number(maxDrawdown.toFixed(4)),method:'One hypothetical contract per signal; binary settlement, entry ask; excludes fees, slippage and early exits'};
   }
   await db.setJSON('comparison/report-v1',report);
-  // Resolve only pre-settlement A/B/hybrid observations against independently
-  // finalized Kalshi labels. One contract = one independent reporting unit.
+  // Settle only frozen, late-window paired predictions against independently
+  // verified official binary outcomes. Separate resolved keys prevent recounting.
   try{
-   const paired=[];
-   let cursor=null,truncated=false;
-   for(let page=0;page<5;page++){
-    const listing=await db.list({prefix:'paired-shadow/v1/',limit:1000,...(cursor?{cursor}:{})});
-    for(const blob of listing.blobs){
-     let row=await db.get(blob.key,{type:'json'});
-     if(!row)continue;
-     if(row.status==='PENDING'&&Number.isFinite(row.expiresAt)&&row.expiresAt<=now-60000){
-      const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
-      const resolved=resolvePairedShadow(row,outcome,now);
-      if(resolved){await db.setJSON(blob.key,resolved);row=resolved;}
-     }
-     paired.push(row);
+   const pendingPaired=await db.list({prefix:'paired-shadow/pending/v1/',limit:1000});
+   for(const blob of pendingPaired.blobs){
+    const row=await db.get(blob.key,{type:'json'});
+    if(!row||!Number.isFinite(row.expiresAt)||row.expiresAt>now-60000)continue;
+    const resolvedKey='paired-shadow/resolved/v1/'+row.ticker;
+    if(await db.get(resolvedKey,{type:'json'})){await db.delete(blob.key);continue;}
+    const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
+    const resolved=resolvePairedShadow(row,outcome,now);
+    if(resolved){
+     await db.setJSON(resolvedKey,resolved);
+     await db.delete(blob.key);
     }
-    cursor=listing.cursor||null;
-    if(!cursor)break;
-    if(page===4)truncated=true;
    }
-   const first=new Map();
-   for(const row of paired.sort((a,b)=>a.at-b.at)){
-    if(row?.ticker&&!first.has(row.ticker))first.set(row.ticker,row);
-   }
-   const frozen=[...first.values()];
-   const report={at:now,version:1,mode:'SHADOW_ONLY',pairedMinuteObservations:paired.length,uniqueContracts:frozen.length,
-    resolvedContracts:frozen.filter(x=>x.status==='RESOLVED').length,pendingContracts:frozen.filter(x=>x.status==='PENDING').length,truncated,
-    selection:'First frozen minute per contract; never count repeated minutes as independent wins',engines:{}};
-   for(const name of ['A','B','hybrid']){
-    const evaluated=frozen.filter(x=>x.status==='RESOLVED'&&x.settlement?.verified===true&&x.evaluation?.[name]?.evaluated);
-    report.engines[name]={evaluated:evaluated.length,correct:evaluated.filter(x=>x.evaluation[name].correct).length,
-     incorrect:evaluated.filter(x=>!x.evaluation[name].correct).length,
-     grossHypotheticalPnl:Number(evaluated.reduce((sum,x)=>sum+x.evaluation[name].grossPnl,0).toFixed(4)),
-     netPnl:null,feesModeled:false,slippageModeled:false,calibrated:false,
-     note:'Counterfactual one-contract settlement at frozen ask; no fill proof, fees, slippage, or calibrated confidence'};
-   }
-   await db.setJSON('paired-shadow/report-v1',report);
+   if(pendingPaired.cursor)console.warn('Paired shadow pending list truncated; later contracts will retry');
   }catch(e){console.warn('Paired A/B settlement evaluation unavailable',String(e))}
   // Shared loss review: update a conservative research-only threshold from resolved
   // outcomes. The original strategy remains frozen as an unbiased baseline.
