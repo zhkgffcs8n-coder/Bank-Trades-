@@ -46,6 +46,20 @@ export default async()=>{
    }
   }catch(e){console.warn('Shadow comparison collection failed',asset,String(e))}
 
+  // One immutable, explicitly hypothetical paper direction per contract round.
+  // Record both sides and their entry costs even if the live recommendation is WAIT.
+  try{
+   const key='round-paper/v1/'+m.ticker;
+   if(!await db.get(key,{type:'json'})){
+    const baseline=Math.max(.01,Math.min(.99,record.yesMid));
+    const model=await db.get('training/model',{type:'json'})||initialModel();
+    const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
+    const probability=predict(model,baseline,features);
+    const upCost=yesAsk,downCost=noAsk;
+    const direction=probability>=0.5?'UP':'DOWN';
+    await db.setJSON(key,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,source:'hypothetical paper-only round forecast',direction,probability,modelVersion:model.version||null,up:{ask:upCost,maxLoss:upCost,winProfit:1-upCost,expectedValue:probability-upCost},down:{ask:downCost,maxLoss:downCost,winProfit:1-downCost,expectedValue:(1-probability)-downCost},status:'PENDING',feeExcluded:true});
+   }
+  }catch(e){console.warn('Round paper forecast failed',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
    const model=await db.get('training/model',{type:'json'})||initialModel();
