@@ -70,7 +70,8 @@ export default async()=>{
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
- const research={model:await hdb.get('training/model',{type:'json'}),status:training};
+ const globalModel=await hdb.get('training/model',{type:'json'});
+ const research={model:globalModel,status:training};
  const roundAudit={at:now,running:true,markets:{}};
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
@@ -85,7 +86,9 @@ export default async()=>{
    if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote'};continue;}
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
    const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
-   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
+   const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
+   const assetResearch={model:assetModel?.count>=20?assetModel:globalModel,status:training?.perAsset?.[asset]||training};
+   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    // Immutable first eligible observation per round, including WAIT decisions.
    // Store both hypothetical sides so avoided losses and missed wins can be measured.
