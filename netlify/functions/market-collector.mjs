@@ -38,12 +38,18 @@ export default async()=>{
   // One immutable late-window observation per contract, scored independently
   // by A and B on the same fetched quote. Research only, never an order.
   try{
-   if(m._expiry-now<=300000&&m._expiry-now>180000){
+   if(m._expiry-now<=420000&&m._expiry-now>180000){
     const key='paired-shadow/pending/v1/'+m.ticker;
     const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
     if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
      const sameContract=recentContractSamples(recent,m.ticker,now);
-     await db.setJSON(key,pairedShadow(m,sameContract,now));
+     // Freeze only after enough distinct same-contract history exists for Engine B.
+     // An early WAIT would otherwise become an immutable, uninformative pair.
+     const distinct=new Set(sameContract.map(r=>r.t));
+     const span=sameContract.length?sameContract.at(-1).t-sameContract[0].t:0;
+     if(distinct.size>=4&&span>=180000){
+      await db.setJSON(key,pairedShadow(m,sameContract,now));
+     }
     }
    }
   }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}

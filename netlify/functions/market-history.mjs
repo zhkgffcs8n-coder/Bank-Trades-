@@ -15,6 +15,7 @@ export default async req=>{
  const pairedTicker=latest?.ticker;
  const pairedShadow=pairedTicker?(await db.get('paired-shadow/resolved/v1/'+pairedTicker,{type:'json'})||
   await db.get('paired-shadow/pending/v1/'+pairedTicker,{type:'json'})):null;
+ const pairedStatus=pairedShadow?'RECORDED':!pairedTicker?'NO_CURRENT_CONTRACT':'AWAITING_QUALIFIED_SNAPSHOT';
  const training=await db.get('training/status',{type:'json'});
  const comparison=await db.get('comparison/report-v1',{type:'json'});
  const adaptiveResearch=await db.get('comparison/research-gate-v1',{type:'json'});
@@ -22,5 +23,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
