@@ -43,7 +43,7 @@ export default async()=>{
     const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
     if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
      const sameContract=recentContractSamples(recent,m.ticker,now);
-     await db.setJSON(key,pairedShadow(m,sameContract,now));
+     await db.setJSON(key,{...pairedShadow(m,sameContract,now),asset});
     }
    }
   }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
@@ -195,6 +195,14 @@ export default async()=>{
     const resolved=resolvePairedShadow(row,outcome,now);
     if(resolved){
      await db.setJSON(resolvedKey,resolved);
+     // Read-only display pointer: keep the newest officially resolved pair
+     // visible after the next 15-minute contract becomes current.
+     const pairedAsset=row.asset||Object.keys(SERIES).find(a=>row.ticker.startsWith(SERIES[a]+'-'));
+     if(pairedAsset){
+      const latestKey='paired-shadow/latest-resolved/v1/'+pairedAsset;
+      const previous=await db.get(latestKey,{type:'json'});
+      if(!previous||Number(previous.at)<Number(resolved.at))await db.setJSON(latestKey,resolved);
+     }
      await db.delete(blob.key);
     }
    }
