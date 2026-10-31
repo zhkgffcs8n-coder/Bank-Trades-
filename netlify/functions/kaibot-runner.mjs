@@ -78,17 +78,21 @@ export default async()=>{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
    const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset)||ledger.trades.some(t=>t.ticker===m.ticker))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
-   // Never trade on a stale or incomplete scheduled history, even if the live quote is fresh.
-   if(records.length<4||now-Number(records.at(-1)?.t)>120000||records.some(x=>!Number.isFinite(x.yesMid)||!Number.isFinite(x.t)))continue;
-   // Read the same paper-only signal rules as the dashboard; preserve execution as a separate step.
-   const signal=gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats);
+   // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
+   // A quote-implied direction is not a validated edge and is never a real-money order.
+   const yesAsk=q(m,'yes_ask'),noAsk=q(m,'no_ask'),yesBid=q(m,'yes_bid'),noBid=q(m,'no_bid');
+   if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk)continue;
+   const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
+   const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
+   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
-   if(signal.action!=='BUY UP'&&signal.action!=='BUY DOWN')continue;
-   // Conservative paper-only quality gate: require stronger agreement and narrow spreads.
-   if(Number(signal.score)<paperScore||Number(signal.ask)>paperMaxAsk)continue;
-   const side=signal.side,ask=signal.ask;
+   const modelUp=Number(signal.probability??signal.prediction);
+   const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
+   const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
+   if(ask<=0||ask>=100)continue;
+   const entryBasis=['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED PAPER SIGNAL':'UNVALIDATED QUOTE-BASED PAPER TEST';
    const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
-   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
+   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch{}
  }
  ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:true});
