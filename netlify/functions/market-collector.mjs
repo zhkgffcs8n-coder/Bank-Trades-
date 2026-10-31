@@ -133,6 +133,8 @@ export default async()=>{
     if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
     const yesWon=outcome.result==='yes';
     rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
+    // Preserve official-label provenance for strict live/Primal comparison.
+    rec.outcomeVerification=SETTLEMENT_VERIFICATION;
     rec.counterfactual={
      upPnl:Number(((yesWon?100:0)-Number(rec.quote.yesAsk)).toFixed(2)),
      downPnl:Number(((yesWon?0:100)-Number(rec.quote.noAsk)).toFixed(2)),
