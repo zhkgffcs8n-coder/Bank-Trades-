@@ -2,6 +2,7 @@ import {getStore} from '@netlify/blobs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 const assets={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
+const expiry=(m,now)=>[m?.expected_expiration_time,m?.expiration_time,m?.close_time].map(v=>Date.parse(v||'')).filter(v=>Number.isFinite(v)&&v>now).sort((a,b)=>a-b)[0]||null;
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 export default async req=>{
  if(req.method!=='GET')return json({error:'GET only'},405);
@@ -15,7 +16,7 @@ export default async req=>{
    let response;try{response=await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}),{signal:controller.signal});}finally{clearTimeout(timer)}
    if(!response.ok)throw Error('Market HTTP '+response.status);
    const data=await response.json();
-   const markets=(data.markets||[]).filter(m=>{const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'');return Number.isFinite(expiry)&&expiry>now+75000&&expiry<now+930000}).sort((a,b)=>Date.parse(a.expected_expiration_time||a.expiration_time||a.close_time)-Date.parse(b.expected_expiration_time||b.expiration_time||b.close_time));
+   const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now+75000&&m._expiry<now+930000).sort((a,b)=>a._expiry-b._expiry);
    const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
    const market=position?(markets.find(m=>m.ticker===position.ticker)||null):markets[0];
    if(!market)return {asset,action:'WAIT',reason:position?'Open paper position requires fresh quotes for its exact ticker':'No verified active contract',ticker:position?.ticker||null};
