@@ -70,7 +70,7 @@ async function update(){
  let r;try{r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
- if(!Number.isFinite(age)||Math.abs(age)>30000||!Array.isArray(d.results))throw Error('Stale or invalid feed');
+ if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
  $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
  let open=0;
  for(const asset of assets){
