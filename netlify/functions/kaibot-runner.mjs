@@ -87,6 +87,19 @@ export default async()=>{
    const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
    const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,research),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
+   // Immutable first eligible observation per round, including WAIT decisions.
+   // Store both hypothetical sides so avoided losses and missed wins can be measured.
+   try{
+    const key='signal-observations/v1/'+m.ticker;
+    if(!await hdb.get(key,{type:'json'})){
+     await hdb.setJSON(key,{version:1,asset,ticker:m.ticker,at:now,expiresAt:m._e,
+      action:signal.action,score:signal.score||0,reason:signal.reason||'',
+      quote:{yesAsk,noAsk,yesBid,noBid},secondsLeft:(m._e-now)/1000,
+      decision:['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED':'ABSTAIN',
+      status:'PENDING',source:'KaiBot scheduled shared signal evaluation; paper research only'});
+    }
+   }catch(e){console.warn('Signal observation journal unavailable',asset,String(e))}
+
    const modelUp=Number(signal.probability??signal.prediction);
    const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
    const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
