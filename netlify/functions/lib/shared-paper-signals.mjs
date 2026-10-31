@@ -14,7 +14,7 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  }
  if(left<180)return {...base,reason:'Late entry blocked'};
  const a=records.filter(r=>r?.ticker===m.ticker&&Number.isFinite(r.yesMid)&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000).sort((x,y)=>x.t-y.t).slice(-8);
- if(a.length<3||a.at(-1).t-a[0].t<60000)return {...base,sampleCount:a.length,reason:'Collecting scheduled samples: '+a.length+'/3; observed span '+(a.length?Math.round((a.at(-1).t-a[0].t)/1000):0)+'s / 60s minimum. No entry until data requirements pass'};
+ if(a.length<2||a.at(-1).t-a[0].t<60000)return {...base,sampleCount:a.length,reason:'Collecting scheduled samples: '+a.length+'/2; observed span '+(a.length?Math.round((a.at(-1).t-a[0].t)/1000):0)+'s / 60s minimum. No entry until data requirements pass'};
  const changes=a.slice(1).map((r,i)=>(r.yesMid-a[i].yesMid)*100),momentum=changes.reduce((s,x)=>s+x,0);
  const side=momentum>2?'up':momentum< -2?'down':null;
  const baseline=Math.max(.02,Math.min(.98,(yb+ya)/200));
