@@ -20,15 +20,16 @@ export default async req=>{
    const data=await response.json();
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
    const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
-   const market=position?(markets.find(m=>m.ticker===position.ticker)||null):markets[0];
-   if(!market)return {asset,action:'WAIT',reason:position?'Open paper position requires fresh quotes for its exact ticker':'No verified active contract',ticker:position?.ticker||null};
+   const market=markets[0];
+   if(!market)return {asset,action:'WAIT',reason:'No verified active contract',ticker:null};
+   const activePosition=position?.ticker===market.ticker?position:null;
    let records=[];
    try{
     const listed=await timed(db.list({prefix:'samples/'+asset+'/',limit:12}),2000,'sample list');
     records=(await Promise.all(listed.blobs.map(b=>timed(db.get(b.key,{type:'json'}),1800,'sample').catch(()=>null)))).filter(Boolean);
    }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Sample storage unavailable: '+e.message};}
-   const signal=gatePaperEntry({...paperSignal(market,records,position||null,now,research),asset},stats);
-   return {asset,...signal,position:position?{side:position.side,ask:position.ask,qty:position.qty,ticker:position.ticker,source:'server paper ledger'}:null};
+   const signal=gatePaperEntry({...paperSignal(market,records,activePosition,now,research),asset},stats);
+   return {asset,...signal,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,results});
