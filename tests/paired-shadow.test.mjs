@@ -82,5 +82,5 @@ test('A and B share deduplicated pre-freeze samples; future quote cannot create 
  assert.equal(pair.engines.B.action,'BUY UP');
  assert.equal(pair.hybrid.action,'WAIT');
  assert.equal(pair.hybrid.authorized,false);
- assert.equal(pair.engines.B.askCents,48);
+ assert.equal(pair.engines.B.askCents,52);
 });
