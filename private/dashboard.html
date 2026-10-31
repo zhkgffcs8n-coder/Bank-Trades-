@@ -125,7 +125,9 @@ function renderTracked(m,stale){
  if(stale||bid==null||bid<=0){el.textContent=selected+' '+p.side+' position ACTIVE · '+p.qty+' at '+p.entry.toFixed(1)+'¢ · fresh executable bid unavailable. Do not use stale exit estimates.';return}
  const pnl=(bid-p.entry)/100*p.qty-p.fees,roi=(bid-p.entry)/p.entry*100;
  const guidance=roi>=15?'TAKE PROFIT REVIEW':roi<=-12?'STOP LOSS REVIEW':'HOLD / MONITOR';
- el.textContent=selected+' '+p.side+' · '+p.qty+' contracts · Entry '+p.entry.toFixed(1)+'¢ · Sell bid '+fmt(bid)+' · Estimated net P/L 
+ el.textContent=selected+' '+p.side+' · '+p.qty+' contracts · Entry '+p.entry.toFixed(1)+'¢ · Sell bid '+fmt(bid)+' · Estimated net P/L $'+pnl.toFixed(2)+' · '+guidance;
+}
+function exitFor(m,stale){
  const side=$('side').value,entry=Number($('entry').value)/100,qty=Number($('qty').value),fees=Number($('fees').value);
  if(!m||stale||!Number.isFinite(entry)||entry<=0||entry>=1||!Number.isInteger(qty)||qty<1||!Number.isFinite(fees)||fees<0)return 'HOLD / SELL UNAVAILABLE — enter a valid position and obtain fresh quotes.';
  const bid=val(m,side==='YES'?'yes_bid':'no_bid');
