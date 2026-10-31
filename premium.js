@@ -2,15 +2,16 @@
 'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
-let paperPositions=[];
+let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
 async function refreshPaperPositions(){
  try{
   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
   if(!response.ok)return;
   const data=await response.json();
-  paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades.filter(t=>t.status==='OPEN'):[];
+  paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
+  paperBotRunning=!!data?.state?.running;paperStatusError='';
   syncSignals();
- }catch{}
+ }catch(e){paperStatusError='Paper positions unavailable';}
 }
 
 const roundSeen=new Map();
@@ -19,21 +20,21 @@ function syncSignals(){
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const action=sig?.action||'WAIT';
-  const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===roundSeen.get(tr.dataset.asset)?.ticker);
+  const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
+  const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
   if(position){
-   const ask=Number(position.ask),bid=Number((tr.children[position.side==='up'?1:2]?.textContent||'').replace('¢',''));
-   const roi=Number.isFinite(bid)&&Number.isFinite(ask)&&ask>0?(bid-ask)/ask:NaN;
-   const secondsLeft=Number((tr.children[4]?.textContent||'').replace('m',''))*60;
-   const recommendation=Number.isFinite(roi)&&roi<=-.12?'SELL FAST · STOP REVIEW':Number.isFinite(roi)&&roi>=.20?'SELL FAST · PROFIT REVIEW':secondsLeft>0&&secondsLeft<=90?'SELL FAST · TIME REVIEW':'HOLD · PAPER';
-   cell.textContent=recommendation;
-   cell.className='premium-action '+(recommendation.startsWith('SELL')?'sell':'hold');
-   cell.title='Tracked paper position: '+position.side.toUpperCase()+' · entry '+ask+'¢ · current ask is not an executable exit bid. Review actual bid before selling.';
+   const side=String(position.side||'').toUpperCase();
+   const status=String(position.status||'').toUpperCase();
+   const reason=String(position.exitReason||'');
+   cell.textContent=status==='OPEN'?'● HOLD '+side+' · PAPER':status==='CLOSED'?'● SOLD '+side+' · PAPER':status==='SETTLED'?'● SETTLED '+side+' · PAPER':'● PAPER '+side+' · '+status;
+   cell.className='premium-action '+(status==='OPEN'?'hold':status==='CLOSED'?'sell':'');
+   cell.title='Recorded paper entry for '+ticker+' · '+side+' · '+status+' · '+reason+' · entry '+position.ask+'¢. Not a live Kalshi order.';
    return;
   }
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
-  cell.textContent=action==='WAIT'&&sig?.roundAssessment?'ROUND CHECKED · WAIT':action;
+  cell.textContent=action==='WAIT'&&sig?.roundAssessment?'ROUND CHECKED · WAIT':action==='WAIT'&&paperBotRunning?'PAPER ENTRY PENDING':action==='WAIT'&&paperStatusError?'PAPER STATUS UNAVAILABLE':'PAPER BOT OFF / WAIT';
   cell.title=sig?.reason||'Waiting for shared signal engine';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
