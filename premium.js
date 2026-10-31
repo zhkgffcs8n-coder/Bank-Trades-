@@ -103,6 +103,28 @@ async function update(){
  }catch(e){failures++;$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message}
  finally{fetching=false}
 }
+let signalFetchBusy=false,signalLastFetch=0;
+async function refreshSharedSignalTable(){
+ if(signalFetchBusy||document.hidden||Date.now()-signalLastFetch<5000)return;
+ signalFetchBusy=true;signalLastFetch=Date.now();
+ try{
+  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
+  let response;try{response=await fetch('/.netlify/functions/shared-signals',{cache:'no-store',signal:controller.signal});}finally{clearTimeout(timeout)}
+  if(!response.ok)throw Error('Shared signals HTTP '+response.status);
+  const payload=await response.json(),ts=Date.parse(payload.fetched_at);
+  if(!Array.isArray(payload.results)||!Number.isFinite(ts)||Math.abs(Date.now()-ts)>90000)throw Error('Shared signals response invalid or stale');
+  engineSignals=assets.map(asset=>payload.results.find(x=>x.asset===asset)||{asset,action:'WAIT',reason:'No signal returned for '+asset});
+  window.__BANK_TRADES_SHARED_ERROR__=null;
+  syncSignals();
+  const chosen=engineSignals.find(x=>x.asset===selected),panel=$('premiumAI');
+  if(panel&&chosen)panel.textContent=selected+' · '+chosen.action+' · '+(chosen.reason||'No explanation provided');
+ }catch(error){
+  window.__BANK_TRADES_SHARED_ERROR__=String(error.message||error);
+  engineSignals=assets.map(asset=>({asset,action:'WAIT',reason:'Shared signals fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__}));
+  syncSignals();
+  const panel=$('premiumAI');if(panel)panel.textContent='Signal service error: '+window.__BANK_TRADES_SHARED_ERROR__;
+ }finally{signalFetchBusy=false}
+}
 window.addEventListener('resize',chart);
 // Health badge must reflect actual displayed, recently fetched quotes, not an initialization placeholder.
 function reconcileHealth(){
@@ -115,5 +137,5 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
-update();refreshPaperPositions();setInterval(refreshPaperPositions,12000);setInterval(()=>{update();reconcileHealth()},1000);
+update();refreshSharedSignalTable();refreshPaperPositions();setInterval(refreshPaperPositions,12000);setInterval(()=>{update();refreshSharedSignalTable();reconcileHealth()},1000);
 })();
