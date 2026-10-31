@@ -6,12 +6,12 @@ let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
 async function refreshPaperPositions(){
  try{
   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
-  if(!response.ok)return;
+  if(!response.ok){paperStatusError='Paper ledger HTTP '+response.status;syncSignals();return;}
   const data=await response.json();
   paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
   paperBotRunning=!!data?.state?.running;paperStatusError='';
   syncSignals();
- }catch(e){paperStatusError='Paper positions unavailable';}
+ }catch(e){paperStatusError='Paper positions unavailable';syncSignals();}
 }
 
 const roundSeen=new Map();
@@ -26,22 +26,25 @@ function syncSignals(){
    const side=String(position.side||'').toUpperCase();
    const status=String(position.status||'').toUpperCase();
    const reason=String(position.exitReason||'');
-   cell.textContent=status==='OPEN'?'● HOLD '+side+' · PAPER':status==='CLOSED'?'● SOLD '+side+' · PAPER':status==='SETTLED'?'● SETTLED '+side+' · PAPER':'● PAPER '+side+' · '+status;
-   cell.className='premium-action '+(status==='OPEN'?'hold':status==='CLOSED'?'sell':'');
-   cell.title='Recorded paper entry for '+ticker+' · '+side+' · '+status+' · '+reason+' · entry '+position.ask+'¢. Not a live Kalshi order.';
+   const elapsed=Date.now()-Number(position.at||0);
+   const exitReview=status==='OPEN'&&['PAPER STOP LOSS','PAPER TAKE PROFIT','PAPER TIME EXIT'].includes(reason);
+   const label=status==='OPEN'?(elapsed<25000?'BUY '+side+' · PAPER':'HOLD '+side+' · PAPER'):status==='CLOSED'?'SELL FAST · '+side+' PAPER':status==='SETTLED'?'SETTLED '+side+' · PAPER':'PAPER '+side+' · '+status;
+   cell.textContent=exitReview?'SELL FAST · '+side+' PAPER':label;
+   cell.className='premium-action '+(status==='CLOSED'||exitReview?'sell':status==='OPEN'&&elapsed<25000?'up':'hold');
+   cell.title='Recorded paper '+status+' · '+ticker+' · '+side+' · entry '+position.ask+'¢'+(Number.isFinite(Number(position.exitBid))?' · exit '+position.exitBid+'¢':'')+(Number.isFinite(Number(position.pnl))?' · P/L $'+Number(position.pnl).toFixed(2):'')+(reason?' · '+reason:'')+'. No real order.';
    return;
   }
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
-  cell.textContent=action==='WAIT'&&sig?.roundAssessment?'ROUND CHECKED · WAIT':action==='WAIT'&&paperBotRunning?'PAPER ENTRY PENDING':action==='WAIT'&&paperStatusError?'PAPER STATUS UNAVAILABLE':'PAPER BOT OFF / WAIT';
+  cell.textContent=action==='WAIT'?(paperStatusError?'PAPER DATA UNAVAILABLE':paperBotRunning?'AWAITING PAPER ENTRY':'WAIT · BOT OFF'):action;
   cell.title=sig?.reason||'Waiting for shared signal engine';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
    const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
    if(details){
     cell.title=(sig.reason||'')+' | '+forecast.method+' | '+side+' ask '+details.askCents+' cents | Max payout gain $'+details.maxProfitPerContract.toFixed(2)+'; max stake loss $'+details.maxLossPerContract.toFixed(2)+' per contract before fees';
-    if(action==='WAIT')cell.textContent='WAIT · '+side+' WATCH';
+    if(action==='WAIT'&&!paperBotRunning&&!paperStatusError)cell.textContent='WAIT · '+side+' WATCH';
    }
   }
  });
