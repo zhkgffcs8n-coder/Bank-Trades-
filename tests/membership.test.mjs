@@ -22,6 +22,7 @@ const codes=await import('../netlify/functions/lib/codes.mjs');
 const {guarded}=await import('../netlify/functions/lib/guard-relay.mjs');
 const {default:membership}=await import('../netlify/functions/membership.mjs');
 const {default:dashboard}=await import('../netlify/functions/dashboard.mjs');
+const {default:kaibotState}=await import('../netlify/functions/kaibot-state.mjs');
 const {withCheckoutLock}=await import('../netlify/functions/lib/checkout-lock.mjs');
 const user={id:'member1',email:'tester@example.com',confirmedAt:'2026-01-01',roles:[],userMetadata:{roles:['owner'],member:true}};
 function session(u=user){globalThis.__membershipTest.session=u;globalThis.__membershipTest.user=u;}
@@ -77,4 +78,20 @@ test('owner can issue and revoke; member receives private no-store data only aft
 test('public output contains no dashboard HTML or server source',async()=>{
  const publicFiles=await readdir('dist');assert.deepEqual(publicFiles.sort(),['account-client.js','dashboard-session.js','learning-lab.js','account.css','index.html','kaibot.js','premium.css','premium.js','terminal-enhancements.js','paper-monitor.js','btc-spot-chart.js','btc-lock-radar.js','upgrade-status.js','service-worker.js','push-client.js','easy-mode.js','build-version.json'].sort());
  const html=await readFile('dist/index.html','utf8');assert.doesNotMatch(html,/id="premiumRows"|id="kaiStart"/);
+});
+
+test('members may inspect shared paper results but only the owner can control the bot',async()=>{
+ const issued=await codes.issueCode(db,{id:'owner1'},{email:user.email,days:1});
+ await codes.redeemCode(db,user,issued.code);
+ session(user);
+ const get=await kaibotState(new Request('https://bank.test/.netlify/functions/kaibot-state'));
+ assert.equal(get.status,200);
+ const post=()=>new Request('https://bank.test/.netlify/functions/kaibot-state',{method:'POST',headers:{'Content-Type':'application/json',origin:'https://bank.test'},body:JSON.stringify({action:'start',maxSpend:1000})});
+ const denied=await kaibotState(post());
+ assert.equal(denied.status,403);
+ assert.equal((await db.get('state')),null,'member cannot start the global bot');
+ session({...user,roles:['owner']});
+ const allowed=await kaibotState(post());
+ assert.equal(allowed.status,200);
+ assert.equal((await db.get('state')).running,true);
 });
