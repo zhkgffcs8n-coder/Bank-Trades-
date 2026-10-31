@@ -41,7 +41,7 @@ if(host){
    const pairedLine=document.createElement('p');
    if(paired){
     const a=paired.engines?.A,b=paired.engines?.B,h=paired.hybrid;
-    pairedLine.textContent=(paired.ticker||'Unknown contract')+' · A '+(a?.action||'WAIT')+' · B '+(b?.action||'WAIT')+
+    pairedLine.textContent=(data.pairedShadowPrevious?'PREVIOUS OFFICIALLY SETTLED ROUND · ':'CURRENT ROUND · ')+(paired.ticker||'Unknown contract')+' · A '+(a?.action||'WAIT')+' · B '+(b?.action||'WAIT')+
      ' · HYBRID '+(h?.researchConsensus?'RESEARCH '+h.researchConsensus:'WAIT')+
      ' · '+(h?.reason||'Missing explanation')+' · '+(paired.status||'PENDING')+
      ' · fees/slippage and calibrated confidence unavailable; NO TRADE AUTHORIZATION';
