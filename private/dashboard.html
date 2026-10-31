@@ -83,7 +83,7 @@ async function loadSharedSignals(){
   const r=await fetch('/.netlify/functions/shared-signals',{cache:'no-store'});
   if(!r.ok)throw Error('HTTP '+r.status);
   const data=await r.json(),time=Date.parse(data.fetched_at);
-  if(!Number.isFinite(time)||Math.abs(Date.now()-time)>45000||!Array.isArray(data.results))throw Error('Stale shared feed');
+  if(!Number.isFinite(time)||time>Date.now()+10000||Date.now()-time>60000||!Array.isArray(data.results))throw Error('Stale shared feed');
   sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
   if(data.performance)window.dispatchEvent(new CustomEvent('banktrades:paper-performance',{detail:data.performance}));
@@ -149,7 +149,7 @@ function render(){
 async function refresh(){
  if(busy)return;busy=true;$('health').textContent='● UPDATING';
  try{const [d]=await Promise.all([api('/api/data?mode=markets'),loadSharedSignals()]);if(!Array.isArray(d.results))throw Error('Invalid feed response');
- const sourceTime=Date.parse(d.fetched_at);if(!Number.isFinite(sourceTime)||Math.abs(Date.now()-sourceTime)>25000)throw Error('Stale or invalid source timestamp');
+ const sourceTime=Date.parse(d.fetched_at);if(!Number.isFinite(sourceTime)||sourceTime>Date.now()+10000||Date.now()-sourceTime>60000)throw Error('Stale or invalid source timestamp');
  rows=d.results;fetched=sourceTime;window.dispatchEvent(new CustomEvent('banktrades:quotes',{detail:{rows,fetched}}));
  $('count').textContent=rows.filter(x=>x.market).length+'/8';$('updated').textContent=new Date(fetched).toLocaleTimeString();
  $('health').textContent='● FEED CONNECTED';$('health').className='pill green';
