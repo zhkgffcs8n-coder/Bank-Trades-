@@ -171,18 +171,19 @@ function draw(){
 $('trackUp').addEventListener('click',()=>beginTracked('UP'));
 $('trackDown').addEventListener('click',()=>beginTracked('DOWN'));
 $('closeTracked').addEventListener('click',()=>{saveTracked(selected,null);show();syncQuickPosition()});
+let quickSelectedAsset=selected;
 function renderQuickAssets(){
  const box=$('quickAssets');if(!box)return;
  box.querySelectorAll('[data-quick-asset]').forEach(btn=>{
-  const active=btn.dataset.quickAsset===selected;
+  const active=btn.dataset.quickAsset===quickSelectedAsset;
   btn.style.minHeight='48px';btn.style.fontWeight='800';btn.style.border=active?'3px solid #ffd84d':'';
   btn.style.background=active?'rgba(255,216,77,.18)':'';
-  btn.onclick=()=>{selected=btn.dataset.quickAsset;renderQuickAssets();syncQuickPosition();show();render();draw()};
+  btn.onclick=()=>{quickSelectedAsset=btn.dataset.quickAsset;selected=quickSelectedAsset;renderQuickAssets();syncQuickPosition();show();render();draw()};
  });
- const label=$('quickSelected');if(label)label.innerHTML='<b>SELECTED: '+selected+'</b> · Enter the % you got in at, then tap UP or DOWN.';
+ const label=$('quickSelected');if(label)label.innerHTML='<b>SELECTED: '+quickSelectedAsset+'</b> · This coin stays selected until you choose another.';
 }
 function syncQuickPosition(){
- const q=$('quickPosition');if(!q)return;const p=trackedFor(selected),m=current()?.market;
+ const q=$('quickPosition');if(!q)return;selected=quickSelectedAsset;const p=trackedFor(quickSelectedAsset),m=current()?.market;
  if(!p){q.textContent='👆 '+selected+' selected · Enter the % you got in at, then tap UP or DOWN.';return}
  const same=m&&p.ticker===m.ticker,side=p.side==='up'?'UP':'DOWN';
  if(!same){q.textContent=selected+' '+side+' · previous contract ended/rotated · verify settlement';return}
@@ -198,7 +199,7 @@ function syncQuickPosition(){
  q.innerHTML='<div style="font-size:28px;margin-bottom:7px">'+decision+'</div><div>'+selected+' '+side+' · Entered '+entry.toFixed(1)+'% · Sell value '+(Number.isFinite(bid)?bid.toFixed(1)+'%':'—')+' · '+mins+'m left</div><div style="font-size:14px;font-weight:600;margin-top:7px;opacity:.85">'+reason+'</div>';
 }
 function quickTrack(side){
- const m=current()?.market,entry=Number($('quickEntry')?.value),qty=1,fees=0;
+ selected=quickSelectedAsset;const m=current()?.market,entry=Number($('quickEntry')?.value),qty=1,fees=0;
  if(!m?.ticker||!Number.isFinite(entry)||entry<=0||entry>=100){$('quickPosition').textContent='⚠️ Pick an active coin above and type the % you entered at (1–99%).';return}
  saveTracked(selected,{ticker:m.ticker,side,entry,qty,fees,at:Date.now(),expiresAt:expiryMs(m)});syncQuickPosition();show();
 }
