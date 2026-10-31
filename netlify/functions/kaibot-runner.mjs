@@ -64,6 +64,9 @@ export default async()=>{
  }
  const training=await hdb.get('training/status',{type:'json'});
  await s.setJSON('research-training-status',training||{count:0,validated:false,mode:'PAPER RESEARCH'});
+ const adaptiveGate=await hdb.get('comparison/active-paper-gate-v1',{type:'json'});
+ const paperScore=adaptiveGate?.status==='ACTIVE'?Math.max(75,Number(adaptiveGate.gate?.score)||75):75;
+ const paperMaxAsk=adaptiveGate?.status==='ACTIVE'?Math.min(65,Number(adaptiveGate.gate?.maxAsk)||65):65;
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
@@ -80,7 +83,7 @@ export default async()=>{
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    if(signal.action!=='BUY UP'&&signal.action!=='BUY DOWN')continue;
    // Conservative paper-only quality gate: require stronger agreement and narrow spreads.
-   if(Number(signal.score)<75||Number(signal.ask)>65)continue;
+   if(Number(signal.score)<paperScore||Number(signal.ask)>paperMaxAsk)continue;
    const side=signal.side,ask=signal.ask;
    // BTC remains disabled for automatic paper entries pending independent validation.
    if(asset==='BTC')continue;
