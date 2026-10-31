@@ -12,5 +12,6 @@ export default async req=>{
  const training=await db.get('training/status',{type:'json'});
  const comparison=await db.get('comparison/report-v1',{type:'json'});
  const adaptiveResearch=await db.get('comparison/research-gate-v1',{type:'json'});
- return json({training,comparison,adaptiveResearch,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ const mistakeAnalysis=await db.get('comparison/mistake-analysis-v1',{type:'json'});
+ return json({training,comparison,adaptiveResearch,mistakeAnalysis,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
