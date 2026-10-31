@@ -37,7 +37,7 @@ if(host){
    const fmt=x=>Number.isFinite(x)?(100*x).toFixed(1)+'%':'N/A';
    comparisonPanel.replaceChildren();
    const paired=data.pairedShadow;
-   const pairedHead=document.createElement('strong');pairedHead.textContent='PAIRED A+B HYBRID · SAME CONTRACT / QUOTE · SHADOW ONLY';comparisonPanel.append(pairedHead);
+   const pairedHead=document.createElement('strong');pairedHead.textContent='OPTIMUS PRIMAL · A+B HYBRID · SAME CONTRACT / QUOTE · SHADOW ONLY';comparisonPanel.append(pairedHead);
    const pairedLine=document.createElement('p');
    if(paired){
     const a=paired.engines?.A,b=paired.engines?.B,h=paired.hybrid;
