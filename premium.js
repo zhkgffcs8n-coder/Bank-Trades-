@@ -34,7 +34,7 @@ function syncSignals(){
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
-  const why=String(sig?.reason||'Signal endpoint has not returned a result');
+  const why=String(sig?.reason||window.__BANK_TRADES_SHARED_ERROR__||'Signal endpoint has not returned a result');
   const unavailable=!sig||/unavailable|timeout|failed|stale|no verified active contract/i.test(why);
   const sampleIssue=/collecting scheduled samples/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':'⏳ WAIT · NO QUALIFIED ENTRY';
