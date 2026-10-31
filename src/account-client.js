@@ -27,7 +27,7 @@ $('signup').onclick=()=>run(async()=>{if(!$('auth-form').reportValidity())return
 $('recover').onclick=()=>run(async()=>{if(!$('email').reportValidity())return;await requestPasswordRecovery($('email').value);message('If that account exists, a password reset link is on its way.');});
 $('logout').onclick=()=>run(async()=>{await logout();await refresh();message('You are signed out.');});
 $('refresh').onclick=()=>run(refresh);
-$('portal').onclick=()=>run(async()=>{const d=await api({action:'portal'});location.assign(d.url);});
+$('portal').textContent='Cancel membership';$('portal').onclick=()=>run(async()=>{if(!confirm('Cancel your BANK TRADES membership?'))return;const d=await api({action:'cancel'});message(d.message||'Cancellation submitted.');await refresh();});
 $('redeem-form').onsubmit=e=>{e.preventDefault();run(async()=>{await api({action:'redeem',code:$('access-code').value});$('access-code').value='';await refresh();});};
 $('issue-form').onsubmit=e=>{e.preventDefault();run(async()=>{const d=await api({action:'issue',email:$('member-email').value,days:Number($('days').value)});issuedCode=d.code;$('issued').textContent=`Code: ${d.code}\nFor: ${d.email}\nAccess ends: ${new Date(d.accessUntil).toLocaleString()}\nRevocation reference: ${d.codeHash}\nSave this code now. It cannot be retrieved later.`;$('copy-code').hidden=false;});};
 $('copy-code').onclick=()=>run(async()=>{await navigator.clipboard.writeText(issuedCode);message('Access code copied.');});
