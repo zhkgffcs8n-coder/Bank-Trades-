@@ -6,6 +6,7 @@ function syncSignals(){document.querySelectorAll('#premiumRows tr').forEach(tr=>
 window.addEventListener('banktrades:shared-signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const s=engineSignals.find(x=>x.asset===selected);if(s)$('premiumAI').textContent=selected+' · '+s.action+' · '+s.reason;});
 window.addEventListener('banktrades:signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const panel=$('premiumAI');if(!panel)return;const sig=engineSignals.find(s=>s.asset===selected);if(!sig){panel.textContent=selected+' · Waiting for a verified signal evaluation.';return}const action=(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');panel.textContent=selected+' · '+action+' · '+(sig.reason||'No reason provided')+(sig.action==='WAIT'?'':' · EXPERIMENTAL — not a calibrated win probability');});
 function price(m,k){if(!m)return NaN;return m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN}
+function expiry(m){for(const k of ['expires_at','expected_expiration_time','expiration_time','close_time']){const t=Date.parse(m?.[k]||'');if(Number.isFinite(t))return t}return NaN}
 function cell(tr,v){const td=document.createElement('td');td.textContent=v;tr.append(td);return td}
 function chart(){
  const c=$('premiumChart');if(!c||c.dataset.candles==='true')return;
@@ -34,16 +35,16 @@ async function update(){
   const row=d.results.find(x=>x.asset===asset),m=row?.market;
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
   const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
-  const remaining=m?Math.max(0,Math.floor((Date.parse(m.expires_at)-Date.now())/60e3)):0;
+  const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
   const tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
-  const state=cell(tr,valid?'WAIT':'NO QUOTE');state.className='premium-action';
-  cell(tr,m?remaining+'m':'—');$('premiumRows').append(tr);
-  if(valid){open++;const series=history.get(asset)||[];if(series.length&&series[series.length-1].ticker!==m.ticker)series.length=0;series.push({v:(ya+yb)/2,ticker:m.ticker});if(series.length>100)series.shift();history.set(asset,series)}
+  const state=cell(tr,valid&&active?'WAIT':valid?'CHECK ROUND':'NO QUOTE');state.className='premium-action';
+  cell(tr,m?remaining:'—');$('premiumRows').append(tr);
+  if(valid&&active){open++;const series=history.get(asset)||[];if(series.length&&series[series.length-1].ticker!==m.ticker)series.length=0;series.push({v:(ya+yb)/2,ticker:m.ticker});if(series.length>100)series.shift();history.set(asset,series)}
   if(assets.includes(asset)){
    const tile=document.createElement('div');tile.className='premium-tile';
    const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI';
    const value=document.createElement('b');value.textContent=valid?'UP '+ya.toFixed(1)+'%':'—';
-   const meta=document.createElement('small');meta.textContent=valid?remaining+' min remaining':'Market unavailable';
+   const meta=document.createElement('small');meta.textContent=valid?remaining:'Market unavailable';
    const down=document.createElement('small');down.textContent=valid?'DOWN '+na.toFixed(1)+'% · UP bid '+yb.toFixed(1)+'%':'Waiting for Kalshi quotes';
    tile.append(label,value,down,meta);$('premiumStrip').append(tile);
   }
