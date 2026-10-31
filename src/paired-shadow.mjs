@@ -17,7 +17,10 @@ export function engineBTrend(m,records,now){
  if(Math.max(ask-bid,noAsk-noBid)>.04)return wait('B: spread exceeds four cents');
  if(!Number.isFinite(expiry)||expiry-now<=180000||expiry-now>930000)return wait('B: contract outside entry-time window');
  const rows=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1)
-  .sort((a,b)=>a.t-b.t).filter((r,i,a)=>i===0||r.t!==a[i-1].t).slice(-6);
+  // Multiple observations can share a minute bucket. Prefer the most recently
+  // observed quote for that bucket; otherwise a stale duplicate can reverse B.
+  .sort((a,b)=>a.t-b.t||(Number(b.observedAt)||0)-(Number(a.observedAt)||0))
+  .filter((r,i,a)=>i===0||r.t!==a[i-1].t).slice(-6);
  if(rows.length<4)return wait('B: fewer than four distinct same-contract samples');
  if(now-rows.at(-1).t>90000)return wait('B: latest sample older than 90 seconds');
  const last=rows.slice(-4);
