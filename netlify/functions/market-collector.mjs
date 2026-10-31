@@ -42,13 +42,15 @@ export default async()=>{
     const key='paired-shadow/pending/v1/'+m.ticker;
     const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
     if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
-     const sameContract=recentContractSamples(recent,m.ticker,now);
+     const sameContract=recentContractSamples(recent,m.ticker,record.observedAt);
+     // Use the timestamp of the fetched quote, not the start of the scheduled
+     // invocation. Both engines must score this same frozen quote at capture time.
      // Freeze only after enough distinct same-contract history exists for Engine B.
      // An early WAIT would otherwise become an immutable, uninformative pair.
      const distinct=new Set(sameContract.map(r=>r.t));
      const span=sameContract.length?sameContract.at(-1).t-sameContract[0].t:0;
      if(distinct.size>=4&&span>=180000){
-      await db.setJSON(key,{...pairedShadow(m,sameContract,now),asset});
+      await db.setJSON(key,{...pairedShadow(m,sameContract,record.observedAt),asset});
      }
     }
    }
