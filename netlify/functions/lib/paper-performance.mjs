@@ -1,7 +1,7 @@
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export function performance(trades=[]){
- const valid=trades.filter(t=>((t.status==='SETTLED'&&['yes','no'].includes(t.settlement))||(t.status==='CLOSED'&&t.paperExitOnly===true&&Number.isFinite(Number(t.exitBid))))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
+ const valid=trades.filter(t=>((t.status==='SETTLED'&&['WIN','LOSS'].includes(String(t.settlement).toUpperCase())&&['yes','no'].includes(String(t.marketResult).toLowerCase()))||(t.status==='CLOSED'&&t.paperExitOnly===true&&Number.isFinite(Number(t.exitBid))))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
  const summarize=rows=>{
   const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=n-wins;
   const spent=rows.reduce((s,t)=>s+Number(t.cost),0),pnl=rows.reduce((s,t)=>s+Number(t.pnl),0);
