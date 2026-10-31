@@ -171,19 +171,25 @@ function draw(){
 $('trackUp').addEventListener('click',()=>beginTracked('UP'));
 $('trackDown').addEventListener('click',()=>beginTracked('DOWN'));
 $('closeTracked').addEventListener('click',()=>{saveTracked(selected,null);show();syncQuickPosition()});
-let quickSelectedAsset=selected;
+let quickSelectedAsset=sessionStorage.getItem('bankTradesQuickAsset')||'';
 function renderQuickAssets(){
  const box=$('quickAssets');if(!box)return;
  box.querySelectorAll('[data-quick-asset]').forEach(btn=>{
-  const active=btn.dataset.quickAsset===quickSelectedAsset;
-  btn.style.minHeight='48px';btn.style.fontWeight='800';btn.style.border=active?'3px solid #ffd84d':'';
-  btn.style.background=active?'rgba(255,216,77,.18)':'';
-  btn.onclick=()=>{quickSelectedAsset=btn.dataset.quickAsset;selected=quickSelectedAsset;renderQuickAssets();syncQuickPosition();show();render();draw()};
+  const asset=btn.dataset.quickAsset,active=asset===quickSelectedAsset;
+  btn.classList.toggle('quick-asset-selected',active);
+  btn.style.setProperty('border',active?'3px solid #ffd84d':'1px solid rgba(255,255,255,.28)','important');
+  btn.style.setProperty('background',active?'#6b5a00':'transparent','important');
+  btn.style.setProperty('color',active?'#fff3a0':'inherit','important');
+  btn.style.minHeight='48px';btn.style.fontWeight='900';
+  const base=btn.dataset.baseLabel||(btn.dataset.baseLabel=btn.textContent.replace(/\s+SELECTED ✓$/,'').trim());
+  btn.textContent=active?base+' · SELECTED ✓':base;
+  btn.onclick=()=>{quickSelectedAsset=asset;sessionStorage.setItem('bankTradesQuickAsset',asset);selected=asset;renderQuickAssets();syncQuickPosition();show();render();draw()};
  });
- const label=$('quickSelected');if(label)label.innerHTML='<b>SELECTED: '+quickSelectedAsset+'</b> · This coin stays selected until you choose another.';
+ const label=$('quickSelected');
+ if(label)label.innerHTML=quickSelectedAsset?'<b style="color:#ffd84d">✓ SELECTED: '+quickSelectedAsset+'</b> · Enter your entry % below.':'<b>👆 TAP YOUR COIN</b>';
 }
 function syncQuickPosition(){
- const q=$('quickPosition');if(!q)return;selected=quickSelectedAsset;const p=trackedFor(quickSelectedAsset),m=current()?.market;
+ const q=$('quickPosition');if(!q)return;if(!quickSelectedAsset){q.textContent='👆 Tap the coin you bought first.';return}selected=quickSelectedAsset;const p=trackedFor(quickSelectedAsset),m=current()?.market;
  if(!p){q.textContent='👆 '+selected+' selected · Enter the % you got in at, then tap UP or DOWN.';return}
  const same=m&&p.ticker===m.ticker,side=p.side==='up'?'UP':'DOWN';
  if(!same){q.textContent=selected+' '+side+' · previous contract ended/rotated · verify settlement';return}
@@ -199,7 +205,7 @@ function syncQuickPosition(){
  q.innerHTML='<div style="font-size:28px;margin-bottom:7px">'+decision+'</div><div>'+selected+' '+side+' · Entered '+entry.toFixed(1)+'% · Sell value '+(Number.isFinite(bid)?bid.toFixed(1)+'%':'—')+' · '+mins+'m left</div><div style="font-size:14px;font-weight:600;margin-top:7px;opacity:.85">'+reason+'</div>';
 }
 function quickTrack(side){
- selected=quickSelectedAsset;const m=current()?.market,entry=Number($('quickEntry')?.value),qty=1,fees=0;
+ if(!quickSelectedAsset){$('quickPosition').textContent='⚠️ Tap your coin first.';return}selected=quickSelectedAsset;const m=current()?.market,entry=Number($('quickEntry')?.value),qty=1,fees=0;
  if(!m?.ticker||!Number.isFinite(entry)||entry<=0||entry>=100){$('quickPosition').textContent='⚠️ Pick an active coin above and type the % you entered at (1–99%).';return}
  saveTracked(selected,{ticker:m.ticker,side,entry,qty,fees,at:Date.now(),expiresAt:expiryMs(m)});syncQuickPosition();show();
 }
