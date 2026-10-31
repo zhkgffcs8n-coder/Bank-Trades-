@@ -61,3 +61,14 @@ test('B is a separate trend rule rather than copying A or committee vote',()=>{
  const x=engineBTrend(market,samples([.40,.44,.48,.52]),now);
  assert.equal(x.action,'BUY UP');assert.match(x.reason,/short-window trend/);
 });
+
+test('B prefers newest observed quote when minute bucket has conflicting duplicates',()=>{
+ const rows=samples([.40,.45,.50,.35]);
+ const stale={...rows.at(-1),yesMid:.35,observedAt:now-20000};
+ const newest={...rows.at(-1),yesMid:.55,observedAt:now-10000};
+ for(const candidate of [[...rows.slice(0,-1),stale,newest],[...rows.slice(0,-1),newest,stale]]){
+  const result=engineBTrend(market,candidate,now);
+  assert.equal(result.action,'BUY UP');
+  assert.equal(result.side,'up');
+ }
+});
