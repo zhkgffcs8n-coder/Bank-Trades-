@@ -111,6 +111,31 @@ export default async()=>{
   const eligible=scored.filter(g=>g.train.trades>=30&&g.holdout.trades>=15&&g.train.roi>0&&g.holdout.roi>0);
   eligible.sort((a,b)=>b.holdout.roi-a.holdout.roi);
   const chosen=eligible[0]||null;
+  // Cross-engine mistake analysis: evaluate disagreement, abstentions, and loss patterns.
+  // Analysis is retrospective and cannot silently change either engine's live rules.
+  const breakdown={at:now,version:1,mode:'AUTOMATED PAPER RESEARCH',assets:{},entryBands:{},scoreBands:{},disagreements:{originalOnly:0,bothEntered:0},recentLosses:[],recommendations:[]};
+  for(const row of resolved){
+   const a=row.engines.original,b=row.engines.upgraded;
+   const band=Number(a.ask)<45?'under45':Number(a.ask)<60?'45to59':'60plus';
+   const scoreBand=Number(a.score)<75?'under75':Number(a.score)<85?'75to84':'85plus';
+   for(const [target,key] of [[breakdown.assets,row.asset||'UNKNOWN'],[breakdown.entryBands,band],[breakdown.scoreBands,scoreBand]]){
+    const v=target[key]||(target[key]={n:0,wins:0,losses:0,pnl:0});
+    v.n++;v.wins+=a.won?1:0;v.losses+=a.won?0:1;v.pnl+=Number(a.pnl);
+   }
+   if(b?.resolved)breakdown.disagreements.bothEntered++;
+   else breakdown.disagreements.originalOnly++;
+   if(!a.won)breakdown.recentLosses.push({ticker:row.ticker,asset:row.asset,at:row.at,ask:a.ask,score:a.score,pnl:a.pnl,upgradedSkipped:!b?.resolved});
+  }
+  breakdown.recentLosses=breakdown.recentLosses.slice(-25);
+  for(const [asset,v] of Object.entries(breakdown.assets)){
+   v.pnl=Number(v.pnl.toFixed(4));
+   if(v.n>=20&&v.pnl<0)breakdown.recommendations.push({type:'REVIEW_ASSET',asset,reason:asset+' has negative historical simulated returns over '+v.n+' observations; confirm on new outcomes before changing rules'});
+  }
+  for(const [band,v] of Object.entries(breakdown.entryBands)){
+   v.pnl=Number(v.pnl.toFixed(4));
+   if(v.n>=20&&v.pnl<0)breakdown.recommendations.push({type:'REVIEW_ENTRY_BAND',band,reason:'Negative simulated returns in '+band+' entry band; research only'});
+  }
+  await db.setJSON('comparison/mistake-analysis-v1',breakdown);
   await db.setJSON('comparison/research-gate-v1',{
    at:now,mode:'RESEARCH ONLY',baseline:'original unchanged',trainingCount:training.length,holdoutCount:holdout.length,
    candidates:scored,proposed:chosen?{score:chosen.score,maxAsk:chosen.maxAsk}:null,
