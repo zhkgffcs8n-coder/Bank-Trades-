@@ -47,6 +47,8 @@ test('A/B disagreement never becomes a research consensus',()=>{
 
 test('settlement requires exact trusted outcome; keeps gross and unavailable net distinct',()=>{
  const row=pairedShadow(market,samples([.40,.44,.48,.52]),now);
+ assert.equal(resolvePairedShadow(row,verified,now+299999),null,'no pre-expiry settlement even with a forged verified label');
+ assert.equal(resolvePairedShadow(row,verified,NaN),null,'invalid resolution clock is not evidence');
  assert.equal(resolvePairedShadow(row,{ticker,result:'yes'},now+400000),null);
  assert.equal(resolvePairedShadow(row,{...verified,ticker:'OTHER'},now+400000),null);
  const settled=resolvePairedShadow(row,verified,now+400000);
@@ -60,4 +62,27 @@ test('settlement requires exact trusted outcome; keeps gross and unavailable net
 test('B is a separate trend rule rather than copying A or committee vote',()=>{
  const x=engineBTrend(market,samples([.40,.44,.48,.52]),now);
  assert.equal(x.action,'BUY UP');assert.match(x.reason,/short-window trend/);
+});
+
+test('B prefers newest observed quote when minute bucket has conflicting duplicates',()=>{
+ const rows=samples([.40,.45,.50,.35]);
+ const stale={...rows.at(-1),yesMid:.35,observedAt:now-20000};
+ const newest={...rows.at(-1),yesMid:.55,observedAt:now-10000};
+ for(const candidate of [[...rows.slice(0,-1),stale,newest],[...rows.slice(0,-1),newest,stale]]){
+  const result=engineBTrend(market,candidate,now);
+  assert.equal(result.action,'BUY UP');
+  assert.equal(result.side,'up');
+ }
+});
+
+test('A and B share deduplicated pre-freeze samples; future quote cannot create agreement',()=>{
+ const rows=samples([.40,.44,.48,.52]);
+ const future={...rows.at(-1),yesMid:.70,observedAt:now+1000};
+ const pair=pairedShadow(market,[...rows,future],now);
+ assert.equal(pair.at,now);
+ assert.equal(pair.engines.A.action,'BUY UP');
+ assert.equal(pair.engines.B.action,'BUY UP');
+ assert.equal(pair.hybrid.action,'WAIT');
+ assert.equal(pair.hybrid.authorized,false);
+ assert.equal(pair.engines.B.askCents,52);
 });

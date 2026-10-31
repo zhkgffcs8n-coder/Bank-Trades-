@@ -42,13 +42,15 @@ export default async()=>{
     const key='paired-shadow/pending/v1/'+m.ticker;
     const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
     if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
-     const sameContract=recentContractSamples(recent,m.ticker,now);
+     const sameContract=recentContractSamples(recent,m.ticker,record.observedAt);
+     // Use the timestamp of the fetched quote, not the start of the scheduled
+     // invocation. Both engines must score this same frozen quote at capture time.
      // Freeze only after enough distinct same-contract history exists for Engine B.
      // An early WAIT would otherwise become an immutable, uninformative pair.
      const distinct=new Set(sameContract.map(r=>r.t));
      const span=sameContract.length?sameContract.at(-1).t-sameContract[0].t:0;
      if(distinct.size>=4&&span>=180000){
-      await db.setJSON(key,pairedShadow(m,sameContract,now));
+      await db.setJSON(key,{...pairedShadow(m,sameContract,record.observedAt),asset});
      }
     }
    }
@@ -133,6 +135,8 @@ export default async()=>{
     if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
     const yesWon=outcome.result==='yes';
     rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
+    // Preserve official-label provenance for strict live/Primal comparison.
+    rec.outcomeVerification=SETTLEMENT_VERIFICATION;
     rec.counterfactual={
      upPnl:Number(((yesWon?100:0)-Number(rec.quote.yesAsk)).toFixed(2)),
      downPnl:Number(((yesWon?0:100)-Number(rec.quote.noAsk)).toFixed(2)),
@@ -201,6 +205,13 @@ export default async()=>{
     const resolved=resolvePairedShadow(row,outcome,now);
     if(resolved){
      await db.setJSON(resolvedKey,resolved);
+     // Read-only historical pointer; only strict officially verified resolutions qualify.
+     const pairedAsset=row.asset||Object.keys(SERIES).find(a=>row.ticker.startsWith(SERIES[a]+'-'));
+     if(pairedAsset){
+      const latestKey='paired-shadow/latest-resolved/v1/'+pairedAsset;
+      const previous=await db.get(latestKey,{type:'json'});
+      if(!previous||Number(previous.at)<Number(resolved.at))await db.setJSON(latestKey,resolved);
+     }
      await db.delete(blob.key);
     }
    }

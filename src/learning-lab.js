@@ -41,7 +41,7 @@ if(host){
    const pairedLine=document.createElement('p');
    if(paired){
     const a=paired.engines?.A,b=paired.engines?.B,h=paired.hybrid;
-    pairedLine.textContent=(paired.ticker||'Unknown contract')+' · A '+(a?.action||'WAIT')+' · B '+(b?.action||'WAIT')+
+    pairedLine.textContent=(data.pairedShadowPrevious?'PREVIOUS OFFICIALLY SETTLED ROUND · ':'CURRENT ROUND · ')+(paired.ticker||'Unknown contract')+' · A '+(a?.action||'WAIT')+' · B '+(b?.action||'WAIT')+
      ' · HYBRID '+(h?.researchConsensus?'RESEARCH '+h.researchConsensus:'WAIT')+
      ' · '+(h?.reason||'Missing explanation')+' · '+(paired.status||'PENDING')+
      ' · fees/slippage and calibrated confidence unavailable; NO TRADE AUTHORIZATION';
@@ -49,8 +49,22 @@ if(host){
       ' · A '+(paired.evaluation?.A?.correct===null?'abstained':paired.evaluation?.A?.correct?'correct':'incorrect')+
       ' · B '+(paired.evaluation?.B?.correct===null?'abstained':paired.evaluation?.B?.correct?'correct':'incorrect')+
       ' · hybrid '+(paired.evaluation?.hybrid?.correct===null?'abstained':paired.evaluation?.hybrid?.correct?'correct':'incorrect');}
-   }else pairedLine.textContent=data.pairedStatus==='NO_CURRENT_CONTRACT'?'WAIT · no current contract snapshot recorded; research only':'WAIT · collecting sufficient same-contract observations before freezing an A/B pair; research only';
+   }else {
+    const why=Array.isArray(data.pairedWaitReasons)&&data.pairedWaitReasons.length?data.pairedWaitReasons.join('; '):'No frozen pair yet; collecting qualified inputs';
+    pairedLine.textContent='WAIT · '+why+' · '+(Number(data.pairedSampleCount)||0)+' current-contract samples · no trade authorization';
+   }
    comparisonPanel.append(pairedLine);
+   if(data.pairedLiveMatch){const matched=document.createElement('p');matched.textContent='PRIMAL VS LIVE SIGNALS · '+data.pairedLiveMatch.status+' · '+data.pairedLiveMatch.reason+' · no shared win credit without exact frozen timestamp/contract/quote; fees, slippage and fills unverified';comparisonPanel.append(matched);}
+   if(data.pairedShadowPrevious){const note=document.createElement('p');note.textContent='CURRENT ROUND · '+data.pairedStatus+' · awaiting a new qualified frozen pair; historical outcome is not a current signal';comparisonPanel.append(note);}
+   if(data.pairedShadowLatestResolved){
+    const old=data.pairedShadowLatestResolved,ev=old.evaluation||{};
+    const resultLabel=v=>v?.evaluated===true?(v.correct?'correct':'incorrect'):'abstained';
+    const historical=document.createElement('p');
+    historical.textContent='PREVIOUS VERIFIED A+B ROUND · '+old.ticker+' · official '+old.settlement.result.toUpperCase()+
+     ' · A '+resultLabel(ev.A)+' · B '+resultLabel(ev.B)+' · hybrid '+resultLabel(ev.hybrid)+
+     ' · frozen research predictions, no fees/slippage or verified fills';
+    comparisonPanel.append(historical);
+   }
    const heading=document.createElement('strong');heading.textContent='LEGACY A/B GATED PAPER COMPARISON · NOT INDEPENDENT PAIRED PREDICTIONS';comparisonPanel.append(heading);
    if(cmp){for(const name of ['original','upgraded']){const v=cmp.engines?.[name];if(!v)continue;const line=document.createElement('p');line.textContent=(name==='original'?'ENGINE A · ORIGINAL':'ENGINE B · UPGRADED')+' · '+v.trades+' settled · '+v.wins+' W / '+v.losses+' L · win rate '+fmt(v.winRate)+' · simulated net '+Number(v.netPnl).toFixed(2)+' contracts · ROI '+fmt(v.roi)+' · max drawdown '+Number(v.maxDrawdown).toFixed(2);comparisonPanel.append(line)}const meta=document.createElement('p');meta.textContent=cmp.pending+' pending · '+cmp.totalObserved+' observed · '+(cmp.truncated?'report truncated · ':'')+'one-contract hypothetical settlement; excludes fees, slippage and early exits';comparisonPanel.append(meta)}else{const line=document.createElement('p');line.textContent='Waiting for the first server-side comparison report';comparisonPanel.append(line)}
    if(feed){const p=document.createElement('p');const age=Math.max(0,Date.now()-Number(feed.at));p.textContent='DATA HEALTH · '+feed.asset+' · last scheduled sample '+Math.round(age/1000)+'s ago · '+(age>120000?'STALE — do not trust entries':'recent')+' · duplicate suppressed: '+(feed.sampleDuplicate?'yes':'no')+' · quote spread '+Number(feed.quoteSpread).toFixed(2)+'¢';comparisonPanel.append(p)}

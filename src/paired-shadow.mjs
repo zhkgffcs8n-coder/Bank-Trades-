@@ -3,6 +3,7 @@
 // confirmation; B is not a trained/calibrated model or independent market evidence.
 import {paperSignal} from '../netlify/functions/lib/shared-paper-signals.mjs';
 import {trustedStoredFinalizedOutcome} from './official-settlement.mjs';
+import {recentContractSamples} from './recent-contract-samples.mjs';
 
 const num=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars']):m?.[k]!=null?Number(m[k])/100:NaN;
 const isBuy=a=>a==='BUY UP'||a==='BUY DOWN';
@@ -17,7 +18,10 @@ export function engineBTrend(m,records,now){
  if(Math.max(ask-bid,noAsk-noBid)>.04)return wait('B: spread exceeds four cents');
  if(!Number.isFinite(expiry)||expiry-now<=180000||expiry-now>930000)return wait('B: contract outside entry-time window');
  const rows=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1)
-  .sort((a,b)=>a.t-b.t).filter((r,i,a)=>i===0||r.t!==a[i-1].t).slice(-6);
+  // Multiple observations can share a minute bucket. Prefer the most recently
+  // observed quote for that bucket; otherwise a stale duplicate can reverse B.
+  .sort((a,b)=>a.t-b.t||(Number(b.observedAt)||0)-(Number(a.observedAt)||0))
+  .filter((r,i,a)=>i===0||r.t!==a[i-1].t).slice(-6);
  if(rows.length<4)return wait('B: fewer than four distinct same-contract samples');
  if(now-rows.at(-1).t>90000)return wait('B: latest sample older than 90 seconds');
  const last=rows.slice(-4);
@@ -37,7 +41,9 @@ export function pairedShadow(m,records,now=Date.now()){
  const ticker=m?.ticker||null;
  const quote={yesBid:num(m,'yes_bid'),yesAsk:num(m,'yes_ask'),noBid:num(m,'no_bid'),noAsk:num(m,'no_ask')};
  const quoteValid=Object.values(quote).every(Number.isFinite)&&quote.yesAsk>0&&quote.noAsk>0&&quote.yesAsk<1&&quote.noAsk<1&&quote.yesBid>=0&&quote.noBid>=0&&quote.yesBid<=quote.yesAsk&&quote.noBid<=quote.noAsk;
- const a=paperSignal(m,records,null,now,null),b=engineBTrend(m,records,now);
+ // Both A and B see the same deduplicated, same-contract, pre-freeze samples.
+ const sharedRecords=recentContractSamples(records,ticker,now);
+ const a=paperSignal(m,sharedRecords,null,now,null),b=engineBTrend(m,sharedRecords,now);
  const reasons=[];
  if(!ticker)reasons.push('Missing contract ticker');
  if(!quoteValid)reasons.push('Invalid paired quote');
@@ -55,7 +61,8 @@ export function pairedShadow(m,records,now=Date.now()){
 }
 
 export function resolvePairedShadow(row,outcome,now=Date.now()){
- if(row?.status!=='PENDING'||!row.ticker||!Number.isFinite(row.at)||!Number.isFinite(row.expiresAt)||row.at>=row.expiresAt)return null;
+ if(row?.status!=='PENDING'||!row.ticker||!Number.isFinite(row.at)||!Number.isFinite(row.expiresAt)||
+    !Number.isFinite(now)||row.at>=row.expiresAt||now<row.expiresAt)return null;
  const result=trustedStoredFinalizedOutcome(outcome,row.ticker);
  if(!result)return null;
  const evaluate=(direction)=>{
