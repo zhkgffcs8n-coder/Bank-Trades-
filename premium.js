@@ -72,5 +72,16 @@ async function update(){
  finally{fetching=false}
 }
 window.addEventListener('resize',chart);
-update();setInterval(update,1000);
+// Health badge must reflect actual displayed, recently fetched quotes, not an initialization placeholder.
+function reconcileHealth(){
+ const badge=$('premiumHealth'),rows=$('premiumRows');
+ if(!badge||!rows)return;
+ const count=[...rows.querySelectorAll('tr')].filter(tr=>tr.children.length===5&&tr.children[1]?.textContent!=='—'&&tr.children[2]?.textContent!=='—'&&tr.children[4]?.textContent!=='ENDED').length;
+ const age=Date.now()-lastFetch;
+ if(count>0&&failures===0&&age<30000){badge.textContent='● '+count+' QUOTE FEEDS';badge.className='pill green';}
+ else if(failures>0){badge.textContent='● FEED ERROR · RETRYING';badge.className='pill red';}
+ else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
+ else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
+}
+update();setInterval(()=>{update();reconcileHealth()},1000);
 })();
