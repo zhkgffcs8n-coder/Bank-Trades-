@@ -22,29 +22,23 @@ function syncSignals(){
   const action=sig?.action||'WAIT';
   const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
   const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
+  // Live signals remain independent recommendations; paper executions are contextual only.
   if(position){
-   const side=String(position.side||'').toUpperCase();
-   const status=String(position.status||'').toUpperCase();
-   const reason=String(position.exitReason||'');
-   const elapsed=Date.now()-Number(position.at||0);
-   const exitReview=status==='OPEN'&&['PAPER STOP LOSS','PAPER TAKE PROFIT','PAPER TIME EXIT'].includes(reason);
-   const label=status==='OPEN'?(elapsed<25000?'BUY '+side+' · PAPER':'HOLD '+side+' · PAPER'):status==='CLOSED'?'SELL FAST · '+side+' PAPER':status==='SETTLED'?'SETTLED '+side+' · PAPER':'PAPER '+side+' · '+status;
-   cell.textContent=exitReview?'SELL FAST · '+side+' PAPER':label;
-   cell.className='premium-action '+(status==='CLOSED'||exitReview?'sell':status==='OPEN'&&elapsed<25000?'up':'hold');
-   cell.title='Recorded paper '+status+' · '+ticker+' · '+side+' · entry '+position.ask+'¢'+(Number.isFinite(Number(position.exitBid))?' · exit '+position.exitBid+'¢':'')+(Number.isFinite(Number(position.pnl))?' · P/L $'+Number(position.pnl).toFixed(2):'')+(reason?' · '+reason:'')+'. No real order.';
-   return;
+   const side=String(position.side||'').toUpperCase(),status=String(position.status||'').toUpperCase();
+   const paper=status==='OPEN'?'📋 PAPER HOLD '+side:status==='CLOSED'?'📋 PAPER EXIT '+side:status==='SETTLED'?'📋 PAPER SETTLED '+side:'📋 PAPER '+status;
+   tr.title=paper+' · '+ticker+' · entry '+position.ask+'¢'+(Number.isFinite(Number(position.pnl))?' · P/L $'+Number(position.pnl).toFixed(2):'')+' · Not a real-money order';
   }
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
-  cell.textContent=action==='WAIT'?(paperStatusError?'PAPER DATA UNAVAILABLE':paperBotRunning?'AWAITING PAPER ENTRY':'WAIT · BOT OFF'):action;
+  cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':'⏳ WAIT · NO VERIFIED EDGE';
   cell.title=sig?.reason||'Waiting for shared signal engine';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
    const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
    if(details){
     cell.title=(sig.reason||'')+' | '+forecast.method+' | '+side+' ask '+details.askCents+' cents | Max payout gain $'+details.maxProfitPerContract.toFixed(2)+'; max stake loss $'+details.maxLossPerContract.toFixed(2)+' per contract before fees';
-    if(action==='WAIT'&&!paperBotRunning&&!paperStatusError)cell.textContent='WAIT · '+side+' WATCH';
+    if(action==='WAIT')cell.textContent='⏳ WAIT · '+side+' WATCH';
    }
   }
  });
