@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {initialModel,predict,learn} from '../src/research-model.mjs';
 import legacy from '../netlify/functions/lib/legacy/data.cjs';
 import {paperSignal} from '../netlify/functions/lib/shared-paper-signals.mjs';
+import {buildCommitteeSnapshot,coordinateEngines} from '../src/engine-team.mjs';
 
 test('untrained predictor equals baseline and only labeled examples update weights',()=>{
  const m=initialModel(),features=[1,.5,.1,.6];
@@ -52,4 +53,34 @@ test('paper momentum requires recent scheduled observations before any BUY',()=>
  const blocked=paperSignal(market,stale,null,now);
  assert.equal(blocked.action,'WAIT');
  assert.match(blocked.reason,/Stale momentum history/);
+});
+
+
+test('shadow committee requires fresh same-contract features and normalized executable ask',()=>{
+ const now=Date.parse('2026-10-31T10:00:00Z');
+ const market={ticker:'KXBTC15M-TEST',yes_bid_dollars:'0.48',yes_ask_dollars:'0.50',no_bid_dollars:'0.50',no_ask_dollars:'0.52',expected_expiration_time:new Date(now+5*60000).toISOString()};
+ const records=[{ticker:market.ticker,t:now-90000,yesMid:.40},{ticker:market.ticker,t:now-30000,yesMid:.48}];
+ const good=buildCommitteeSnapshot(market,records,now);
+ assert.equal(good.status,'READY');
+ assert.equal(good.ask,.5);
+ assert.equal(good.features.length,4);
+ assert.ok(good.features.every(Number.isFinite));
+ assert.equal(good.sampleCount,2);
+ const report=coordinateEngines(good);
+ assert.equal(report.status,'SHADOW_ONLY');
+ assert.equal(report.votes.length,7);
+ assert.equal(report.execution.authorized,false);
+ assert.equal(report.champion.promoted,false);
+ const cents=buildCommitteeSnapshot({ticker:market.ticker,yes_bid:48,yes_ask:50,no_bid:50,no_ask:52,expected_expiration_time:market.expected_expiration_time},records,now);
+ assert.equal(cents.status,'READY');
+ assert.equal(cents.ask,.5);
+ const stale=buildCommitteeSnapshot(market,records.map(x=>({...x,t:x.t-180000})),now);
+ assert.equal(stale.status,'MISSING_INPUT');
+ assert.ok(stale.missing.some(x=>x.includes('fresh')));
+ const wrongTicker=buildCommitteeSnapshot(market,records.map(x=>({...x,ticker:'OTHER'})),now);
+ assert.equal(wrongTicker.status,'MISSING_INPUT');
+ assert.ok(wrongTicker.missing.some(x=>x.includes('same-contract')));
+ const invalidQuote=buildCommitteeSnapshot({...market,yes_ask_dollars:'NaN'},records,now);
+ assert.equal(invalidQuote.status,'MISSING_INPUT');
+ assert.ok(invalidQuote.missing.some(x=>x.includes('bid/ask')));
 });
