@@ -1,5 +1,6 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
+import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2',db=()=>getStore({name:'bank-trades-server-kaibot',consistency:'strong'}),hist=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
@@ -17,28 +18,29 @@ export default async()=>{
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN'||(x.status==='CLOSED'&&!['WIN','LOSS'].includes(x.settlement)))){
   let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
-  if(!['yes','no'].includes(String(o?.result||'').toLowerCase())){
+  // Legacy cached labels were not all checked for finality and payout. Reverify.
+  let result=trustedStoredFinalizedOutcome(o,t.ticker);
+  if(!result){
    try{
     const official=await get(base+'/markets/'+encodeURIComponent(t.ticker));
-    const market=official?.market;
-    const result=String(market?.result||'').toLowerCase();
-    if(['yes','no'].includes(result)&&['settled','finalized'].includes(String(market?.status||'').toLowerCase())){
-     o={result,source:'Kalshi official finalized market',verifiedAt:now};
+    result=verifiedFinalizedBinaryOutcome(official?.market,t.ticker);
+    if(result){
+     o={ticker:t.ticker,result,source:'Kalshi official finalized market',verification:SETTLEMENT_VERIFICATION,verifiedAt:now};
      await hdb.setJSON('outcomes/'+t.ticker,o);
     }
    }catch(e){console.warn('KaiBot settlement lookup unavailable',t.ticker,String(e))}
   }
-  if(!['yes','no'].includes(String(o?.result||'').toLowerCase()))continue;
-  const won=(t.side==='up'&&o.result==='yes')||(t.side==='down'&&o.result==='no'),payout=won?t.qty:0;
+  if(!result)continue;
+  const won=(t.side==='up'&&result==='yes')||(t.side==='down'&&result==='no'),payout=won?t.qty:0;
   if(t.status==='CLOSED'){
    // A simulated early exit has already returned its proceeds to cash. Never pay it twice.
    // Classify the actual paper exit P/L, not the later market outcome.
    if(!Number.isFinite(Number(t.pnl)))continue;
    t.settlement=Number(t.pnl)>0?'WIN':Number(t.pnl)<0?'LOSS':'TIE';
-   t.marketResult=o.result;t.outcomeVerifiedAt=now;
+   t.marketResult=result;t.outcomeVerifiedAt=now;
   }else{
    ledger.cash=Math.round((ledger.cash+payout)*100)/100;
-   t.status='SETTLED';t.marketResult=o.result;t.settlement=won?'WIN':'LOSS';
+   t.status='SETTLED';t.marketResult=result;t.settlement=won?'WIN':'LOSS';
    t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
   }
  }
