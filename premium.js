@@ -2,7 +2,23 @@
 'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
-function syncSignals(){document.querySelectorAll('#premiumRows tr').forEach(tr=>{const sig=engineSignals.find(s=>s.asset===tr.dataset.asset);const cell=tr.children[3];if(!cell)return;const action=sig?.action||'WAIT';cell.textContent=action;cell.title=sig?.reason||'Waiting for shared signal engine';cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');if(sig?.forecast){const f=sig.forecast,side=f.direction,details=side==='UP'?f.up:f.down;cell.title=(sig.reason||'')+' | '+f.method+' | '+side+' ask '+details.askCents+'¢ | maximum win })}
+function syncSignals(){
+ document.querySelectorAll('#premiumRows tr').forEach(tr=>{
+  const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
+  if(!cell)return;
+  const action=sig?.action||'WAIT';
+  cell.textContent=action;
+  cell.title=sig?.reason||'Waiting for shared signal engine';
+  cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  if(sig?.forecast&&sig.forecast.direction){
+   const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
+   if(details){
+    cell.title=(sig.reason||'')+' | '+forecast.method+' | '+side+' ask '+details.askCents+' cents | Max payout gain $'+details.maxProfitPerContract.toFixed(2)+'; max stake loss $'+details.maxLossPerContract.toFixed(2)+' per contract before fees';
+    if(action==='WAIT')cell.textContent='WAIT · '+side+' WATCH';
+   }
+  }
+ });
+}
 window.addEventListener('banktrades:shared-signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const s=engineSignals.find(x=>x.asset===selected);if(s)$('premiumAI').textContent=selected+' · '+s.action+' · '+s.reason;});
 window.addEventListener('banktrades:signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const panel=$('premiumAI');if(!panel)return;const sig=engineSignals.find(s=>s.asset===selected);if(!sig){panel.textContent=selected+' · Waiting for a verified signal evaluation.';return}const action=(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');panel.textContent=selected+' · '+action+' · '+(sig.reason||'No reason provided')+(sig.action==='WAIT'?'':' · EXPERIMENTAL — not a calibrated win probability');});
 function price(m,k){if(!m)return NaN;return m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m[k]!=null?Number(m[k]):NaN}
