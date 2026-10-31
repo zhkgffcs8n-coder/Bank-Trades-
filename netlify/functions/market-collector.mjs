@@ -94,8 +94,16 @@ export default async()=>{
  // Track every sampled contract, not just the latest contract for each asset.
  // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
-  const listed=await db.list({prefix:'pending/',limit:1000});
-  const pending=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+  // Scan pending settlements across pages so the first 1,000 old keys cannot
+  // permanently starve newer contracts of official outcome verification.
+  const pendingKeys=[];let pendingCursor;
+  do{
+   const page=await db.list({prefix:'pending/',limit:1000,...(pendingCursor?{cursor:pendingCursor}:{})});
+   pendingKeys.push(...page.blobs.map(b=>b.key));
+   pendingCursor=page.cursor;
+  }while(pendingCursor&&pendingKeys.length<10000);
+  if(pendingCursor)console.warn('Pending settlement scan capped at 10,000 records; next run will retry');
+  const pending=(await Promise.all(pendingKeys.map(key=>db.get(key,{type:'json'})))).filter(Boolean);
   let model=await db.get('training/model',{type:'json'})||initialModel();
   const assetModels={};
   for(const rec of pending){
