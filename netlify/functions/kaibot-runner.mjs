@@ -76,7 +76,7 @@ export default async()=>{
  for(const [asset,series] of Object.entries(SERIES)){
   try{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||ledger.trades.some(t=>t.ticker===m.ticker))continue;
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m)continue;const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=3||previous.some(t=>now-Number(t.at)<120000))continue;
    const recent=await hdb.get('recent/'+asset,{type:'json'}).catch(()=>[]),records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
    // A quote-implied direction is not a validated edge and is never a real-money order.
@@ -89,6 +89,7 @@ export default async()=>{
    const modelUp=Number(signal.probability??signal.prediction);
    const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
    const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
+   if(previous.length&&(!['BUY UP','BUY DOWN'].includes(signal.action)||previous.at(-1).side===side&&Math.abs(ask-Number(previous.at(-1).ask))<5))continue;
    if(ask<=0||ask>=100)continue;
    const entryBasis=['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED PAPER SIGNAL':'UNVALIDATED QUOTE-BASED PAPER TEST';
    const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
