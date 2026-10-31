@@ -306,7 +306,7 @@ let book=safe(),markets=[];
 const money=v=>'$'+Number(v).toFixed(2);
 function save(){try{localStorage.setItem(KEY,JSON.stringify(book))}catch{}}
 function render(){
- $('paperSummary').textContent='VIRTUAL CASH '+money(book.cash)+' · Open paper positions '+book.trades.filter(t=>t.status==='OPEN').length+' · Closed P/L '+money(book.trades.reduce((sum,t)=>sum+(Number(t.pnl)||0),0))+' before fees · No real orders';
+ $('paperSummary').textContent='VIRTUAL CASH '+money(book.cash)+' · Open paper positions '+book.trades.filter(t=>!t.status||t.status==='OPEN').length+' · Closed P/L '+money(book.trades.reduce((sum,t)=>sum+(Number(t.pnl)||0),0))+' before fees · No real orders';
  $('paperLedger').textContent='';
  for(const t of book.trades.slice(-12).reverse()){
  const el=document.createElement('div');el.className='pro-market';
