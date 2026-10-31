@@ -2,7 +2,7 @@ import {mkdir,rm,copyFile,readdir,writeFile} from 'node:fs/promises';
 import {build} from 'esbuild';
 await rm('dist',{recursive:true,force:true});await mkdir('dist');
 // Explicit public allowlist. Dashboard HTML, server code, tests and secrets never enter dist.
-for(const name of ['index.html','account.css','premium.css','premium.js','kaibot.js','paper-monitor.js','terminal-enhancements.js','btc-spot-chart.js','btc-lock-radar.js','upgrade-status.js','service-worker.js','push-client.js'])await copyFile(name,'dist/'+name);
+for(const name of ['index.html','account.css','premium.css','premium.js','kaibot.js','paper-monitor.js','terminal-enhancements.js','btc-spot-chart.js','btc-lock-radar.js','upgrade-status.js','service-worker.js','push-client.js','easy-mode.js'])await copyFile(name,'dist/'+name);
 await build({entryPoints:['src/account-client.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/account-client.js'});
 await build({entryPoints:['src/dashboard-session.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/dashboard-session.js'});
 await build({entryPoints:['src/learning-lab.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/learning-lab.js'});
