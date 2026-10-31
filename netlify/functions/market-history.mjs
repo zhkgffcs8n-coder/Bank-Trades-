@@ -1,4 +1,5 @@
 import {visibleMarketSamples} from '../../src/history-snapshot.mjs';
+import {pairedDisplay} from '../../src/paired-display.mjs';
 import {getStore} from '@netlify/blobs';
 const ASSETS=new Set(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']);
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -19,9 +20,8 @@ export default async req=>{
  const pairedTicker=latest?.ticker;
  const currentPaired=pairedTicker?(await db.get('paired-shadow/resolved/v1/'+pairedTicker,{type:'json'})||
   await db.get('paired-shadow/pending/v1/'+pairedTicker,{type:'json'})):null;
- const previousPaired=currentPaired?null:await db.get('paired-shadow/latest-resolved/v1/'+asset,{type:'json'});
- const pairedShadow=currentPaired||previousPaired||null;
- const pairedShadowPrevious=Boolean(previousPaired);
+ const latestResolved=await db.get('paired-shadow/latest-resolved/v1/'+asset,{type:'json'});
+ const {pairedShadow,pairedShadowPrevious,pairedShadowLatestResolved}=pairedDisplay(currentPaired,latestResolved);
  const training=await db.get('training/status',{type:'json'});
  const comparison=await db.get('comparison/report-v1',{type:'json'});
  const adaptiveResearch=await db.get('comparison/research-gate-v1',{type:'json'});
@@ -29,5 +29,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedShadowPrevious,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedShadowPrevious,pairedShadowLatestResolved,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
