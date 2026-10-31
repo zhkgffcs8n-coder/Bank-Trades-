@@ -13,19 +13,11 @@ export default async req=>{
  let openPositions=[],stats=performance([]);try{const ledger=await timed(paperDb.get('ledger',{type:'json'}),1800,'ledger');stats=performance(ledger?.trades||[]);openPositions=(ledger?.trades||[]).filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));}catch{}
  const research={model:null,status:null};
  await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{})]);
- // Share automatically updated research evidence with the live terminal and KaiBot.
- // Model training is performed by the scheduled collector only after official settlement.
- const learning={mode:'AUTOMATIC PAPER RESEARCH',lastCheckedAt:new Date(now).toISOString(),model:research.status,
-  candidate:null,signalReview:null,lessons:null,activePaperGate:null};
- await Promise.all([
-  timed(db.get('comparison/prospective-evaluation-v1',{type:'json'}),1500,'prospective evaluation').then(v=>learning.candidate=v).catch(()=>{}),
-  timed(db.get('signal-observations/report-v1',{type:'json'}),1500,'signal review').then(v=>learning.signalReview=v).catch(()=>{}),
-  timed(db.get('comparison/lesson-summary-v1',{type:'json'}),1500,'lesson summary').then(v=>learning.lessons=v).catch(()=>{}),
-  timed(db.get('comparison/active-paper-gate-v1',{type:'json'}),1500,'active paper gate').then(v=>learning.activePaperGate=v).catch(()=>{})
- ]);
- learning.status=research.status?.validated?'MODEL RESEARCH CHECK PASSED':'COLLECTING VERIFIED OUTCOMES';
- learning.liveRuleAutoPromotion=false;
- learning.paperRuleAutoPromotion=learning.activePaperGate?.status==='ACTIVE';
+ // Learning continues in the scheduled collector. Keep optional reports out of
+ // the latency-critical signal endpoint to avoid overwhelming Netlify Blobs.
+ const learning={mode:'AUTOMATIC PAPER RESEARCH',model:research.status,
+  status:research.status?.validated?'MODEL RESEARCH CHECK PASSED':'COLLECTING VERIFIED OUTCOMES',
+  liveRuleAutoPromotion:false,details:'Stored by scheduled collector; not fetched on every live quote refresh'};
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
