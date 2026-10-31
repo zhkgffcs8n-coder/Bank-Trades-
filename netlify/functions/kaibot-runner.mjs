@@ -103,12 +103,18 @@ export default async()=>{
     }
    }catch(e){console.warn('Signal observation journal unavailable',asset,String(e))}
 
+   // Only qualified shared-engine signals can open automatic paper positions.
+   // WAIT observations remain in the research journal above.
+   if(!['BUY UP','BUY DOWN'].includes(signal.action)){
+    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Unqualified signal; research observation retained',signal:signal.action};
+    continue;
+   }
    const modelUp=Number(signal.probability??signal.prediction);
    const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
    const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
    if(previous.length&&(!['BUY UP','BUY DOWN'].includes(signal.action)||previous.at(-1).side===side&&Math.abs(ask-Number(previous.at(-1).ask))<5)){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Re-entry requires fresh qualified signal and meaningful price change',signal:signal.action};continue;}
    if(ask<=0||ask>=100){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Selected side not tradable'};continue;}
-   const entryBasis=['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED PAPER SIGNAL':'UNVALIDATED QUOTE-BASED PAPER TEST';
+   const entryBasis='QUALIFIED PAPER SIGNAL';
    const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
    roundAudit.markets[asset]={status:'ENTERED',ticker:m.ticker,side,ask,entryBasis,entries:previous.length+1};
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
