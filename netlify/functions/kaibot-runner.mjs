@@ -72,11 +72,11 @@ export default async()=>{
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const research={model:await hdb.get('training/model',{type:'json'}),status:training};
  const open=new Set(ledger.trades.filter(x=>x.status==='OPEN').map(x=>x.asset));
- const recentlyTraded=new Set(ledger.trades.filter(x=>Number(x.at)>now-15*60*1000).map(x=>x.asset));
+ // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
    const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset)||recentlyTraded.has(asset)||ledger.trades.some(t=>t.ticker===m.ticker))continue;
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=360000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m||open.has(asset)||ledger.trades.some(t=>t.ticker===m.ticker))continue;
    const listed=await hdb.list({prefix:'samples/'+asset+'/',limit:30}),records=(await Promise.all(listed.blobs.map(b=>hdb.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Never trade on a stale or incomplete scheduled history, even if the live quote is fresh.
    if(records.length<4||now-Number(records.at(-1)?.t)>120000||records.some(x=>!Number.isFinite(x.yesMid)||!Number.isFinite(x.t)))continue;
@@ -87,8 +87,6 @@ export default async()=>{
    // Conservative paper-only quality gate: require stronger agreement and narrow spreads.
    if(Number(signal.score)<paperScore||Number(signal.ask)>paperMaxAsk)continue;
    const side=signal.side,ask=signal.ask;
-   // BTC remains disabled for automatic paper entries pending independent validation.
-   if(asset==='BTC')continue;
    const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash)continue;
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch{}
