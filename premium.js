@@ -19,9 +19,9 @@ function chart(){
  pts.forEach((p,i)=>{const x=i*w/(pts.length-1),y=h-12-(p.v-lo)/(hi-lo)*(h-25);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
  ctx.fillStyle='#f5c455';ctx.font='bold 12px system-ui';ctx.fillText(pts[pts.length-1].v.toFixed(2)+'¢',12,20);
 }
-let fetching=false;
+let fetching=false,lastFetch=0,failures=0;
 async function update(){
- if(fetching||document.hidden)return;fetching=true;
+ if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:3000))return;fetching=true;lastFetch=Date.now();
  try{
  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11000);
  let r;try{r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
@@ -50,10 +50,10 @@ async function update(){
  }
  $('premiumHealth').textContent='● '+open+' VERIFIED FEEDS';$('premiumHealth').className='pill green';
  if(!engineSignals.length)$('premiumAI').textContent='Quotes refreshed '+new Date().toLocaleTimeString()+' · Waiting for signal evaluation.';
- syncSignals();chart();
- }catch(e){$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message}
+ failures=0;syncSignals();chart();
+ }catch(e){failures++;$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message}
  finally{fetching=false}
 }
 window.addEventListener('resize',chart);
-update();setInterval(update,15000);
+update();setInterval(update,1000);
 })();
