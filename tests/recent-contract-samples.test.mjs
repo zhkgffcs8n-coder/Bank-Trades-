@@ -30,3 +30,18 @@ test('collector comparison is wired to the rolling snapshot, not old blob listin
   assert.ok(source.includes('const records=recentContractSamples(recent,m.ticker,now);'));
   assert.ok(!source.includes("prefix:'samples/'+asset+'/',limit:30"));
 });
+
+test('future-observed rows cannot leak into a pre-settlement frozen snapshot',()=>{
+ const rows=[rec('NEW',now-120000,.40,now-119000),
+  rec('NEW',now-60000,.45,now-59000),
+  rec('NEW',now-60000,.99,now+1000),
+  rec('NEW',now-180000,.35,now+10000)];
+ const got=recentContractSamples(rows,'NEW',now);
+ assert.deepEqual(got.map(x=>x.yesMid),[.40,.45]);
+});
+
+test('collector freezes paired research at actual captured quote time',()=>{
+ const source=readFileSync(new URL('../netlify/functions/market-collector.mjs',import.meta.url),'utf8');
+ assert.ok(source.includes('pairedShadow(m,sameContract,record.observedAt)'));
+ assert.ok(source.includes('recentContractSamples(recent,m.ticker,record.observedAt)'));
+});
