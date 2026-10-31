@@ -3,13 +3,15 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 const assets={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const expiry=(m,now)=>[m?.expected_expiration_time,m?.expiration_time,m?.close_time].map(v=>Date.parse(v||'')).filter(v=>Number.isFinite(v)&&v>now).sort((a,b)=>a-b)[0]||null;
+const timed=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error(label+' timeout')),ms))]);
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 export default async req=>{
  if(req.method!=='GET')return json({error:'GET only'},405);
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'}),now=Date.now();
  const paperDb=getStore({name:'bank-trades-server-kaibot',consistency:'strong'});
- let openPositions=[],stats=performance([]);try{const ledger=await paperDb.get('ledger',{type:'json'});stats=performance(ledger?.trades||[]);openPositions=(ledger?.trades||[]).filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));}catch{}
- const research={model:await db.get('training/model',{type:'json'}),status:await db.get('training/status',{type:'json'})};
+ let openPositions=[],stats=performance([]);try{const ledger=await timed(paperDb.get('ledger',{type:'json'}),1800,'ledger');stats=performance(ledger?.trades||[]);openPositions=(ledger?.trades||[]).filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));}catch{}
+ const research={model:null,status:null};
+ await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{})]);
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
@@ -20,8 +22,11 @@ export default async req=>{
    const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
    const market=position?(markets.find(m=>m.ticker===position.ticker)||null):markets[0];
    if(!market)return {asset,action:'WAIT',reason:position?'Open paper position requires fresh quotes for its exact ticker':'No verified active contract',ticker:position?.ticker||null};
-   const listed=await db.list({prefix:'samples/'+asset+'/',limit:30});
-   const records=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+   let records=[];
+   try{
+    const listed=await timed(db.list({prefix:'samples/'+asset+'/',limit:12}),2000,'sample list');
+    records=(await Promise.all(listed.blobs.map(b=>timed(db.get(b.key,{type:'json'}),1800,'sample').catch(()=>null)))).filter(Boolean);
+   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Sample storage unavailable: '+e.message};}
    const signal=gatePaperEntry({...paperSignal(market,records,position||null,now,research),asset},stats);
    return {asset,...signal,position:position?{side:position.side,ask:position.ask,qty:position.qty,ticker:position.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
