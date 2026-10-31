@@ -1,6 +1,6 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
-import {verifiedFinalizedBinaryOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
+import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
@@ -79,13 +79,16 @@ export default async()=>{
   for(const rec of pending){
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
    const labelKey='outcomes/'+rec.ticker;
-   if(await db.get(labelKey,{type:'json'})){await db.delete('pending/'+rec.ticker);continue;}
+   const cached=await db.get(labelKey,{type:'json'});
+   // Reverify legacy labels instead of discarding pending records on sight.
+   if(trustedStoredFinalizedOutcome(cached,rec.ticker)){await db.delete('pending/'+rec.ticker);continue;}
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
     const result=verifiedFinalizedBinaryOutcome(m,rec.ticker);
     if(result){
      await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
-     if(Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
+     // Existing legacy labels may already have trained weights. Never count them twice.
+     if(!cached&&Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
       model=learn(model,rec,result==='yes'?1:0);
       await db.setJSON('training/model',model);
       const assetKey=String(rec.asset||'UNKNOWN');
@@ -105,7 +108,7 @@ export default async()=>{
    for(const rec of observations){
     if(rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
     const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-    if(!['yes','no'].includes(outcome?.result))continue;
+    if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
     const yesWon=outcome.result==='yes';
     rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
     rec.counterfactual={
@@ -140,7 +143,7 @@ export default async()=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
    const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-   if(!['yes','no'].includes(outcome?.result))continue;
+   if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
    for(const engine of Object.values(rec.engines||{})){
     if(!['up','down'].includes(engine.side)||engine.action==='WAIT')continue;
     const won=(engine.side==='up')===(outcome.result==='yes');
