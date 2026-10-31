@@ -52,7 +52,7 @@ export default async()=>{
    const key='round-paper/v1/'+m.ticker;
    if(!await db.get(key,{type:'json'})){
     const baseline=Math.max(.01,Math.min(.99,record.yesMid));
-    const model=await db.get('training/model',{type:'json'})||initialModel();
+    const model=await db.get('training/model/'+asset,{type:'json'})||await db.get('training/model',{type:'json'})||initialModel();
     const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
     const probability=predict(model,baseline,features);
     const upCost=yesAsk,downCost=noAsk;
@@ -62,7 +62,7 @@ export default async()=>{
   }catch(e){console.warn('Round paper forecast failed',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
-   const model=await db.get('training/model',{type:'json'})||initialModel();
+   const model=await db.get('training/model/'+asset,{type:'json'})||await db.get('training/model',{type:'json'})||initialModel();
    const baseline=Math.max(.02,Math.min(.98,record.yesMid));
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
    await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features)});
@@ -74,6 +74,7 @@ export default async()=>{
   const listed=await db.list({prefix:'pending/',limit:1000});
   const pending=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
   let model=await db.get('training/model',{type:'json'})||initialModel();
+  const assetModels={};
   for(const rec of pending){
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
    const labelKey='outcomes/'+rec.ticker;
@@ -87,6 +88,10 @@ export default async()=>{
      if(Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
       model=learn(model,rec,result==='yes'?1:0);
       await db.setJSON('training/model',model);
+      const assetKey=String(rec.asset||'UNKNOWN');
+      const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
+      assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
+      await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
      }
      await db.delete('pending/'+rec.ticker);
     }
@@ -263,7 +268,12 @@ export default async()=>{
    note:'Uses past finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
   });
 
-  await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,mode:'PAPER RESEARCH'});
+  const perAsset={};
+  for(const asset of Object.keys(SERIES)){
+   const am=assetModels[asset]||await db.get('training/model/'+asset,{type:'json'});
+   if(am?.count)perAsset[asset]={count:am.count,brier:am.brier/am.count,baselineBrier:am.baselineBrier/am.count,validated:am.count>=40&&am.brier<am.baselineBrier};
+  }
+  await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset models fall back to global model until sufficient history.'});
  }catch(e){console.error('Training update failed',String(e))}
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
