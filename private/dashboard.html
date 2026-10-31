@@ -90,10 +90,19 @@ async function loadSharedSignals(){
   announceAllEntries();
  }catch(e){sharedSignals.clear();sharedFetched=0;window.__BANK_TRADES_SHARED_ERROR__=String(e.message||e);window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:[]}));}
 }
+const signalDisplayCache=new Map();
 function signalFor(asset,m,stale){
- const s=sharedSignals.get(asset);
- if(stale||!m||Date.now()-sharedFetched>45000||!s||s.ticker!==m.ticker)return {action:'WAIT',score:0,reason:window.__BANK_TRADES_SHARED_ERROR__?'Shared signal fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__:!s?'Shared signal missing for '+asset:s.ticker!==m.ticker?'Signal ticker mismatch: quotes '+m.ticker+' vs signal '+s.ticker:'Shared signal stale'};
- return {...s,ask:Number.isFinite(s.ask)?s.ask/100:null};
+ const s=sharedSignals.get(asset),now=Date.now(),valid=!stale&&!!m&&now-sharedFetched<=45000&&!!s&&s.ticker===m.ticker;
+ const live=valid?{...s,ask:Number.isFinite(s.ask)?s.ask/100:null}:null;
+ // Preserve a valid, actionable alert briefly so refreshes cannot erase it instantly.
+ // Never replay a prior contract, a stale quote, or a signal after its entry window closes.
+ const expires=expiryMs(m),entryOpen=Number.isFinite(expires)&&expires-now>360000;
+ if(live&&['BUY UP','BUY DOWN'].includes(live.action)&&entryOpen)signalDisplayCache.set(asset,{ticker:m.ticker,signal:live,seenAt:now});
+ const prior=signalDisplayCache.get(asset);
+ if(prior&&(!m||prior.ticker!==m.ticker||!entryOpen||now-prior.seenAt>20000||stale)){signalDisplayCache.delete(asset)}
+ else if(prior&&live&&live.action==='WAIT')return {...prior.signal,reason:prior.signal.reason+' · recent signal retained for 20s (verify current quote before entry)',retained:true};
+ if(live)return live;
+ return {action:'WAIT',score:0,reason:window.__BANK_TRADES_SHARED_ERROR__?'Shared signal fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__:!s?'Shared signal missing for '+asset:s.ticker!==m?.ticker?'Signal ticker mismatch: quotes '+m?.ticker+' vs signal '+s.ticker:'Shared signal stale'};
 }
 
 const trackedKey='banktrades:manual-positions:v1';
