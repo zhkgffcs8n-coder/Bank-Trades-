@@ -1,3 +1,4 @@
+import {SETTLEMENT_VERIFICATION} from './official-settlement.mjs';
 // Strict observational matching. Never attribute a live signal win to Primal
 // based on shared ticker alone, rounded time windows, or aggregate win rates.
 export function matchLiveObservation(pair, live) {
@@ -11,7 +12,8 @@ export function matchLiveObservation(pair, live) {
    return {status:'UNMATCHED',reason:'Different or missing '+k+' quote; no cross-credit'};
  }
  if (pair.status!=='RESOLVED'||pair.settlement?.verified!==true||!['yes','no'].includes(pair.settlement?.result)||
-     live.status!=='RESOLVED'||live.outcome!==pair.settlement.result)
+     live.status!=='RESOLVED'||live.outcomeVerification!==SETTLEMENT_VERIFICATION||
+     live.outcome!==pair.settlement.result)
   return {status:'PENDING_VERIFICATION',reason:'Both observations require the same independently verified official settlement'};
  return {status:'EXACT_VERIFIED_MATCH',reason:'Same ticker, timestamp, quote and verified outcome; no evidence of fills or net profit',
   liveAction:live.action||'WAIT',primalConsensus:pair.hybrid?.researchConsensus||null,
