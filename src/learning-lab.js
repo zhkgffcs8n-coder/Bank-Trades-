@@ -49,13 +49,14 @@ if(host){
  }
  refreshServerTraining();setInterval(refreshServerTraining,60000);
  const paperPerformance=document.createElement('div');paperPerformance.className='premium-foot';host.append(paperPerformance);
+ const ledgerScope=document.createElement('p');ledgerScope.className='premium-foot';ledgerScope.textContent='LEDGER RECONCILIATION · Server KaiBot paper results, filtered shared-paper performance, browser-only paper trades and real Kalshi account trades are different scopes. Some paper rows overlap; do NOT add their P/L totals together. Real-money account history is not imported or verified here. A reported external loss cannot be inferred from this dashboard.';host.append(ledgerScope);
  window.addEventListener('banktrades:paper-performance',event=>{
   const stats=event.detail,overall=stats?.overall;
   if(!overall)return;
   const pct=x=>Number.isFinite(x)?(100*x).toFixed(1)+'%':'N/A';
   const groups=Object.entries(stats.byStrategy||{}).sort((a,b)=>b[1].trades-a[1].trades);
   paperPerformance.replaceChildren();
-  const h=document.createElement('strong');h.textContent='SHARED SERVER PAPER PERFORMANCE · VERIFIED SETTLEMENTS';paperPerformance.append(h);
+  const h=document.createElement('strong');h.textContent='FILTERED SERVER PAPER PERFORMANCE · RESOLVED PAPER TRADES';paperPerformance.append(h);
   const total=document.createElement('p');total.textContent=overall.trades+' resolved · '+overall.wins+' W / '+overall.losses+' L · '+pct(overall.winRate)+' wins · paper P/L $'+overall.netPnl.toFixed(2)+' · ROI '+pct(overall.roi);paperPerformance.append(total);
   for(const [name,v] of groups){const row=document.createElement('p');row.textContent=name+' · '+v.trades+' trades · '+v.wins+'W/'+v.losses+'L · ROI '+pct(v.roi)+' · paper P/L $'+v.netPnl.toFixed(2);paperPerformance.append(row)}
   for(const [label,groups] of [['ENTRY PRICE',stats.byEntryBand],['EXIT REASON',stats.byExitReason]]){
@@ -67,7 +68,7 @@ if(host){
     paperPerformance.append(line);
    }
   }
-  const note=document.createElement('p');note.textContent='Paper fills and slippage are simulated. Research training requires finalized market outcomes.';paperPerformance.append(note);
+  const note=document.createElement('p');note.textContent='Includes simulated paper exits as well as officially finalized outcomes where recorded; fills, fees and slippage are not independently verified. Research training requires finalized market outcomes.';paperPerformance.append(note);
  });
  const panel=document.createElement('div');panel.className='notice';host.append(panel);
  const detail=document.createElement('p');detail.className='premium-foot';host.append(detail);
