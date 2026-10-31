@@ -141,17 +141,32 @@ export default async()=>{
   const registryKey='comparison/prospective-candidate-v1';
   let registry=await db.get(registryKey,{type:'json'});
   if(!registry&&chosen){
-   registry={createdAt:now,after:resolved.length,gate:{score:chosen.score,maxAsk:chosen.maxAsk},status:'COLLECTING',version:1};
+   registry={createdAt:now,after:resolved.length,afterAt:now,gate:{score:chosen.score,maxAsk:chosen.maxAsk},status:'COLLECTING',version:1};
    await db.setJSON(registryKey,registry);
   }
   if(registry){
-   const future=resolved.slice(registry.after);
+   const future=Number.isFinite(registry.afterAt)?resolved.filter(x=>x.at>registry.afterAt):resolved.slice(registry.after);
    const evalGate=evaluate(future,registry.gate);
    const baseline=evaluate(future,{score:0,maxAsk:100});
    const ready=future.length>=100&&evalGate.trades>=30;
    const better=ready&&evalGate.roi!==null&&baseline.roi!==null&&evalGate.roi>baseline.roi&&evalGate.pnl>0;
-   const evaluation={at:now,version:1,status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:false,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
+   const evaluation={at:now,version:1,status:ready?(better?'PASSED_RESEARCH_CHECK':'FAILED_RESEARCH_CHECK'):'COLLECTING',futureObservations:future.length,candidate:evalGate,baseline,gate:registry.gate,automaticExecution:false,automaticPromotion:true,notes:'Prospective holdout; no live strategy changes. Simulation omits fees and slippage.'};
    await db.setJSON('comparison/prospective-evaluation-v1',evaluation);
+   // Automatic promotion affects simulated KaiBot entries only. The original stays unchanged.
+   // Only allow a strictly tighter gate than the existing 75 score / 65c ceiling.
+   const safe=Number(registry.gate.score)>=75&&Number(registry.gate.maxAsk)<=65;
+   const activeKey='comparison/active-paper-gate-v1';
+   const active=await db.get(activeKey,{type:'json'});
+   if(better&&safe&&!active){
+    await db.setJSON(activeKey,{gate:registry.gate,activatedAt:now,afterAt:now,status:'ACTIVE',source:'prospective-verified',mode:'PAPER ONLY'});
+   }else if(active?.status==='ACTIVE'){
+    const post=resolved.filter(x=>x.at>active.afterAt);
+    const candidatePost=evaluate(post,active.gate),baselinePost=evaluate(post,{score:75,maxAsk:65});
+    if(post.length>=50&&(candidatePost.pnl<0||(candidatePost.trades>=15&&baselinePost.roi!==null&&candidatePost.roi<baselinePost.roi))){
+     await db.setJSON(activeKey,{...active,status:'ROLLED_BACK',rolledBackAt:now,reason:'Negative or weaker forward paper performance'});
+    }
+   }
+
   }
 
   await db.setJSON('comparison/research-gate-v1',{
