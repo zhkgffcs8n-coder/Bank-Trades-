@@ -75,6 +75,6 @@ test('owner can issue and revoke; member receives private no-store data only aft
  await codes.revokeCode(db,d.codeHash);r=await handler(new Request('https://bank.test/api/data'));assert.equal(r.status,403);assert.equal(calls,1);
 });
 test('public output contains no dashboard HTML or server source',async()=>{
- const publicFiles=await readdir('dist');assert.deepEqual(publicFiles.sort(),['account-client.js','dashboard-session.js','learning-lab.js','account.css','index.html','kaibot.js','premium.css','premium.js','terminal-enhancements.js'].sort());
+ const publicFiles=await readdir('dist');assert.deepEqual(publicFiles.sort(),['account-client.js','dashboard-session.js','learning-lab.js','account.css','index.html','kaibot.js','premium.css','premium.js','terminal-enhancements.js','paper-monitor.js','btc-spot-chart.js','btc-lock-radar.js','upgrade-status.js','service-worker.js','push-client.js','easy-mode.js','build-version.json'].sort());
  const html=await readFile('dist/index.html','utf8');assert.doesNotMatch(html,/id="premiumRows"|id="kaiStart"/);
 });

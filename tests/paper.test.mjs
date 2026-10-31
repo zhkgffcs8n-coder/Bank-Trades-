@@ -15,12 +15,17 @@ test('paper entry and bid exit preserve cash accounting and prevent closing twic
  const memory=new Map(),windowEvents={},alerts=[];let locks=0;
  const market={ticker:'KXBTC15M-TEST',expires_at:new Date(Date.now()+600000).toISOString(),yes_ask_dollars:'0.4500',yes_bid_dollars:'0.4300'};
  const context=vm.createContext({document:{getElementById:id=>els[id],createElement:()=>new Element()},window:{__BANK_TRADES_USER_ID__:'tester',addEventListener:(type,fn)=>windowEvents[type]=fn,dispatchEvent:e=>windowEvents[e.type]?.(e)},Event:class{constructor(type){this.type=type;}},navigator:{locks:{request:async(key,fn)=>{locks++;return fn();}}},localStorage:{getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v)},fetch:async()=>({ok:true,json:async()=>({fetched_at:new Date().toISOString(),results:[{asset:'BTC',market}]})}),AbortController,setTimeout,clearTimeout,setInterval:()=>0,alert:m=>alerts.push(m),confirm:()=>true,Date,Number,Math,JSON});
- const html=readFileSync('private/dashboard.html','utf8');const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).find(s=>s.includes("const KEY='banktrades.paper.v1.'"));
+ const html=readFileSync('private/dashboard.html','utf8');const script=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).find(s=>s.includes("const KEY='banktrades.paper.v2.'"));
  assert.ok(script);new vm.Script(script).runInContext(context);
  await els.paperBuy.events.click();
- let book=JSON.parse(memory.get('banktrades.paper.v1.tester'));assert.equal(book.cash,9999.1);assert.equal(book.trades.length,1);
+ let book=JSON.parse(memory.get('banktrades.paper.v2.tester'));assert.equal(book.cash,999.1);assert.equal(book.trades.length,1);assert.equal(book.trades[0].status,'OPEN');assert.match(els.paperSummary.textContent,/Open paper positions 1/);
  const close=els.paperLedger.children[0].children.find(e=>e.textContent==='SIMULATE SELL AT BID');assert.ok(close);
  await close.onclick();
- book=JSON.parse(memory.get('banktrades.paper.v1.tester'));assert.equal(book.cash,9999.96);assert.equal(book.trades[0].status,'CLOSED');assert.ok(Math.abs(book.trades[0].pnl+.04)<1e-8);
- await close.onclick();assert.equal(JSON.parse(memory.get('banktrades.paper.v1.tester')).cash,9999.96);assert.ok(alerts.includes('Position is already closed.'));assert.ok(locks>=3);
+ book=JSON.parse(memory.get('banktrades.paper.v2.tester'));assert.equal(book.cash,999.96);assert.equal(book.trades[0].status,'CLOSED');assert.ok(Math.abs(book.trades[0].pnl+.04)<1e-8);
+ await close.onclick();assert.equal(JSON.parse(memory.get('banktrades.paper.v2.tester')).cash,999.96);assert.ok(alerts.includes('Position is already closed.'));assert.ok(locks>=3);
+ // Existing v2 browser entries created before OPEN was stored still count as open.
+ const legacy={...book.trades[0],status:undefined,exitBid:undefined,pnl:undefined};
+ memory.set('banktrades.paper.v2.tester',JSON.stringify({cash:999,trades:[legacy]}));
+ windowEvents['banktrades:paper']();
+ assert.match(els.paperSummary.textContent,/Open paper positions 1/);
 });

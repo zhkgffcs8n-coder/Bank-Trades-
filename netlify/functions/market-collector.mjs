@@ -1,5 +1,8 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
+import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
+import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
+import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
@@ -23,20 +26,34 @@ export default async()=>{
   if(!existing)await db.setJSON(sampleKey,record);
   await db.setJSON('latest/'+asset,record);
   // Maintain a bounded per-asset rolling snapshot; signal readers avoid expensive blob listings.
+  let recent=[];
   try{
    const key='recent/'+asset;
    const prior=await db.get(key,{type:'json'});
-   const recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
+   recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
    recent.push(record);
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
+  // One immutable late-window observation per contract, scored independently
+  // by A and B on the same fetched quote. Research only, never an order.
+  try{
+   if(m._expiry-now<=300000&&m._expiry-now>180000){
+    const key='paired-shadow/pending/v1/'+m.ticker;
+    const resolvedKey='paired-shadow/resolved/v1/'+m.ticker;
+    if(!await db.get(key,{type:'json'})&&!await db.get(resolvedKey,{type:'json'})){
+     const sameContract=recentContractSamples(recent,m.ticker,now);
+     await db.setJSON(key,pairedShadow(m,sameContract,now));
+    }
+   }
+  }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
   try{
    const comparisonKey='comparison/v1/'+m.ticker;
    if(!await db.get(comparisonKey,{type:'json'})){
-    const history=await db.list({prefix:'samples/'+asset+'/',limit:30});
-    const records=(await Promise.all(history.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
+    // Use the same fresh contract snapshot as the live signal path. Blob list's
+    // first 30 historical keys are not the latest 30 after the archive grows.
+    const records=recentContractSamples(recent,m.ticker,now);
     const candidate=paperSignal(m,records,null,now,null);
     if(['BUY UP','BUY DOWN'].includes(candidate.action)){
      const a={action:candidate.action,side:candidate.side,ask:candidate.ask,score:candidate.score};
@@ -78,14 +95,16 @@ export default async()=>{
   for(const rec of pending){
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
    const labelKey='outcomes/'+rec.ticker;
-   if(await db.get(labelKey,{type:'json'})){await db.delete('pending/'+rec.ticker);continue;}
+   const cached=await db.get(labelKey,{type:'json'});
+   // Reverify legacy labels instead of discarding pending records on sight.
+   if(trustedStoredFinalizedOutcome(cached,rec.ticker)){await db.delete('pending/'+rec.ticker);continue;}
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
-    const value=Number(m?.settlement_value_dollars),result=m?.result;
-    const finalized=m?.status==='finalized'&&m?.market_type==='binary'&&m?.is_provisional!==true&&['yes','no'].includes(result)&&value===(result==='yes'?1:0);
-    if(finalized){
-     await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record'});
-     if(Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
+    const result=verifiedFinalizedBinaryOutcome(m,rec.ticker);
+    if(result){
+     await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
+     // Existing legacy labels may already have trained weights. Never count them twice.
+     if(!cached&&Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
       model=learn(model,rec,result==='yes'?1:0);
       await db.setJSON('training/model',model);
       const assetKey=String(rec.asset||'UNKNOWN');
@@ -105,7 +124,7 @@ export default async()=>{
    for(const rec of observations){
     if(rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
     const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-    if(!['yes','no'].includes(outcome?.result))continue;
+    if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
     const yesWon=outcome.result==='yes';
     rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
     rec.counterfactual={
@@ -140,7 +159,7 @@ export default async()=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
    const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-   if(!['yes','no'].includes(outcome?.result))continue;
+   if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
    for(const engine of Object.values(rec.engines||{})){
     if(!['up','down'].includes(engine.side)||engine.action==='WAIT')continue;
     const won=(engine.side==='up')===(outcome.result==='yes');
@@ -163,6 +182,24 @@ export default async()=>{
    report.engines[name]={trades:trades.length,wins:trades.filter(row=>row.engines[name].won).length,losses:trades.filter(row=>!row.engines[name].won).length,winRate:trades.length?trades.filter(row=>row.engines[name].won).length/trades.length:null,netPnl:Number(pnl.toFixed(4)),roi:invested?Number((pnl/invested).toFixed(4)):null,maxDrawdown:Number(maxDrawdown.toFixed(4)),method:'One hypothetical contract per signal; binary settlement, entry ask; excludes fees, slippage and early exits'};
   }
   await db.setJSON('comparison/report-v1',report);
+  // Settle only frozen, late-window paired predictions against independently
+  // verified official binary outcomes. Separate resolved keys prevent recounting.
+  try{
+   const pendingPaired=await db.list({prefix:'paired-shadow/pending/v1/',limit:1000});
+   for(const blob of pendingPaired.blobs){
+    const row=await db.get(blob.key,{type:'json'});
+    if(!row||!Number.isFinite(row.expiresAt)||row.expiresAt>now-60000)continue;
+    const resolvedKey='paired-shadow/resolved/v1/'+row.ticker;
+    if(await db.get(resolvedKey,{type:'json'})){await db.delete(blob.key);continue;}
+    const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
+    const resolved=resolvePairedShadow(row,outcome,now);
+    if(resolved){
+     await db.setJSON(resolvedKey,resolved);
+     await db.delete(blob.key);
+    }
+   }
+   if(pendingPaired.cursor)console.warn('Paired shadow pending list truncated; later contracts will retry');
+  }catch(e){console.warn('Paired A/B settlement evaluation unavailable',String(e))}
   // Shared loss review: update a conservative research-only threshold from resolved
   // outcomes. The original strategy remains frozen as an unbiased baseline.
   // Never retrain on unresolved outcomes or automatically loosen risk limits.

@@ -9,6 +9,12 @@ export default async req=>{
  const cutoff=Date.now()-4*60*60*1000,records=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
  for(const ticker of tickers){const o=await db.get('outcomes/'+ticker,{type:'json'});if(o)outcomes[ticker]=o}
+ // Expose only the most recent contract's independently paired SHADOW record.
+ // Historical legacy A/B aggregate stats are not this paired experiment.
+ const latest=await db.get('latest/'+asset,{type:'json'});
+ const pairedTicker=latest?.ticker;
+ const pairedShadow=pairedTicker?(await db.get('paired-shadow/resolved/v1/'+pairedTicker,{type:'json'})||
+  await db.get('paired-shadow/pending/v1/'+pairedTicker,{type:'json'})):null;
  const training=await db.get('training/status',{type:'json'});
  const comparison=await db.get('comparison/report-v1',{type:'json'});
  const adaptiveResearch=await db.get('comparison/research-gate-v1',{type:'json'});
@@ -16,5 +22,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
