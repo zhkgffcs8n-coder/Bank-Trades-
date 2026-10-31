@@ -15,10 +15,16 @@ if(host){
  committeePanel.className='premium-foot';
  committeePanel.textContent='ENGINE COMMITTEE · waiting for signal data · paper research only';
  host.append(committeePanel);
- window.addEventListener('banktrades:signals',event=>{
+ window.addEventListener('banktrades:shared-signals',event=>{
   const signals=Array.isArray(event.detail)?event.detail:[];
-  const reports=signals.map(s=>({asset:s.asset||s.ticker||'Market',report:coordinateEngines(s)})).filter(x=>x.report.status==='SHADOW_ONLY');
-  committeePanel.textContent=reports.length?'ENGINE COMMITTEE · '+reports.slice(0,5).map(x=>x.asset+' '+x.report.consensus+' ('+Math.round(x.report.agreement*100)+'% vote agreement)').join(' · ')+' · SHADOW ONLY; agreement is not accuracy':'ENGINE COMMITTEE · awaiting valid signals';
+  const reports=signals.map(s=>({asset:s.asset||s.ticker||'Market',input:s.committeeInput,report:coordinateEngines(s.committeeInput)}));
+  const ready=reports.filter(x=>x.input?.status==='READY'&&x.report.status==='SHADOW_ONLY');
+  const missing=reports.filter(x=>x.input?.status!=='READY');
+  const why=missing.slice(0,3).map(x=>x.asset+': '+(x.input?.missing?.join(', ')||'committee snapshot unavailable')).join(' · ');
+  committeePanel.textContent='ENGINE COMMITTEE · '+ready.length+'/'+reports.length+' valid shadow snapshots · '+
+   (ready.length?ready.slice(0,5).map(x=>x.asset+' '+x.report.consensus+' ('+Math.round(x.report.agreement*100)+'% vote agreement)').join(' · '):'no eligible votes')+
+   (missing.length?' · MISSING INPUT: '+why:'')+
+   ' · RESEARCH ONLY; correlated votes are not measured accuracy';
  });
  const comparisonPanel=document.createElement('div');comparisonPanel.className='premium-foot';host.append(comparisonPanel);
  const serverTraining=document.createElement('p');serverTraining.className='premium-foot';serverTraining.textContent='SERVER RESEARCH TRAINING · loading verified settlement statistics';host.append(serverTraining);
