@@ -5,7 +5,8 @@ export function recentContractSamples(rows, ticker, now, limit=8) {
   const byMinute=new Map();
   for (const r of rows) {
     if (r?.ticker !== ticker || !Number.isFinite(r.t) || !Number.isFinite(r.yesMid) ||
-        r.t > now || r.t < now-480000 || r.yesMid < 0 || r.yesMid > 1) continue;
+        r.t > now || r.t < now-480000 || r.yesMid < 0 || r.yesMid > 1 ||
+        (r.observedAt != null && (!Number.isFinite(Number(r.observedAt)) || Number(r.observedAt)>now))) continue;
     const prior=byMinute.get(r.t);
     if (!prior || (Number(r.observedAt)||0) > (Number(prior.observedAt)||0)) byMinute.set(r.t,r);
   }
