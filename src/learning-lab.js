@@ -51,6 +51,15 @@ if(host){
       ' · hybrid '+(paired.evaluation?.hybrid?.correct===null?'abstained':paired.evaluation?.hybrid?.correct?'correct':'incorrect');}
    }else pairedLine.textContent='WAIT · no frozen paired A/B snapshot for the latest contract yet; research only';
    comparisonPanel.append(pairedLine);
+   if(data.pairedShadowLatestResolved){
+    const old=data.pairedShadowLatestResolved,ev=old.evaluation||{};
+    const resultLabel=v=>v?.evaluated===true?(v.correct?'correct':'incorrect'):'abstained';
+    const historical=document.createElement('p');
+    historical.textContent='PREVIOUS VERIFIED A+B ROUND · '+old.ticker+' · official '+old.settlement.result.toUpperCase()+
+     ' · A '+resultLabel(ev.A)+' · B '+resultLabel(ev.B)+' · hybrid '+resultLabel(ev.hybrid)+
+     ' · frozen research predictions, no fees/slippage or verified fills';
+    comparisonPanel.append(historical);
+   }
    const heading=document.createElement('strong');heading.textContent='LEGACY A/B GATED PAPER COMPARISON · NOT INDEPENDENT PAIRED PREDICTIONS';comparisonPanel.append(heading);
    if(cmp){for(const name of ['original','upgraded']){const v=cmp.engines?.[name];if(!v)continue;const line=document.createElement('p');line.textContent=(name==='original'?'ENGINE A · ORIGINAL':'ENGINE B · UPGRADED')+' · '+v.trades+' settled · '+v.wins+' W / '+v.losses+' L · win rate '+fmt(v.winRate)+' · simulated net '+Number(v.netPnl).toFixed(2)+' contracts · ROI '+fmt(v.roi)+' · max drawdown '+Number(v.maxDrawdown).toFixed(2);comparisonPanel.append(line)}const meta=document.createElement('p');meta.textContent=cmp.pending+' pending · '+cmp.totalObserved+' observed · '+(cmp.truncated?'report truncated · ':'')+'one-contract hypothetical settlement; excludes fees, slippage and early exits';comparisonPanel.append(meta)}else{const line=document.createElement('p');line.textContent='Waiting for the first server-side comparison report';comparisonPanel.append(line)}
    if(feed){const p=document.createElement('p');const age=Math.max(0,Date.now()-Number(feed.at));p.textContent='DATA HEALTH · '+feed.asset+' · last scheduled sample '+Math.round(age/1000)+'s ago · '+(age>120000?'STALE — do not trust entries':'recent')+' · duplicate suppressed: '+(feed.sampleDuplicate?'yes':'no')+' · quote spread '+Number(feed.quoteSpread).toFixed(2)+'¢';comparisonPanel.append(p)}
