@@ -27,6 +27,6 @@ test('bounded sorted history avoids selecting stale first blob-list page',()=>{
 });
 test('collector comparison is wired to the rolling snapshot, not old blob listing',()=>{
   const source=readFileSync(new URL('../netlify/functions/market-collector.mjs',import.meta.url),'utf8');
-  assert.match(source,/recentContractSamples\\(recent,m\\.ticker,now\\)/);
-  assert.doesNotMatch(source,/prefix:'samples\/'\\+asset\\+'\/',limit:30/);
+  assert.ok(source.includes('const records=recentContractSamples(recent,m.ticker,now);'));
+  assert.ok(!source.includes("prefix:'samples/'+asset+'/',limit:30"));
 });
