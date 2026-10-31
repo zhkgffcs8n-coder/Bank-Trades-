@@ -16,9 +16,13 @@ export default async()=>{
   const m=markets[0];if(!m)return;
   const yesBid=price(m,'yes_bid'),yesAsk=price(m,'yes_ask'),noBid=price(m,'no_bid'),noAsk=price(m,'no_ask');
   if(![yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||yesAsk<yesBid||noAsk<noBid)return;
-  const record={asset,ticker:m.ticker,t:bucket,expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
-  await db.setJSON('samples/'+asset+'/'+bucket,record);
+  const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
+  const sampleKey='samples/'+asset+'/'+bucket;
+  const existing=await db.get(sampleKey,{type:'json'});
+  // One immutable training sample per asset/minute. A fast UI refresh is not new training evidence.
+  if(!existing)await db.setJSON(sampleKey,record);
   await db.setJSON('latest/'+asset,record);
+  await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
   try{
    const comparisonKey='comparison/v1/'+m.ticker;
