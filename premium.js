@@ -2,12 +2,34 @@
 'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
+let paperPositions=[];
+async function refreshPaperPositions(){
+ try{
+  const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
+  if(!response.ok)return;
+  const data=await response.json();
+  paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades.filter(t=>t.status==='OPEN'):[];
+  syncSignals();
+ }catch{}
+}
+
 const roundSeen=new Map();
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const action=sig?.action||'WAIT';
+  const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===roundSeen.get(tr.dataset.asset)?.ticker);
+  if(position){
+   const ask=Number(position.ask),bid=Number((tr.children[position.side==='up'?1:2]?.textContent||'').replace('¢',''));
+   const roi=Number.isFinite(bid)&&Number.isFinite(ask)&&ask>0?(bid-ask)/ask:NaN;
+   const secondsLeft=Number((tr.children[4]?.textContent||'').replace('m',''))*60;
+   const recommendation=Number.isFinite(roi)&&roi<=-.12?'SELL FAST · STOP REVIEW':Number.isFinite(roi)&&roi>=.20?'SELL FAST · PROFIT REVIEW':secondsLeft>0&&secondsLeft<=90?'SELL FAST · TIME REVIEW':'HOLD · PAPER';
+   cell.textContent=recommendation;
+   cell.className='premium-action '+(recommendation.startsWith('SELL')?'sell':'hold');
+   cell.title='Tracked paper position: '+position.side.toUpperCase()+' · entry '+ask+'¢ · current ask is not an executable exit bid. Review actual bid before selling.';
+   return;
+  }
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
@@ -88,5 +110,5 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
-update();setInterval(()=>{update();reconcileHealth()},1000);
+update();refreshPaperPositions();setInterval(refreshPaperPositions,12000);setInterval(()=>{update();reconcileHealth()},1000);
 })();
