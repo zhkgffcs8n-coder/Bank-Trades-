@@ -171,26 +171,27 @@ function draw(){
 $('trackUp').addEventListener('click',()=>beginTracked('UP'));
 $('trackDown').addEventListener('click',()=>beginTracked('DOWN'));
 $('closeTracked').addEventListener('click',()=>{saveTracked(selected,null);show();syncQuickPosition()});
-let quickSelectedAsset=sessionStorage.getItem('bankTradesQuickAsset')||'';
-function renderQuickAssets(){
+let quickSelectedAsset=localStorage.getItem('bankTradesQuickAsset')||'';
+function paintQuickAssets(){
  const box=$('quickAssets');if(!box)return;
- box.querySelectorAll('[data-quick-asset]').forEach(btn=>{
-  const asset=btn.dataset.quickAsset,active=asset===quickSelectedAsset;
-  btn.classList.toggle('quick-asset-selected',active);
-  btn.style.setProperty('border',active?'3px solid #ffd84d':'1px solid rgba(255,255,255,.28)','important');
-  btn.style.setProperty('background',active?'#6b5a00':'transparent','important');
-  btn.style.setProperty('color',active?'#fff3a0':'inherit','important');
-  btn.style.minHeight='48px';btn.style.fontWeight='900';
-  const base=btn.dataset.baseLabel||(btn.dataset.baseLabel=btn.textContent.replace(/\s+SELECTED ✓$/,'').trim());
-  btn.textContent=active?base+' · SELECTED ✓':base;
-  btn.onclick=()=>{quickSelectedAsset=asset;sessionStorage.setItem('bankTradesQuickAsset',asset);selected=asset;renderQuickAssets();syncQuickPosition();show();render();draw()};
+ box.querySelectorAll('button[data-quick-asset]').forEach(btn=>{
+  const asset=btn.getAttribute('data-quick-asset'),on=asset===quickSelectedAsset;
+  btn.style.cssText='min-height:50px;font-weight:900;cursor:pointer;border:'+(on?'4px solid #ffd400':'1px solid rgba(255,255,255,.35)')+' !important;background:'+(on?'#8a7300':'transparent')+' !important;color:'+(on?'#fff7a8':'inherit')+' !important;box-shadow:'+(on?'0 0 0 2px rgba(255,212,0,.25)':'none')+' !important;';
+  const original=btn.getAttribute('data-original-label')||btn.textContent.replace(/ · ✓ SELECTED/g,'').trim();
+  btn.setAttribute('data-original-label',original);btn.textContent=on?original+' · ✓ SELECTED':original;
  });
- const label=$('quickSelected');
- if(label)label.innerHTML=quickSelectedAsset?'<b style="color:#ffd84d">✓ SELECTED: '+quickSelectedAsset+'</b> · Enter your entry % below.':'<b>👆 TAP YOUR COIN</b>';
+ const label=$('quickSelected');if(label)label.innerHTML=quickSelectedAsset?'<b style="color:#ffd400">✓ YOU PICKED '+quickSelectedAsset+'</b>':'<b>👆 TAP YOUR COIN</b>';
 }
+function chooseQuickAsset(asset){
+ quickSelectedAsset=asset;localStorage.setItem('bankTradesQuickAsset',asset);paintQuickAssets();syncQuickPosition();
+}
+function renderQuickAssets(){paintQuickAssets()}
+const quickAssetBox=$('quickAssets');
+if(quickAssetBox)quickAssetBox.addEventListener('click',e=>{const btn=e.target.closest('button[data-quick-asset]');if(!btn)return;e.preventDefault();e.stopPropagation();chooseQuickAsset(btn.getAttribute('data-quick-asset'));});
+paintQuickAssets();
 function syncQuickPosition(){
- const q=$('quickPosition');if(!q)return;if(!quickSelectedAsset){q.textContent='👆 Tap the coin you bought first.';return}selected=quickSelectedAsset;const p=trackedFor(quickSelectedAsset),m=current()?.market;
- if(!p){q.textContent='👆 '+selected+' selected · Enter the % you got in at, then tap UP or DOWN.';return}
+ const q=$('quickPosition');if(!q)return;if(!quickSelectedAsset){q.textContent='👆 Tap the coin you bought first.';return}const priorSelected=selected;selected=quickSelectedAsset;const p=trackedFor(quickSelectedAsset),m=current()?.market;
+ if(!p){q.textContent='✓ '+quickSelectedAsset+' selected · Enter your entry %, then tap UP or DOWN.';selected=priorSelected;return}
  const same=m&&p.ticker===m.ticker,side=p.side==='up'?'UP':'DOWN';
  if(!same){q.textContent=selected+' '+side+' · previous contract ended/rotated · verify settlement';return}
  const bid=val(m,p.side==='up'?'yes_bid':'no_bid'),entry=Number(p.entry),roi=Number.isFinite(bid)&&entry>0?(bid-entry)/entry:null;
