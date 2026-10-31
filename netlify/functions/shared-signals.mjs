@@ -13,10 +13,10 @@ export default async req=>{
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
-   let response;try{response=await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}),{signal:controller.signal});}finally{clearTimeout(timer)}
+   let response;try{response=await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}),{signal:controller.signal});}finally{clearTimeout(timer)}
    if(!response.ok)throw Error('Market HTTP '+response.status);
    const data=await response.json();
-   const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now+75000&&m._expiry<now+930000).sort((a,b)=>a._expiry-b._expiry);
+   const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
    const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
    const market=position?(markets.find(m=>m.ticker===position.ticker)||null):markets[0];
    if(!market)return {asset,action:'WAIT',reason:position?'Open paper position requires fresh quotes for its exact ticker':'No verified active contract',ticker:position?.ticker||null};
