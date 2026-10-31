@@ -72,3 +72,15 @@ test('B prefers newest observed quote when minute bucket has conflicting duplica
   assert.equal(result.side,'up');
  }
 });
+
+test('A and B share deduplicated pre-freeze samples; future quote cannot create agreement',()=>{
+ const rows=samples([.40,.44,.48,.52]);
+ const future={...rows.at(-1),yesMid:.70,observedAt:now+1000};
+ const pair=pairedShadow(market,[...rows,future],now);
+ assert.equal(pair.at,now);
+ assert.equal(pair.engines.A.action,'BUY UP');
+ assert.equal(pair.engines.B.action,'BUY UP');
+ assert.equal(pair.hybrid.action,'WAIT');
+ assert.equal(pair.hybrid.authorized,false);
+ assert.equal(pair.engines.B.askCents,48);
+});
