@@ -47,7 +47,7 @@ function draw(){
 async function loadCandles(force=false){
  const row=quotes.find(x=>x.asset===selected),m=row?.market;
  if(!m||Date.now()-quoteTime>25000){status.textContent='Candle request paused: fresh active market required';return}
- if(!force&&Date.now()-lastRequest<20000&&chartTicker===m.ticker)return;lastRequest=Date.now();
+ if(!force&&Date.now()-lastRequest<60000&&chartTicker===m.ticker)return;lastRequest=Date.now();
  const id=++requestId,asset=selected,ticker=m.ticker;
  if(chartTicker!==ticker){candles=[];chartTicker=ticker;draw()}
  status.textContent='Loading one-minute YES bid candles…';
@@ -77,6 +77,6 @@ window.addEventListener('banktrades:signals',e=>{
 });
 window.addEventListener('banktrades:select',e=>{selected=e.detail;loadCandles(true)});
 window.addEventListener('resize',draw);
-setInterval(()=>{if(!document.hidden){loadCandles();if(chartTime&&Date.now()-chartTime>45000)status.textContent='Candle display stale · waiting for refresh'}},5000);
+setInterval(()=>{if(!document.hidden){loadCandles();if(chartTime&&Date.now()-chartTime>75000)status.textContent='Candle display stale · waiting for refresh'}},1000);
 observations();draw();
 })();
