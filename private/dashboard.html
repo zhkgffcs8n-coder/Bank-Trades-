@@ -84,15 +84,15 @@ async function loadSharedSignals(){
   if(!r.ok)throw Error('HTTP '+r.status);
   const data=await r.json(),time=Date.parse(data.fetched_at);
   if(!Number.isFinite(time)||time>Date.now()+10000||Date.now()-time>60000||!Array.isArray(data.results))throw Error('Stale shared feed');
-  sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;
+  sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;window.__BANK_TRADES_SHARED_ERROR__=null;
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
   if(data.performance)window.dispatchEvent(new CustomEvent('banktrades:paper-performance',{detail:data.performance}));
   announceAllEntries();
- }catch(e){sharedSignals.clear();sharedFetched=0}
+ }catch(e){sharedSignals.clear();sharedFetched=0;window.__BANK_TRADES_SHARED_ERROR__=String(e.message||e);window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:[]}));}
 }
 function signalFor(asset,m,stale){
  const s=sharedSignals.get(asset);
- if(stale||!m||Date.now()-sharedFetched>45000||!s||s.ticker!==m.ticker)return {action:'WAIT',score:0,reason:'Shared signal unavailable or stale'};
+ if(stale||!m||Date.now()-sharedFetched>45000||!s||s.ticker!==m.ticker)return {action:'WAIT',score:0,reason:window.__BANK_TRADES_SHARED_ERROR__?'Shared signal fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__:!s?'Shared signal missing for '+asset:s.ticker!==m.ticker?'Signal ticker mismatch: quotes '+m.ticker+' vs signal '+s.ticker:'Shared signal stale'};
  return {...s,ask:Number.isFinite(s.ask)?s.ask/100:null};
 }
 
