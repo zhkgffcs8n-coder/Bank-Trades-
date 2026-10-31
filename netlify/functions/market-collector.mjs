@@ -1,5 +1,6 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
+import {verifiedFinalizedBinaryOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
@@ -81,10 +82,9 @@ export default async()=>{
    if(await db.get(labelKey,{type:'json'})){await db.delete('pending/'+rec.ticker);continue;}
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
-    const value=Number(m?.settlement_value_dollars),result=m?.result;
-    const finalized=m?.status==='finalized'&&m?.market_type==='binary'&&m?.is_provisional!==true&&['yes','no'].includes(result)&&value===(result==='yes'?1:0);
-    if(finalized){
-     await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record'});
+    const result=verifiedFinalizedBinaryOutcome(m,rec.ticker);
+    if(result){
+     await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
      if(Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
       model=learn(model,rec,result==='yes'?1:0);
       await db.setJSON('training/model',model);
