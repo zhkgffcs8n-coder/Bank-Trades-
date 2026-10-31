@@ -5,11 +5,11 @@ export function performance(trades=[]){
  const explorationExcluded=trades.length-eligible.length;
  const valid=eligible.filter(t=>((t.status==='SETTLED'&&['WIN','LOSS'].includes(String(t.settlement).toUpperCase())&&['yes','no'].includes(String(t.marketResult).toLowerCase()))||(t.status==='CLOSED'&&t.paperExitOnly===true&&Number.isFinite(Number(t.exitBid))))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
  const summarize=rows=>{
-  const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=n-wins;
+  const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=rows.filter(t=>Number(t.pnl)<0).length,ties=n-wins-losses;
   const spent=rows.reduce((s,t)=>s+Number(t.cost),0),pnl=rows.reduce((s,t)=>s+Number(t.pnl),0);
   const rate=n?wins/n:null,avgAsk=n?rows.reduce((s,t)=>s+Number(t.ask),0)/n:null;
   const z=1.96,lower=n?(rate+z*z/(2*n)-z*Math.sqrt(rate*(1-rate)/n+z*z/(4*n*n)))/(1+z*z/n):null;
-  return {trades:n,wins,losses,winRate:rate,winRateLower95:lower,spent:Number(spent.toFixed(2)),netPnl:Number(pnl.toFixed(2)),roi:spent?Number((pnl/spent).toFixed(4)):null,avgEntryPercent:avgAsk,breakEvenWinRate:avgAsk==null?null:avgAsk/100};
+  return {trades:n,wins,losses,ties,winRate:rate,winRateLower95:lower,spent:Number(spent.toFixed(2)),netPnl:Number(pnl.toFixed(2)),roi:spent?Number((pnl/spent).toFixed(4)):null,avgEntryPercent:avgAsk,breakEvenWinRate:avgAsk==null?null:avgAsk/100};
  };
  const groups={};
  const entryBands={'0-24%':[],'25-49%':[],'50-74%':[],'75-99%':[]};
@@ -42,7 +42,7 @@ export function performance(trades=[]){
  const groupStats=groups=>Object.fromEntries(Object.entries(groups).map(([key,rows])=>[key,summarize(rows)]));
  const recentSummary=summarize(recent);
  const priorSummary=summarize(ordered.slice(-100,-50));
- const losses=valid.filter(t=>Number(t.pnl)<=0);
+ const losses=valid.filter(t=>Number(t.pnl)<0);
  const lossReview={
   at:new Date().toISOString(),totalLosses:losses.length,
   grossLoss:Number(losses.reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2)),
