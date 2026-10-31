@@ -5,18 +5,18 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  const expires=Date.parse(m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
  const left=(expires-now)/1000,spread=Math.max(ya-yb,na-nb);
  const base={ticker:m?.ticker||null,action:'WAIT',score:0,reason:'Insufficient verified evidence',at:now,expiresAt:expires};
- if(!m?.ticker||![yb,ya,nb,na].every(Number.isFinite)||ya<yb||na<nb||yb<=0||nb<=0||spread>3||!Number.isFinite(left)||left<75||left>930)return {...base,reason:'Missing, stale, illiquid or invalid quotes'};
+ if(!m?.ticker||![yb,ya,nb,na].every(Number.isFinite)||ya<yb||na<nb||yb<=0||nb<=0||spread>4||!Number.isFinite(left)||left<75||left>930)return {...base,reason:'Missing, stale, illiquid or invalid quotes'};
  if(position){
   const side=String(position.side).toLowerCase(),bid=side==='up'?yb:side==='down'?nb:NaN,entry=Number(position.ask);
   if(!Number.isFinite(bid)||!Number.isFinite(entry)||entry<=0)return {...base,reason:'Position entry or exit bid unavailable'};
   const roi=(bid-entry)/entry;
   return {...base,action:roi<=-.12?'SELL FAST':'HOLD',roi,reason:roi<=-.12?'Paper position crossed 12% stop threshold':'Paper position open; monitor bid and settlement'};
  }
- if(left<360)return {...base,reason:'Late entry blocked'};
+ if(left<180)return {...base,reason:'Late entry blocked'};
  const a=records.filter(r=>r?.ticker===m.ticker&&Number.isFinite(r.yesMid)&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000).sort((x,y)=>x.t-y.t).slice(-8);
- if(a.length<4||a.at(-1).t-a[0].t<120000)return {...base,sampleCount:a.length,reason:'Collecting scheduled samples: '+a.length+'/4; observed span '+(a.length?Math.round((a.at(-1).t-a[0].t)/1000):0)+'s / 120s minimum. No entry until data requirements pass'};
+ if(a.length<3||a.at(-1).t-a[0].t<60000)return {...base,sampleCount:a.length,reason:'Collecting scheduled samples: '+a.length+'/3; observed span '+(a.length?Math.round((a.at(-1).t-a[0].t)/1000):0)+'s / 60s minimum. No entry until data requirements pass'};
  const changes=a.slice(1).map((r,i)=>(r.yesMid-a[i].yesMid)*100),momentum=changes.reduce((s,x)=>s+x,0);
- const side=momentum>3?'up':momentum< -3?'down':null;
+ const side=momentum>2?'up':momentum< -2?'down':null;
  const baseline=Math.max(.02,Math.min(.98,(yb+ya)/200));
  const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,spread/10)),Math.max(-1,Math.min(1,left/900)),Math.max(-1,Math.min(1,(yb-nb)/100))];
  let researchForecast=null;
@@ -26,6 +26,6 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  const agreement=changes.filter(x=>side==='up'?x>0:x<0).length/changes.length;
  const reversals=changes.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(changes[i])&&Math.abs(x)>.4&&Math.abs(changes[i])>.4).length;
  const ask=side==='up'?ya:na;
- if(agreement<.65||reversals>2||ask<35||ask>80)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast};
+ if(agreement<.6||reversals>2||ask<20||ask>85)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast};
  return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length,researchForecast,researchValidated:Boolean(research?.status?.validated),researchMode:'observation only; does not change entry decisions'};
 }
