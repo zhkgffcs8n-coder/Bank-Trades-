@@ -114,6 +114,8 @@ async function refreshSharedSignalTable(){
   const payload=await response.json(),ts=Date.parse(payload.fetched_at);
   if(!Array.isArray(payload.results)||!Number.isFinite(ts)||Math.abs(Date.now()-ts)>90000)throw Error('Shared signals response invalid or stale');
   engineSignals=assets.map(asset=>payload.results.find(x=>x.asset===asset)||{asset,action:'WAIT',reason:'No signal returned for '+asset});
+  // Notify Learning Lab from the actual server response, not the unrelated quote UI event.
+  window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:engineSignals}));
   window.__BANK_TRADES_SHARED_ERROR__=null;
   syncSignals();
   const chosen=engineSignals.find(x=>x.asset===selected),panel=$('premiumAI');
