@@ -16,11 +16,11 @@ async function refresh(){
  message(state.access.active?'Your access is active'+(state.access.expiresAt?' until '+new Date(state.access.expiresAt).toLocaleDateString():'')+'.':'Choose a membership or redeem a free access code.');
  for(const p of state.plans){
   const b=document.createElement('button');const amount=new Intl.NumberFormat(undefined,{style:'currency',currency:p.currency}).format(p.amount/100);
-  b.textContent=`${p.name[0].toUpperCase()+p.name.slice(1)} · ${amount} / ${p.intervalCount>1?p.intervalCount+' ':''}${p.interval}`;
+  b.textContent=`${p.label||p.name.toUpperCase()} · ${amount} / ${p.intervalCount>1?p.intervalCount+' ':''}${p.interval}${p.available?' · JOIN NOW':' · SQUARE ACTIVATION PENDING'}`; b.disabled=!p.available;
   b.onclick=()=>run(async()=>{const d=await api({action:'checkout',plan:p.name});location.assign(d.url);});
   if(!state.access.active)$('plans').append(b);
  }
- if(!state.plans.length&&!state.access.active)message('Paid signup is awaiting activation. You can redeem an owner-issued free access code.');
+ if(!state.access.active&&!state.plans.some(p=>p.available))message('Memberships are published. Square checkout activation is pending; owner-issued free access codes still work.');
 }
 $('auth-form').onsubmit=e=>{e.preventDefault();run(async()=>{await login($('email').value,$('password').value);$('password').value='';await refresh();});};
 $('signup').onclick=()=>run(async()=>{if(!$('auth-form').reportValidity())return;await signup($('email').value,$('password').value);$('password').value='';message('Check your email and confirm your account, then sign in.');});
