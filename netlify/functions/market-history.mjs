@@ -5,8 +5,18 @@ export default async req=>{
  if(req.method!=='GET')return json({error:'GET only'},405);
  const u=new URL(req.url),asset=String(u.searchParams.get('asset')||'').toUpperCase();
  if(!ASSETS.has(asset))return json({error:'Invalid asset'},400);
- const db=getStore({name:'bank-trades-market-history',consistency:'strong'}),listed=await db.list({prefix:'samples/'+asset+'/',limit:240});
- const cutoff=Date.now()-4*60*60*1000,records=(await Promise.all(listed.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
+ const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
+ // Keys are chronological; listing only the first page eventually hides new samples.
+ // Scan bounded pages and keep the most recent four hours, never the oldest page.
+ const cutoff=Date.now()-4*60*60*1000;
+ const keys=[];let cursor,hasMore=false;
+ for(let page=0;page<20;page++){
+  const listed=await db.list({prefix:'samples/'+asset+'/',limit:1000,...(cursor?{cursor}:{})});
+  keys.push(...listed.blobs.filter(b=>Number(b.key.split('/').at(-1))>=cutoff).map(b=>b.key));
+  cursor=listed.cursor;hasMore=!!cursor;
+  if(!cursor)break;
+ }
+ const records=(await Promise.all(keys.slice(-300).map(key=>db.get(key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
  for(const ticker of tickers){const o=await db.get('outcomes/'+ticker,{type:'json'});if(o)outcomes[ticker]=o}
  // Expose only the most recent contract's independently paired SHADOW record.
@@ -23,5 +33,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore:!!listed.cursor,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
