@@ -7,7 +7,7 @@ export function matchLiveObservation(pair, live) {
  if (!Number.isFinite(live.at)||live.at!==pair.at) return {status:'UNMATCHED',reason:'Different observation timestamp; no cross-credit'};
  for (const k of ['yesAsk','noAsk','yesBid','noBid']) {
   const dollars=Number(pair.quote?.[k]),cents=Number(live.quote?.[k]);
-  if (!Number.isFinite(dollars)||!Number.isFinite(cents)||Math.abs(dollars-cents/100)>1e-9)
+  if (pair.quote?.[k]==null||live.quote?.[k]==null||live.quote?.[k]===''||!Number.isFinite(dollars)||!Number.isFinite(cents)||Math.abs(dollars-cents/100)>1e-9)
    return {status:'UNMATCHED',reason:'Different or missing '+k+' quote; no cross-credit'};
  }
  if (pair.status!=='RESOLVED'||pair.settlement?.verified!==true||!['yes','no'].includes(pair.settlement?.result)||

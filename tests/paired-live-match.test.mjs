@@ -21,4 +21,5 @@ test('requires separately recorded live observation and matching verified outcom
  assert.equal(matchLiveObservation({...pair,status:'PENDING'},live).status,'PENDING_VERIFICATION');
  assert.equal(matchLiveObservation(pair,{...live,outcome:'no'}).status,'PENDING_VERIFICATION');
  assert.equal(matchLiveObservation(pair,{...live,status:'PENDING'}).status,'PENDING_VERIFICATION');
+ assert.equal(matchLiveObservation({...pair,quote:{...pair.quote,yesBid:0}},{...live,quote:{...live.quote,yesBid:null}}).status,'UNMATCHED');
 });
