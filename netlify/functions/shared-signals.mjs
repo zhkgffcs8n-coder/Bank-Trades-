@@ -25,9 +25,9 @@ export default async req=>{
    const activePosition=position?.ticker===market.ticker?position:null;
    let records=[];
    try{
-    const listed=await timed(db.list({prefix:'samples/'+asset+'/',limit:12}),2000,'sample list');
-    records=(await Promise.all(listed.blobs.map(b=>timed(db.get(b.key,{type:'json'}),1800,'sample').catch(()=>null)))).filter(Boolean);
-   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Sample storage unavailable: '+e.message};}
+    const recent=await timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples');
+    records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
+   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message};}
    const signal=gatePaperEntry({...paperSignal(market,records,activePosition,now,research),asset},stats);
    return {asset,...signal,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null}}
