@@ -19,8 +19,8 @@ export default async req=>{
  const learning={mode:'AUTOMATIC PAPER RESEARCH',model:research.status,
   status:research.status?.validated?'MODEL RESEARCH CHECK PASSED':'COLLECTING VERIFIED OUTCOMES',
   liveRuleAutoPromotion:false,
-  paperRuleAutoPromotion:true,
-  pipeline:['LIVE OBSERVATION','OFFICIAL SETTLEMENT','ONLINE MODEL UPDATE','PROSPECTIVE PAPER VALIDATION','AUTO PAPER PROMOTION OR ROLLBACK'],
+  paperRuleAutoPromotion:false,
+  pipeline:['LIVE OBSERVATION','OFFICIAL SETTLEMENT','ONLINE MODEL UPDATE','PROSPECTIVE PAPER VALIDATION','MANUAL REVIEW BEFORE ANY PROMOTION'],
   details:'Scheduled collector performs learning; live endpoint consumes the latest model without re-reading historical reports on every refresh'};
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
