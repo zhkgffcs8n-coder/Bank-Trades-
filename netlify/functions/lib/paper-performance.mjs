@@ -23,7 +23,34 @@ export function performance(trades=[]){
   (groups[key]??=[]).push(t);
  }
  const byStrategy=Object.fromEntries(Object.entries(groups).map(([k,v])=>[k,summarize(v)]));
- return {overall:summarize(valid),byStrategy,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:trades.length-valid.length,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
+ // Diagnose losing paper trades without fitting a new rule to the same outcomes.
+ // Only fields recorded at entry are used to define cohorts; never infer missing features.
+ const ordered=[...valid].sort((a,b)=>Number(a.closedAt||a.settledAt||a.at||0)-Number(b.closedAt||b.settledAt||b.at||0));
+ const recent=ordered.slice(-50);
+ const byAsset={};
+ const bySide={up:[],down:[]};
+ const byEntryTime={early:[],middle:[],late:[],unknown:[]};
+ for(const t of valid){
+  (byAsset[String(t.asset||'UNKNOWN')]??=[]).push(t);
+  bySide[t.side].push(t);
+  const remaining=Number(t.secondsToExpiryAtEntry);
+  const key=!Number.isFinite(remaining)||remaining<=0?'unknown':remaining>=600?'early':remaining>=300?'middle':'late';
+  byEntryTime[key].push(t);
+ }
+ const groupStats=groups=>Object.fromEntries(Object.entries(groups).map(([key,rows])=>[key,summarize(rows)]));
+ const recentSummary=summarize(recent);
+ const priorSummary=summarize(ordered.slice(-100,-50));
+ const losses=valid.filter(t=>Number(t.pnl)<=0);
+ const lossReview={
+  at:new Date().toISOString(),totalLosses:losses.length,
+  grossLoss:Number(losses.reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2)),
+  byAsset:groupStats(byAsset),bySide:groupStats(bySide),byEntryTime:groupStats(byEntryTime),
+  recent50:recentSummary,previous50:priorSummary,
+  worsening:recentSummary.trades>=30&&priorSummary.trades>=30&&recentSummary.roi<priorSummary.roi,
+  insufficientEvidence:Object.entries(byAsset).filter(([,rows])=>rows.length<30).map(([asset])=>asset),
+  cautions:['These are retrospective associations, not proven causes of losses.','Do not promote a rule based only on the same trades used to discover it.','Net returns may omit fees and slippage.']
+ };
+ return {overall:summarize(valid),lossReview,byStrategy,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:trades.length-valid.length,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
 }
 export function gatePaperEntry(signal,stats){
  if(!['BUY UP','BUY DOWN'].includes(signal.action))return signal;
