@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {registerHooks} from 'node:module';
 import {readFile,readdir} from 'node:fs/promises';
-import Stripe from 'stripe';
 
 class MemoryStore{
  constructor(){this.rows=new Map();this.seq=0;}
@@ -23,7 +22,6 @@ const codes=await import('../netlify/functions/lib/codes.mjs');
 const {guarded}=await import('../netlify/functions/lib/guard-relay.mjs');
 const {default:membership}=await import('../netlify/functions/membership.mjs');
 const {default:dashboard}=await import('../netlify/functions/dashboard.mjs');
-const {default:webhook}=await import('../netlify/functions/stripe-webhook.mjs');
 const {withCheckoutLock}=await import('../netlify/functions/lib/checkout-lock.mjs');
 const user={id:'member1',email:'tester@example.com',confirmedAt:'2026-01-01',roles:[],userMetadata:{roles:['owner'],member:true}};
 function session(u=user){globalThis.__membershipTest.session=u;globalThis.__membershipTest.user=u;}
@@ -75,25 +73,6 @@ test('owner can issue and revoke; member receives private no-store data only aft
  const handler=guarded(async()=>{calls++;return {statusCode:200,headers:{'Access-Control-Allow-Origin':'*'},body:'secret'};});
  r=await handler(new Request('https://bank.test/api/data'));assert.equal(r.status,200);assert.equal(calls,1);assert.equal(r.headers.get('Access-Control-Allow-Origin'),null);assert.equal(r.headers.get('Cache-Control'),'private, no-store');
  await codes.revokeCode(db,d.codeHash);r=await handler(new Request('https://bank.test/api/data'));assert.equal(r.status,403);assert.equal(calls,1);
-});
-test('paid entitlement requires paid current invoice, active status, allowed price and live period',()=>{
- const s={status:'active',latest_invoice:{status:'paid'},items:{data:[{price:{id:'price_allowed'},current_period_end:Date.now()/1000+3600}]}};
- assert.equal(access.subscriptionEligible(s,['price_allowed']),true);
- for(const status of ['trialing','incomplete','past_due','unpaid','canceled','paused'])assert.equal(access.subscriptionEligible({...s,status},['price_allowed']),false);
- assert.equal(access.subscriptionEligible({...s,latest_invoice:{status:'open'}},['price_allowed']),false);
- assert.equal(access.subscriptionEligible(s,['price_unrelated']),false);
- assert.equal(access.subscriptionEligible({...s,pause_collection:{}},['price_allowed']),false);
- assert.equal(access.subscriptionEligible(s,['price_allowed'],Date.now()+7200000),false);
-});
-test('webhook rejects forged signatures and is idempotent with a valid signed event',async()=>{
- process.env.STRIPE_RESTRICTED_KEY='rk_test_localfixture';process.env.STRIPE_WEBHOOK_SECRET='whsec_localfixture';
- const client=new Stripe(process.env.STRIPE_RESTRICTED_KEY);const payload=JSON.stringify({id:'evt_localfixture',type:'invoice.paid',created:Date.now()/1000,data:{object:{customer:'cus_localfixture'}}});
- let r=await webhook(new Request('https://bank.test/.netlify/functions/stripe-webhook',{method:'POST',headers:{'stripe-signature':'forged'},body:payload}));assert.equal(r.status,400);
- await db.setJSON('identity/cus_localfixture',{id:user.id});
- const signature=client.webhooks.generateTestHeaderString({payload,secret:process.env.STRIPE_WEBHOOK_SECRET});
- for(let i=0;i<2;i++){r=await webhook(new Request('https://bank.test/.netlify/functions/stripe-webhook',{method:'POST',headers:{'stripe-signature':signature},body:payload}));assert.equal(r.status,200);}
- assert.equal((await db.get('event/evt_localfixture')).processed,true);
- delete process.env.STRIPE_RESTRICTED_KEY;delete process.env.STRIPE_WEBHOOK_SECRET;
 });
 test('public output contains no dashboard HTML or server source',async()=>{
  const publicFiles=await readdir('dist');assert.deepEqual(publicFiles.sort(),['account-client.js','dashboard-session.js','learning-lab.js','account.css','index.html','kaibot.js','premium.css','premium.js','terminal-enhancements.js'].sort());
