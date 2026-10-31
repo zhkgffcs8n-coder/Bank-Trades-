@@ -22,6 +22,14 @@ export default async()=>{
   // One immutable training sample per asset/minute. A fast UI refresh is not new training evidence.
   if(!existing)await db.setJSON(sampleKey,record);
   await db.setJSON('latest/'+asset,record);
+  // Maintain a bounded per-asset rolling snapshot; signal readers avoid expensive blob listings.
+  try{
+   const key='recent/'+asset;
+   const prior=await db.get(key,{type:'json'});
+   const recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
+   recent.push(record);
+   await db.setJSON(key,recent.slice(-12));
+  }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
   try{
