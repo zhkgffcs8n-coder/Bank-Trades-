@@ -28,11 +28,14 @@ function syncSignals(){
    const paper=status==='OPEN'?'📋 PAPER HOLD '+side:status==='CLOSED'?'📋 PAPER EXIT '+side:status==='SETTLED'?'📋 PAPER SETTLED '+side:'📋 PAPER '+status;
    tr.title=paper+' · '+ticker+' · entry '+position.ask+'¢'+(Number.isFinite(Number(position.pnl))?' · P/L $'+Number(position.pnl).toFixed(2):'')+' · Not a real-money order';
   }
+  const currentTrades=paperPositions.filter(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
+  const entryCount=currentTrades.length;
+  if(entryCount){tr.title=(tr.title||'')+' · '+entryCount+' paper entr'+(entryCount===1?'y':'ies')+' this round';}
   const round=roundSeen.get(tr.dataset.asset);
   if(round&&sig?.roundAssessment?.ticker===round.ticker)tr.title='Round '+round.ticker+' evaluated '+new Date(sig.roundAssessment.evaluatedAt).toLocaleTimeString();
 
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':'⏳ WAIT · NO VERIFIED EDGE';
-  cell.title=sig?.reason||'Waiting for shared signal engine';
+  cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
    const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
