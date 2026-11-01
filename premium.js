@@ -24,6 +24,15 @@ signalFxStyle.textContent=`
 #premiumRows tr.bt-buy-down td:nth-child(4){color:#fda4af!important;border-radius:12px;border:2px solid #fb7185!important;text-shadow:0 1px 4px #450a0a}
 #premiumRows tr.bt-signal-new td:nth-child(4){animation:btComicPop .55s cubic-bezier(.18,1.5,.38,1),btComicGlow 1.4s ease-in-out 2}
 @media(prefers-reduced-motion:reduce){#premiumRows tr.bt-signal-new td:nth-child(4){animation:none}}
+@media(min-width:900px){
+ #premiumRows tr td{padding-top:4px!important;padding-bottom:4px!important;vertical-align:middle!important}
+ #premiumRows tr td:nth-child(4){line-height:1.18!important}
+ #premiumRows tr td.bt-compact-signal[data-compact="true"] small{display:none!important}
+ #premiumRows tr td.bt-compact-signal[data-compact="true"] small:nth-of-type(1){display:none!important}
+ #premiumRows tr td.bt-compact-signal{cursor:pointer}
+ #premiumRows tr td.bt-compact-signal[data-compact="false"] small{display:block!important}
+}
+
 `;
 document.head.appendChild(signalFxStyle);
 const roundSeen=new Map();
@@ -323,11 +332,16 @@ function syncSignals(){
   const decision=action==='BUY UP'?'BUY UP':action==='BUY DOWN'?'BUY DOWN':action==='SELL FAST'?'SELL FAST':action==='HOLD'?'HOLD':'WAIT';
   const color=decision==='BUY UP'?'#22c55e':decision==='BUY DOWN'||decision==='SELL FAST'?'#ef4444':decision==='HOLD'?'#a78bfa':'#facc15';
   const badge=document.createElement('div');
-  badge.style.cssText='display:inline-block;padding:9px 15px;margin:3px 0 10px;border:3px solid '+color+';border-radius:15px;background:'+color+'20;color:'+color+';font-size:clamp(18px,2vw,28px);font-weight:950;letter-spacing:.6px;box-shadow:0 0 16px '+color+'55;text-shadow:0 1px 1px #000';
+  badge.style.cssText='display:inline-block;padding:4px 9px;margin:1px 0 3px;border:2px solid '+color+';border-radius:9px;background:'+color+'20;color:'+color+';font-size:clamp(12px,1.1vw,16px);font-weight:900;letter-spacing:.2px;box-shadow:0 0 8px '+color+'44';
   badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   cell.prepend(badge);
   const original=Array.from(cell.childNodes).find(n=>n.nodeType===3&&n.textContent.trim());
   if(original)original.textContent='';
+  // Compact desktop rows: show the action and one live tracker line by default.
+  // Preserve every diagnostic in the hover tooltip and allow click-to-expand.
+  cell.classList.add('bt-compact-signal');
+  cell.dataset.compact='true';
+  cell.onclick=()=>{cell.dataset.compact=cell.dataset.compact==='true'?'false':'true';};
   // Display separate research context without converting it into an actionable signal.
   const research=sig?.researchDirection;
   if(research?.mode==='SHADOW_ONLY'&&research.roundTicker===ticker&&
