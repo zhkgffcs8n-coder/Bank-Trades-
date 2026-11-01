@@ -67,7 +67,8 @@ function manualPositionAdvice(asset){
  const expires=expiry(m),secondsLeft=(expires-Date.now())/1000;
  const fees=Number(p.fees)||0,qty=Number(p.qty)||1,net=(bid-entry)*qty/100-fees;
  const sell=roi<=-.12||trail!==null&&drawdown<=-trail;
- const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
+ const holdTillEnd=!sell&&secondsLeft>0&&secondsLeft<=90&&bid>=90&&net>0&&roi>=.10;
+ const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):holdTillEnd?'🟢 HOLD TILL END · REVIEW':secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
  return {action,reason:'Tracked position; see current bid and position details.'};
 }
 function syncSignals(){
