@@ -44,7 +44,8 @@ function manualPositionAdvice(asset){
  const fees=Number(p.fees)||0,qty=Number(p.qty)||1,net=(bid-entry)*qty/100-fees;
  const sell=roi<=-.12||trail!==null&&drawdown<=-trail;
  const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
- return {action,reason:'TRACKED '+side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · estimated '+(roi*100).toFixed(1)+'% before fees · net 
+ return {action,reason:'Tracked position; see current bid and position details.'};
+}
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
