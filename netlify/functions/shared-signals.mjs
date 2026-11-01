@@ -52,7 +52,14 @@ export default async req=>{
     const recent=await timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples');
     records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
    }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable: '+String(e.message)]}};}
-   const signal=gatePaperEntry({...paperSignal(market,records,activePosition,now,research),asset},stats);
+   const rawSignal=paperSignal(market,records,activePosition,now,research);
+   const signal=gatePaperEntry({...rawSignal,asset},stats);
+   // Keep the underlying direction and the post-performance veto visible.
+   // Never promote a rejected signal into a live BUY.
+   const entryGate={rawAction:rawSignal.action,finalAction:signal.action,
+    blockedByPerformance:rawSignal.action.startsWith('BUY')&&signal.action==='WAIT',
+    validation:signal.validation||null,reason:signal.reason,
+    sampleCount:rawSignal.sampleCount??null};
    // A shadow committee receives real same-contract features and normalized ask,
    // even when the actionable paper signal correctly remains WAIT.
    const committeeInput=buildCommitteeSnapshot(market,records,now);
@@ -67,7 +74,7 @@ export default async req=>{
    const researchDirection=Number.isFinite(fairUp)&&valid
     ?{direction:fairUp>=.5?'UP':'DOWN',method:'Current quote midpoint, not validated predictive signal',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now}
     :{direction:null,method:'Insufficient valid quotes',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now};
-   return {asset,...signal,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,results});
