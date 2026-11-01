@@ -33,3 +33,7 @@ test('collector research validation uses full model integrity gate rather than B
  assert.match(collector,/validated:modelValidated\(model\)/);
  assert.doesNotMatch(collector,/validated:model\.count\s*>=\s*100\s*&&/);
 });
+
+test('collector passes pagination completeness to cost-aware paired audit',()=>{
+ assert.match(collector,/report\.costAwareMatched\s*=\s*costAwarePairedAudit\(rows,\s*\{archiveComplete:\s*!all\.cursor\}\)/);
+});
