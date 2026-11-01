@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {performance} from '../netlify/functions/lib/paper-performance.mjs';
+import {SETTLEMENT_VERIFICATION} from '../src/official-settlement.mjs';
 
 test('verified paper performance counts break-even exits as ties, not losses',()=>{
- const common={asset:'BTC',side:'up',ask:50,cost:0.5,qty:1};
+ const common={asset:'BTC',side:'up',ask:50,cost:0.5,qty:1,outcomeVerification:SETTLEMENT_VERIFICATION};
  const rows=[
   {...common,id:'win',status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:0.5},
   {...common,id:'loss',status:'SETTLED',settlement:'LOSS',marketResult:'no',pnl:-0.5},
@@ -39,7 +40,7 @@ test('missing P/L or exit bid never becomes a fabricated break-even paper trade'
 
 test('paper outcomes must reconcile to recorded quantity, cost and official side',async()=>{
  const {reconciledPaperTrade}=await import('../netlify/functions/lib/paper-performance.mjs');
- const settled={asset:'BTC',side:'up',qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1};
+ const settled={asset:'BTC',side:'up',qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
  const exited={asset:'BTC',side:'down',qty:2,ask:50,cost:1,status:'CLOSED',paperExitOnly:true,exitBid:30,pnl:-0.4,settlement:'LOSS'};
  assert.equal(reconciledPaperTrade(settled),true);
  assert.equal(reconciledPaperTrade(exited),true);
@@ -49,6 +50,8 @@ test('paper outcomes must reconcile to recorded quantity, cost and official side
   {...settled,qty:0},
   {...settled,cost:0.01},
   {...settled,settlement:'LOSS'},
+  {...settled,outcomeVerification:null},
+  {...settled,outcomeVerification:'LEGACY_LABEL'},
   {...exited,pnl:0.4},
   {...exited,exitBid:null},
   {...exited,settlement:'WIN'}
@@ -59,4 +62,26 @@ test('paper outcomes must reconcile to recorded quantity, cost and official side
  assert.equal(stats.overall.wins,1);
  assert.equal(stats.overall.losses,1);
  assert.equal(stats.excluded,bad.length);
+});
+
+
+test('unverified legacy paper settlements never count as proven wins or losses',async()=>{
+ const {reconciledPaperTrade}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const base={id:'legacy',asset:'BTC',side:'up',qty:2,ask:50,cost:1,
+  status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1};
+ for(const marker of [undefined,null,'',false,'LEGACY']){
+  const row={...base,outcomeVerification:marker};
+  assert.equal(reconciledPaperTrade(row),false);
+  const stats=performance([row]);
+  assert.equal(stats.overall.trades,0);
+  assert.equal(stats.excluded,1);
+ }
+ const verified={...base,outcomeVerification:SETTLEMENT_VERIFICATION};
+ assert.equal(reconciledPaperTrade(verified),true);
+ assert.equal(performance([verified]).overall.trades,1);
+ // Independently simulated early exits are still classified from recorded bids.
+ const exit={id:'paper-exit',asset:'BTC',side:'down',qty:2,ask:50,cost:1,
+  status:'CLOSED',paperExitOnly:true,exitBid:30,pnl:-.4,settlement:'LOSS'};
+ assert.equal(reconciledPaperTrade(exit),true);
+ assert.equal(performance([exit]).overall.trades,1);
 });
