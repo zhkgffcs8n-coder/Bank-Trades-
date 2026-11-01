@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  const paint=()=>{
   button.dataset.screenAlerts=screenAlertsEnabled?'on':'off';
   button.setAttribute('aria-pressed',String(screenAlertsEnabled));
-  button.textContent=screenAlertsEnabled?'🔔 SCREEN ALERTS ON':'🔔 ENABLE ALERTS';
+  button.textContent=screenAlertsEnabled?'🔔 SCREEN ALERTS ON':'🔔 ENABLE SCREEN ALERTS';
   button.title=screenAlertsEnabled?'Green entry / red exit screen alerts ON while dashboard is open. Background push not configured.':'Turn on green entry / red exit screen alerts while dashboard is open.';
  };
  button.addEventListener('click',()=>{
