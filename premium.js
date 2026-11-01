@@ -235,6 +235,24 @@ function syncSignals(){
     cell.append(watch);
    }
   }
+  // Read-only per-market live quote tracker. Never infer fills or predictive certainty.
+  const tracker=document.createElement('small');
+  tracker.style.display='block';tracker.style.fontSize='10px';tracker.style.marginTop='4px';
+  const age=Date.now()-latestPositionQuoteAt;
+  if(liveMarket?.ticker===ticker&&Number.isFinite(age)&&age>=0&&age<15000){
+   const yb=price(liveMarket,'yes_bid'),ya=price(liveMarket,'yes_ask');
+   const nb=price(liveMarket,'no_bid'),na=price(liveMarket,'no_ask');
+   const remaining=(expiry(liveMarket)-Date.now())/1000;
+   const fmt=v=>Number.isFinite(v)?v.toFixed(0)+'¢':'—';
+   tracker.textContent='LIVE TRACKER · UP '+fmt(yb)+'/'+fmt(ya)+
+    ' · DOWN '+fmt(nb)+'/'+fmt(na)+
+    ' (bid/ask) · spread '+(Number.isFinite(ya-yb)?(ya-yb).toFixed(1)+'¢':'—')+
+    ' · '+(Number.isFinite(remaining)?Math.max(0,Math.ceil(remaining/60))+'m left':'expiry unknown')+
+    ' · quote age '+Math.ceil(age/1000)+'s';
+  }else{
+   tracker.textContent='LIVE TRACKER · STALE / NO MATCHING CONTRACT · do not trade from this quote';
+  }
+  cell.append(tracker);
   // Display separate research context without converting it into an actionable signal.
   const research=sig?.researchDirection;
   if(research?.mode==='SHADOW_ONLY'&&research.roundTicker===ticker&&
