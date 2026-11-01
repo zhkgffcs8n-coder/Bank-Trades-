@@ -42,7 +42,7 @@ function hypotheticalAdvice(asset,sig){
  p.peak=Math.max(p.peak,bid);
  const roi=(bid-p.entry)/p.entry,peakGain=(p.peak-p.entry)/p.entry,drawdown=(bid-p.peak)/p.peak;
  const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
- const stop=roi<=-.12,exit=stop||(trail!==null&&drawdown<=-trail);
+ const targetProfit=bid>=65&&bid<=100&&roi>=.05; const stop=roi<=-.12,exit=targetProfit||stop||(trail!==null&&drawdown<=-trail);
  const remaining=(expiry(m)-Date.now())/1000;
  const opposite=sig?.action===(p.side==='up'?'BUY DOWN':'BUY UP');
  const oppositeAsk=price(m,p.side==='up'?'no_ask':'yes_ask');
