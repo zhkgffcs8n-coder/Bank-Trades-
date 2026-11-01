@@ -249,10 +249,20 @@ async function refresh(){
 }
 $('refresh').onclick=refresh;
 $('auto').onclick=()=>{auto=!auto;$('auto').textContent='AUTO REFRESH '+(auto?'ON':'OFF')};
-function syncVoice(){for(const id of ['voice','premiumVoice']){const b=$(id);if(b){b.textContent=voice?'🔊 VOICE ON':'🔇 VOICE OFF';b.setAttribute('aria-pressed',String(voice))}}}
-function toggleVoice(){if(!('speechSynthesis'in window))return;voice=!voice;try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}syncVoice();if(voice){announcedEntries.clear();announceAllEntries(true)}else window.speechSynthesis.cancel()}
+function syncVoice(){for(const id of ['voice','premiumVoice']){const b=$(id);if(b){b.textContent=voice?'🔊 VOICE ON':'🔇 VOICE OFF';b.setAttribute('aria-pressed',String(voice));b.style.setProperty('background',voice?'#facc15':'','important');b.style.setProperty('color',voice?'#171717':'','important');b.style.setProperty('border',voice?'4px solid #fff176':'','important');b.style.setProperty('box-shadow',voice?'0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)':'','important');b.style.fontWeight=voice?'900':''}}}
+function toggleVoice(){if(!('speechSynthesis'in window)){alert('Voice playback is unavailable in this browser.');return;}voice=!voice;try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}syncVoice();if(voice){announcedEntries.clear();say('Voice alerts on. Monitoring all eight Kalshi markets.',true);announceAllEntries(false)}else window.speechSynthesis.cancel()}
 $('voice').onclick=toggleVoice;
 $('premiumVoice').onclick=toggleVoice;
+const spokenLiveEvents=new Set();
+window.addEventListener('banktrades:live-voice-alert',event=>{
+ if(!voice||document.hidden)return;
+ const d=event.detail||{},asset=String(d.asset||''),ticker=String(d.ticker||''),action=String(d.action||'');
+ if(!assets.includes(asset)||!ticker||!action)return;
+ const key=[asset,ticker,action].join(':');if(spokenLiveEvents.has(key))return;
+ spokenLiveEvents.add(key);if(spokenLiveEvents.size>200)spokenLiveEvents.clear();
+ const message=action==='BUY UP'||action==='BUY DOWN'?asset+'. '+action+'. Entry signal. Check Kalshi price.':/SELL FAST|TAKE PROFITS|EXIT ALERT/.test(action)?'Attention. '+asset+'. '+action+'. Review exit immediately.':/POSSIBLE FLIP/.test(action)?asset+'. Possible flip. Verify opposite signal.':null;
+ if(message)say(message,true);
+});
 try{voice=localStorage.getItem('banktrades:voice-enabled')==='1'}catch{}
 syncVoice();
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&voice){announcedEntries.clear();announceAllEntries(true)}});
