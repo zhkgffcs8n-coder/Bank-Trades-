@@ -201,6 +201,18 @@ document.addEventListener('DOMContentLoaded',()=>{
  });
  paint();
 });
+const flipWatchHistory=new Map();
+function flipWatchFor(asset,sig,ticker){
+ const call=sig?.roundCall;
+ if(!ticker||call?.ticker!==ticker||!['UP','DOWN'].includes(call.direction)||
+    !Number.isFinite(call.asOf)||Date.now()-call.asOf>90000)return null;
+ const prev=flipWatchHistory.get(asset);
+ const direction=call.direction;
+ const changed=prev&&prev.ticker===ticker&&prev.direction!==direction;
+ const flippedAt=changed?Date.now():prev?.ticker===ticker?prev.flippedAt:0;
+ flipWatchHistory.set(asset,{ticker,direction,flippedAt});
+ return {direction,recentFlip:!!flippedAt&&Date.now()-flippedAt<60000,observed:call.basis==='observed same-round momentum'};
+}
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
@@ -351,6 +363,15 @@ function syncSignals(){
    chip.textContent='ROUND CALL: '+roundCall.direction;
    chip.title='Direction call only, not a qualified BUY signal or order. '+roundCall.basis;
    badge.after(chip);
+  }
+  const flip=flipWatchFor(tr.dataset.asset,sig,ticker);
+  if(flip){
+   const icon=document.createElement('span');
+   const hue=flip.direction==='UP'?'#4ade80':'#fb7185';
+   icon.style.cssText='display:inline-block;margin-left:6px;padding:4px 7px;border-radius:8px;border:1px solid '+hue+';color:'+hue+';font-size:12px;font-weight:900;white-space:nowrap';
+   icon.textContent=(flip.recentFlip?'⚡ FLIP WATCH ':'↗↘ WATCH ')+(flip.direction==='UP'?'▲ UP':'▼ DOWN');
+   icon.title=(flip.recentFlip?'Direction reversed in recent observations. ':'Current directional watch. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
+   badge.after(icon);
   }
   // Small research-direction chip stays visible beside WAIT in compact mode.
   // This is observed momentum research, NOT an approved buy signal.
