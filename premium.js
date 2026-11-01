@@ -58,7 +58,10 @@ function manualPositionAdvice(asset){
  let p;try{p=JSON.parse(localStorage.getItem('banktrades:manual-positions:v1')||'{}')?.[asset]}catch{return null}
  if(!p)return null;
  const m=latestPositionQuotes.find(x=>x.asset===asset)?.market;
- if(!m||m.ticker!==p.ticker||Date.now()-latestPositionQuoteAt>10000)return {action:'⚠️ POSITION · QUOTE UNAVAILABLE',reason:'Tracked position exists; contract mismatch or stale sell quote. Check Kalshi directly.'};
+ // A previous-round manual record is not evidence of a live position. Never erase it automatically.
+ if(Number.isFinite(Number(p.expiresAt))&&Number(p.expiresAt)>0&&Date.now()>=Number(p.expiresAt))return {action:'📋 PREVIOUS ROUND · REVIEW RESULT',reason:'Saved manual position is past contract expiry; verify settlement on Kalshi and clear the record when ready.'};
+ if(m?.ticker&&m.ticker!==p.ticker)return {action:'📋 PREVIOUS CONTRACT · VERIFY',reason:'Saved manual position belongs to '+p.ticker+', not the current '+m.ticker+'. Check Kalshi settlement; this is not a live sell alert.'};
+ if(!m||Date.now()-latestPositionQuoteAt>10000)return {action:'⚠️ POSITION · QUOTE STALE',reason:'Manual position exists, but no fresh verified sell quote. Check Kalshi directly.'};
  const side=String(p.side).toLowerCase(),bid=price(m,side==='up'?'yes_bid':'no_bid'),ask=price(m,side==='up'?'yes_ask':'no_ask'),entry=Number(p.entry);
  if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5||!Number.isFinite(entry)||entry<=0)return {action:'⚠️ POSITION · NO SELL BID',reason:'Cannot estimate a reliable exit from this quote.'};
  const key=asset+':'+p.ticker+':'+p.at,previous=manualPeaks.get(key)||entry,peak=Math.max(previous,bid);manualPeaks.set(key,peak);
@@ -95,7 +98,8 @@ function syncSignals(){
   const why=String(sig?.reason||window.__BANK_TRADES_SHARED_ERROR__||'Signal endpoint has not returned a result');
   const unavailable=!sig||/unavailable|timeout|failed|stale|no verified active contract/i.test(why);
   const sampleIssue=/collecting scheduled samples/i.test(why);
-  cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':'⏳ WAIT · NO QUALIFIED ENTRY';
+  const quoteIssue=/missing, stale, illiquid or invalid quotes/i.test(why);
+  cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':quoteIssue?'⚠️ NO VALID ENTRY QUOTE':'⏳ WAIT · NO QUALIFIED ENTRY';
   if(advice){cell.textContent=advice.action;cell.title=advice.reason;cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';cell.className='premium-action'+(/SELL|PROFITS/.test(advice.action)?' sell':' hold');return;}
   if(!advice&&hypothetical){cell.textContent=hypothetical.action;cell.title=hypothetical.reason;cell.style.whiteSpace='normal';cell.className='premium-action hold';return;}
   if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
