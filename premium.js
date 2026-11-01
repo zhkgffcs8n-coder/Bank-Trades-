@@ -219,7 +219,7 @@ function syncSignals(){
    const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
    if(details){
     cell.title=(sig.reason||'')+' | '+forecast.method+' | '+side+' ask '+details.askCents+' cents | Max payout gain $'+details.maxProfitPerContract.toFixed(2)+'; max stake loss $'+details.maxLossPerContract.toFixed(2)+' per contract before fees';
-    if(action==='WAIT')cell.textContent='⏳ WAIT · NO QUALIFIED ENTRY';
+    if(action==='WAIT'){ const label=cell.firstChild; if(label&&label.nodeType===3)label.textContent='⏳ WAIT · NO QUALIFIED ENTRY'; }
    }
   }
  });
