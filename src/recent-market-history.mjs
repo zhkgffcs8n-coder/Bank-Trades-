@@ -9,21 +9,20 @@ export function mergeRecentMarketHistory(archive, rolling, asset, cutoff, now, l
     typeof row.ticker === 'string' && row.ticker.length > 0 &&
     Number.isFinite(row.t) && row.t >= cutoff && row.t <= now;
   const merged = new Map();
-  let recoveredFromRolling = 0;
   // Archive wins ties: the first immutable sample is the research evidence.
   for (const row of Array.isArray(archive) ? archive : []) {
-    if (valid(row)) merged.set(row.t + '/' + row.ticker, row);
+    if (valid(row)) merged.set(row.t + '/' + row.ticker, {row, fromRolling:false});
   }
   for (const row of Array.isArray(rolling) ? rolling : []) {
     if (!valid(row)) continue;
     const key = row.t + '/' + row.ticker;
     if (!merged.has(key)) {
-      merged.set(key, row);
-      recoveredFromRolling++;
+      merged.set(key, {row, fromRolling:true});
     }
   }
-  const records = [...merged.values()]
-    .sort((a,b) => a.t - b.t || a.ticker.localeCompare(b.ticker))
+  const selected = [...merged.values()]
+    .sort((a,b) => a.row.t - b.row.t || a.row.ticker.localeCompare(b.row.ticker))
     .slice(-limit);
-  return {records, recoveredFromRolling};
+  return {records:selected.map(x=>x.row),
+    recoveredFromRolling:selected.filter(x=>x.fromRolling).length};
 }
