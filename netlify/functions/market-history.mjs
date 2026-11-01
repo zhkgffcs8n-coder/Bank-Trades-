@@ -1,4 +1,5 @@
 import {sampleTimestampFromKey} from '../../src/sample-archive-key.mjs';
+import {trustedStoredFinalizedOutcome} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 const ASSETS=new Set(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']);
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -19,7 +20,14 @@ export default async req=>{
  }
  const records=(await Promise.all(keys.slice(-300).map(key=>db.get(key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
- for(const ticker of tickers){const o=await db.get('outcomes/'+ticker,{type:'json'});if(o)outcomes[ticker]=o}
+ let unverifiedOutcomeRecords=0;
+ for(const ticker of tickers){
+  const o=await db.get('outcomes/'+ticker,{type:'json'});
+  // Legacy cached labels without strict finality evidence must not appear as
+  // official settled outcomes in the public market-history response.
+  if(trustedStoredFinalizedOutcome(o,ticker))outcomes[ticker]=o;
+  else if(o)unverifiedOutcomeRecords++;
+ }
  // Expose only the most recent contract's independently paired SHADOW record.
  // Historical legacy A/B aggregate stats are not this paired experiment.
  const latest=await db.get('latest/'+asset,{type:'json'});
@@ -34,5 +42,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,hasMore,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
