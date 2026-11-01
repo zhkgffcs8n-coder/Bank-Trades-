@@ -28,3 +28,8 @@ test('every cached/fresh finalized-outcome training review reason is accepted by
   assert.equal(review.status,'REQUIRES_RECONCILIATION');
  }
 });
+
+test('collector research validation uses full model integrity gate rather than Brier count shortcut',()=>{
+ assert.match(collector,/validated:modelValidated\(model\)/);
+ assert.doesNotMatch(collector,/validated:model\.count\s*>=\s*100\s*&&/);
+});
