@@ -17,6 +17,19 @@ async function refreshPaperPositions(){
 const roundSeen=new Map();
 let latestPositionQuotes=[],latestPositionQuoteAt=0;
 const manualPeaks=new Map();
+const calledEntries=new Map();
+function rememberEntryCalls(signals){
+ for(const sig of signals){
+  if(!['BUY UP','BUY DOWN'].includes(sig?.action))continue;
+  const ticker=roundSeen.get(sig.asset)?.ticker;
+  if(!ticker)continue;
+  const prior=calledEntries.get(sig.asset);
+  if(prior?.ticker===ticker)returnIfSame(prior,sig);
+  else calledEntries.set(sig.asset,{ticker,action:sig.action,at:Date.now()});
+ }
+}
+function returnIfSame(prior,sig){if(prior.action!==sig.action)prior.action=sig.action}
+
 function manualPositionAdvice(asset){
  let p;try{p=JSON.parse(localStorage.getItem('banktrades:manual-positions:v1')||'{}')?.[asset]}catch{return null}
  if(!p)return null;
@@ -37,6 +50,7 @@ function syncSignals(){
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const advice=manualPositionAdvice(tr.dataset.asset);
+  const call=calledEntries.get(tr.dataset.asset);
   const action=sig?.action||'WAIT';
   const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
   const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
@@ -57,6 +71,7 @@ function syncSignals(){
   const sampleIssue=/collecting scheduled samples/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':'⏳ WAIT · NO QUALIFIED ENTRY';
   if(advice){cell.textContent=advice.action;cell.title=advice.reason;cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';cell.className='premium-action'+(/SELL|PROFITS/.test(advice.action)?' sell':' hold');return;}
+  if(!advice&&call?.ticker===ticker&&action==='WAIT'&&!unavailable){cell.textContent='📍 '+call.action+' CALLED · CONFIRM ENTRY TO TRACK';cell.title='Prior entry signal for this contract. No trade has been confirmed; use MY POSITION — EASY MODE if you bought.';cell.className='premium-action hold';return;}
   if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
   // Independent BTC spot evidence is research context, never a trade authorization.
   if(tr.dataset.asset==='BTC'){
@@ -153,7 +168,7 @@ async function update(){
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
   const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
   const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
-  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker)roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});}
+  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});calledEntries.delete(asset);}}
   const tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
   const state=cell(tr,valid&&active?(ya<=na?'↑ UP WATCH':'↓ DOWN WATCH'):valid?'CHECK ROUND':'NO QUOTE');state.className='premium-action';state.title='Directional quote watch, not a filled order or guaranteed profit';
   cell(tr,m?remaining:'—');$('premiumRows').append(tr);
@@ -184,6 +199,7 @@ async function refreshSharedSignalTable(){
   const payload=await response.json(),ts=Date.parse(payload.fetched_at);
   if(!Array.isArray(payload.results)||!Number.isFinite(ts)||Math.abs(Date.now()-ts)>90000)throw Error('Shared signals response invalid or stale');
   engineSignals=assets.map(asset=>payload.results.find(x=>x.asset===asset)||{asset,action:'WAIT',reason:'No signal returned for '+asset});
+  rememberEntryCalls(engineSignals);
   // Notify Learning Lab from the actual server response, not the unrelated quote UI event.
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:engineSignals}));
   window.__BANK_TRADES_SHARED_ERROR__=null;
