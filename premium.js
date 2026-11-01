@@ -42,7 +42,7 @@ function hypotheticalAdvice(asset,sig){
  p.peak=Math.max(p.peak,bid);
  const roi=(bid-p.entry)/p.entry,peakGain=(p.peak-p.entry)/p.entry,drawdown=(bid-p.peak)/p.peak;
  const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
- const targetProfit=bid>=65&&bid<=100&&roi>=.05; const stop=roi<=-.12,exit=targetProfit||stop||(trail!==null&&drawdown<=-trail);
+ const profitRunning=bid>=65&&bid<=100&&roi>=.05; const stop=roi<=-.12,exit=stop||(trail!==null&&drawdown<=-trail);
  const remaining=(expiry(m)-Date.now())/1000;
  const opposite=sig?.action===(p.side==='up'?'BUY DOWN':'BUY UP');
  const oppositeAsk=price(m,p.side==='up'?'no_ask':'yes_ask');
@@ -50,6 +50,7 @@ function hypotheticalAdvice(asset,sig){
   p.status='EXIT';
   return {action:roi>0?'💰 TAKE PROFITS · EXIT ALERT':'🚨 SELL FAST · EXIT ALERT',reason:'Hypothetical '+p.side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees. No order executed.'};
  }
+ if(profitRunning)return {action:'🟢 HOLD · PROFIT RUNNING',reason:'Hypothetical '+p.side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · peak '+p.peak.toFixed(1)+'¢ · gross ROI '+(roi*100).toFixed(1)+'% · trailing exit monitoring; no order executed.'};
  if(opposite&&Number.isFinite(oppositeAsk)&&oppositeAsk>0&&oppositeAsk<100)return {action:'🔄 POSSIBLE FLIP · REVIEW',reason:'Opposite BUY signal appeared; compare fees, spread and executable prices. No automatic reversal.'};
  if(remaining>0&&remaining<=90&&bid>=90&&roi>=.10)return {action:'🟢 HOLD TILL END · REVIEW',reason:'Strong current bid but settlement can still reverse; simulated position only.'};
  return {action:'🟢 HOLD · MONITOR',reason:'Hypothetical '+p.side.toUpperCase()+' · entry '+p.entry.toFixed(1)+'¢ · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees'};
