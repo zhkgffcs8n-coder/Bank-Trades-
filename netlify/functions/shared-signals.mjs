@@ -49,6 +49,12 @@ export default async req=>{
   paperRuleAutoPromotion:false,
   pipeline:['LIVE OBSERVATION','OFFICIAL SETTLEMENT','ONLINE MODEL UPDATE','PROSPECTIVE PAPER VALIDATION','MANUAL REVIEW BEFORE ANY PROMOTION'],
   details:'Scheduled collector performs learning; live endpoint consumes the latest model without re-reading historical reports on every refresh'};
+ // Use each asset's trained model for research forecasts, falling back to global.
+ // Previously the live signal path only loaded the global model.
+ const assetModels=Object.fromEntries(await Promise.all(Object.keys(assets).map(async asset=>{
+  try{return [asset,await timed(db.get('training/model/'+asset,{type:'json'}),1800,'asset model')]}
+  catch{return [asset,null]}
+ })));
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
@@ -65,7 +71,7 @@ export default async req=>{
     const recent=await timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples');
     records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
    }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable: '+String(e.message)]}};}
-   const rawSignal=paperSignal(market,records,activePosition,now,research);
+   const rawSignal=paperSignal(market,records,activePosition,now,{...research,model:assetModels[asset]||research.model});
    const signal=gatePaperEntry({...rawSignal,asset},stats);
    // Keep the underlying direction and the post-performance veto visible.
    // Never promote a rejected signal into a live BUY.
@@ -99,5 +105,5 @@ export default async req=>{
    return {asset,...signal,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
- return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),results});
+ return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});
 };
