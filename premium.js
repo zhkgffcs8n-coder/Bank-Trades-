@@ -83,9 +83,9 @@ function manualPositionAdvice(asset){
  const expires=expiry(m),secondsLeft=(expires-Date.now())/1000;
  const fees=Number(p.fees)||0,qty=Number(p.qty)||1,net=(bid-entry)*qty/100-fees;
  const sell=roi<=-.12||trail!==null&&drawdown<=-trail;
- const holdTillEnd=!sell&&secondsLeft>0&&secondsLeft<=90&&bid>=90&&net>0&&roi>=.10;
+ const holdTillEnd=!sell&&secondsLeft>0&&secondsLeft<=45&&bid>=95&&ask-bid<=2&&net>0&&roi>=.10;
  const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):holdTillEnd?'🟢 HOLD TILL END · REVIEW':secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
- return {action,reason:'Tracked position; see current bid and position details.'};
+ return {action,reason:holdTillEnd?'High-priced contract near expiry with fresh tight bid/ask and positive estimated net exit; NOT a guaranteed lock. Settlement can still reverse.':'Tracked position; see current bid and position details.'};
 }
 // Large in-page visual alerts. Only works while the dashboard page is active.
 let screenAlertsEnabled=false;
@@ -104,10 +104,10 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
   overlay.querySelector('button').addEventListener('click',()=>overlay.remove());
  }
  document.body.append(overlay);
- const color=kind==='sell'||kind==='down'?'#ed2929':kind==='up'?'#16a34a':'#eab308';
+ const color=kind==='sell'||kind==='down'?'#ed2929':kind==='up'?'#16a34a':kind==='hold'?'#a78bfa':'#eab308';
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
- overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':'🟡 DEMO / WAIT');
+ overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD TILL END · REVIEW':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  overlay.querySelector('button').focus();
 }
@@ -145,9 +145,10 @@ function evaluateScreenAlerts(){
   const trackedExit=manual||hypothetical;
   const exitText=trackedExit?.action||'';
   const isExit=/SELL FAST|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
-  const kind=isExit?'sell':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
+  const isHoldReview=/HOLD TILL END · REVIEW/.test(exitText);
+  const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
   if(kind){
-   const message=isExit?exitText+' · '+(trackedExit.reason||'Tracked position exit review'):
+   const message=(isExit||isHoldReview)?exitText+' · '+(trackedExit.reason||'Tracked position review'):
     kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':'Paper position SELL FAST';
    showScreenAlert(asset,kind,message,ticker);
   }
