@@ -74,6 +74,51 @@ function manualPositionAdvice(asset){
  const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):holdTillEnd?'🟢 HOLD TILL END · REVIEW':secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
  return {action,reason:'Tracked position; see current bid and position details.'};
 }
+// Large in-page visual alerts. Only works while the dashboard page is active.
+let screenAlertsEnabled=false;
+const seenScreenAlerts=new Set();
+function showScreenAlert(asset,kind,label,ticker){
+ if(!screenAlertsEnabled||document.hidden)return;
+ const key=[asset,kind,label,ticker].join('|');
+ if(seenScreenAlerts.has(key))return;
+ seenScreenAlerts.add(key);
+ if(seenScreenAlerts.size>150)seenScreenAlerts.clear();
+ let overlay=document.getElementById('bankScreenAlert');
+ if(!overlay){
+  const style=document.createElement('style');
+  style.textContent='@keyframes bankAlertPulse{0%,100%{opacity:.10}50%{opacity:.28}}@media(prefers-reduced-motion:reduce){#bankScreenAlert .bank-flash{animation:none!important}}#bankScreenAlert{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:white;font-family:system-ui,sans-serif}#bankScreenAlert .bank-flash{position:absolute;inset:0;pointer-events:none;animation:bankAlertPulse 1.1s ease-in-out 2}#bankScreenAlert .bank-box{position:relative;max-width:680px;width:100%;border:4px solid white;border-radius:24px;padding:28px 20px;background:#111b27;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}#bankScreenAlert .bank-head{font-size:clamp(28px,7vw,64px);font-weight:900}#bankScreenAlert button{margin-top:24px;font-size:22px;font-weight:800;padding:14px 35px;border:0;border-radius:12px;cursor:pointer}';
+  document.head.append(style);
+  overlay=document.createElement('div');overlay.id='bankScreenAlert';overlay.setAttribute('role','alertdialog');overlay.setAttribute('aria-modal','true');
+  overlay.innerHTML='<div class="bank-flash"></div><div class="bank-box"><div class="bank-head"></div><p class="bank-detail" style="font-size:clamp(18px,3vw,27px)"></p><p style="font-size:14px">Signal guidance only · no order placed · verify live Kalshi price</p><button type="button">DISMISS</button></div>';
+  overlay.querySelector('button').addEventListener('click',()=>overlay.remove());
+ }
+ document.body.append(overlay);
+ const color=kind==='sell'?'#ed2929':'#16a34a';
+ overlay.querySelector('.bank-flash').style.background=color;
+ overlay.querySelector('.bank-box').style.borderColor=color;
+ overlay.querySelector('.bank-head').textContent=(kind==='sell'?'🚨 EXIT ALERT':'🟢 ENTRY ALERT')+' · '+asset;
+ overlay.querySelector('.bank-detail').textContent=label;
+ overlay.querySelector('button').focus();
+}
+function evaluateScreenAlerts(){
+ if(!screenAlertsEnabled||document.hidden)return;
+ for(const tr of document.querySelectorAll('#premiumRows tr')){
+  const asset=tr.dataset.asset,label=tr.children[3]?.textContent||'';
+  const ticker=roundSeen.get(asset)?.ticker;
+  if(!ticker)continue;
+  const kind=/SELL FAST|TAKE PROFITS|SELL\s*·\s*SIGNAL|EXIT ALERT/.test(label)?'sell':/BUY UP|BUY DOWN/.test(label)?'buy':null;
+  if(kind)showScreenAlert(asset,kind,label,ticker);
+ }
+}
+document.addEventListener('DOMContentLoaded',()=>{
+ const button=document.getElementById('enablePush');if(!button)return;
+ button.addEventListener('click',()=>{
+  screenAlertsEnabled=true;
+  button.dataset.screenAlerts='on';
+  button.title='Full-screen entry/exit alerts enabled while this page is open. Background push requires separate server configuration.';
+  evaluateScreenAlerts();
+ });
+});
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
@@ -129,6 +174,7 @@ function syncSignals(){
    }
   }
  });
+ evaluateScreenAlerts();
 }
 window.addEventListener('banktrades:shared-signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const s=engineSignals.find(x=>x.asset===selected);if(s)$('premiumAI').textContent=selected+' · '+s.action+' · '+s.reason;});
 window.addEventListener('banktrades:signals',event=>{const incoming=Array.isArray(event.detail)?event.detail:[];if(incoming.some(x=>x?.roundAssessment||x?.forecast||x?.position))engineSignals=incoming;else if(!engineSignals.length)engineSignals=incoming;syncSignals();const panel=$('premiumAI');if(!panel)return;const sig=engineSignals.find(s=>s.asset===selected);if(!sig){panel.textContent=selected+' · Waiting for a verified signal evaluation.';return}const action=(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');panel.textContent=selected+' · '+action+' · '+(sig.reason||'No reason provided')+(sig.action==='WAIT'?'':' · EXPERIMENTAL — not a calibrated win probability');});
