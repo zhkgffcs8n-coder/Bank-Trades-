@@ -1,4 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
+import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
@@ -57,6 +58,15 @@ export default async()=>{
     }
    }
   }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
+  // Independently journal one Primal research decision per contract, including abstentions.
+  // Never promote this shadow output into live/paper execution without prospective proof.
+  try{
+   const key='primal-brain/shadow/v1/'+m.ticker;
+   if(!await db.get(key,{type:'json'})){
+    const snapshot=recentContractSamples(recent,m.ticker,now);
+    await db.setJSON(key,{...analyzeBrain(m,snapshot,now),asset,expiresAt:m._expiry,status:'PENDING'});
+   }
+  }catch(e){console.warn('Primal shadow brain observation unavailable',asset,String(e))}
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
   try{
    const comparisonKey='comparison/v1/'+m.ticker;
