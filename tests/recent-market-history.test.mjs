@@ -37,3 +37,11 @@ test('invalid window settings fail closed',()=>{
   assert.throws(()=>mergeRecentMarketHistory([],[],asset,cutoff,now,0),/Invalid/);
   assert.throws(()=>mergeRecentMarketHistory([],[],asset,cutoff,NaN),/Invalid/);
 });
+
+test('recovery count excludes rolling rows discarded by output limit',()=>{
+  const newest=row(now-30_000,'KXBTC15M-NEW');
+  const old=row(now-120_000,'KXBTC15M-OLD');
+  const result=mergeRecentMarketHistory([newest],[old],asset,cutoff,now,1);
+  assert.deepEqual(result.records,[newest]);
+  assert.equal(result.recoveredFromRolling,0);
+});
