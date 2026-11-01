@@ -3,7 +3,7 @@ import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,multiWindowMomentum} from '../../src/research-model.mjs';
-import {pendingTrainingReview} from '../../src/training-provenance.mjs';
+import {pendingTrainingReview,frozenTrainingTargets} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
 import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
@@ -133,12 +133,12 @@ export default async()=>{
   }catch(e){console.warn('Early-exit shadow audit unavailable',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
-   const assetModelForPrediction=await db.get('training/model/'+asset,{type:'json'});
+   const assetModelForPrediction=await db.get('training/model/'+asset,{type:'json'})||initialModel();
    const globalModelForPrediction=await db.get('training/model',{type:'json'})||initialModel();
-   const model=assetModelForPrediction||globalModelForPrediction;
+   const model=assetModelForPrediction;
    const baseline=Math.max(.02,Math.min(.98,record.yesMid));
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
-   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),assetPrediction:assetModelForPrediction?predict(assetModelForPrediction,baseline,features):null,globalPrediction:predict(globalModelForPrediction,baseline,features)});
+   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),assetPrediction:predict(assetModelForPrediction,baseline,features),globalPrediction:predict(globalModelForPrediction,baseline,features)});
    collection.newPredictions++;
   }
  }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
@@ -177,10 +177,11 @@ export default async()=>{
     if(result){
      await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
      // Existing legacy labels may already have trained weights. Never count them twice.
-     if(!cached&&Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
+     const targets=frozenTrainingTargets(rec);
+     if(!cached&&(targets.global||targets.asset)){
       // The global model must be scored against its OWN prediction frozen
       // before settlement, not the separate asset model's prediction.
-      if(Number.isFinite(rec.globalPrediction)&&rec.globalPrediction>0&&rec.globalPrediction<1){
+      if(targets.global){
        model=learn(model,{...rec,prediction:rec.globalPrediction},result==='yes'?1:0);
        await db.setJSON('training/model',model);
       }
@@ -188,16 +189,16 @@ export default async()=>{
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       // Do not score an asset model using a global fallback forecast.
       // Only an asset-specific prediction frozen before settlement is valid.
-      if(Number.isFinite(rec.assetPrediction)&&rec.assetPrediction>0&&rec.assetPrediction<1){
+      if(targets.asset){
        assetModels[assetKey]=learn(assetModel,{...rec,prediction:rec.assetPrediction},result==='yes'?1:0);
       }else{
        assetModels[assetKey]=assetModel;
       }
       trainedThisRun++;
       trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
-      await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
+      if(targets.asset)await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
       // Persist idempotency evidence after both models have been updated.
-      await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalCount:model.count,assetCount:assetModels[assetKey].count});
+      await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
 
      }else{
       await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
