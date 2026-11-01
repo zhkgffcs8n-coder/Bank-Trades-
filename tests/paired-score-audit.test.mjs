@@ -42,3 +42,18 @@ test('rejects invalid comparison options',()=>{
  assert.throws(()=>pairedScoreAudit([],{archiveComplete:'yes'}));
  assert.throws(()=>pairedScoreAudit([],{margin:-.1}));
 });
+
+test('conflicting market provenance blocks eligibility even with 100 other good matches',()=>{
+ const records=Array.from({length:101},(_,i)=>row(i));
+ const clean=pairedScoreAudit(records,complete);
+ assert.equal(clean.eligible,true);
+ const conflicted=pairedScoreAudit([...records,row(100,.2,.6,0)],complete);
+ assert.equal(conflicted.count,100);
+ assert.equal(conflicted.conflictingMarketCount,1);
+ assert.ok(conflicted.candidateBrier<conflicted.baselineBrier);
+ assert.equal(conflicted.eligible,false);
+ assert.match(conflicted.reason,/Conflicting duplicate contracts/);
+ const reversed=pairedScoreAudit([row(100,.2,.6,0),...records],complete);
+ assert.equal(reversed.eligible,false);
+ assert.equal(reversed.conflictingMarketCount,1);
+});
