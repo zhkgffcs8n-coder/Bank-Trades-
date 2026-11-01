@@ -1,5 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
-import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
+import {performance,gatePaperEntry,hasRecordedNumber} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
@@ -11,7 +11,7 @@ export default async()=>{
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
  // Reconcile historical simulated early exits from recorded executable bids without paying cash twice.
  for(const t of ledger.trades.filter(x=>x.status==='CLOSED'&&!x.paperExitOnly)){
-  if(Number.isFinite(Number(t.exitBid))&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))){
+  if(hasRecordedNumber(t.exitBid)&&hasRecordedNumber(t.pnl)&&hasRecordedNumber(t.cost)){
    t.paperExitOnly=true;t.settlement=Number(t.pnl)>0?'WIN':Number(t.pnl)<0?'LOSS':'TIE';t.settledAt=t.exitedAt||now;
   }
  }
@@ -35,7 +35,7 @@ export default async()=>{
   if(t.status==='CLOSED'){
    // A simulated early exit has already returned its proceeds to cash. Never pay it twice.
    // Classify the actual paper exit P/L, not the later market outcome.
-   if(!Number.isFinite(Number(t.pnl)))continue;
+   if(!hasRecordedNumber(t.pnl))continue;
    t.settlement=Number(t.pnl)>0?'WIN':Number(t.pnl)<0?'LOSS':'TIE';
    t.marketResult=result;t.outcomeVerifiedAt=now;
   }else{
@@ -87,20 +87,16 @@ export default async()=>{
  const entryPaused=true;
  const initialCash=1000;
  const openCost=ledger.trades.filter(t=>t.status==='OPEN').reduce((sum,t)=>sum+(Number(t.cost)||0),0);
- const recordedPnl=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status)&&Number.isFinite(Number(t.pnl))).reduce((sum,t)=>sum+Number(t.pnl),0);
+ const recordedPnl=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status)&&hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0);
  const expectedCash=initialCash+recordedPnl-openCost;
  const cashDifference=Number((Number(ledger.cash)-expectedCash).toFixed(2));
  await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
- if(entryPaused){
-  ledger.updatedAt=now;
-  await s.setJSON('ledger',ledger);
-  await s.setJSON('last-run',{at:now,running:!!state?.running,entriesPaused:true,reason:'Safety circuit breaker; exits and settlement still processed'});
-  return new Response(null,{status:204});
- }
+ // Keep quote-based signal observations flowing during the paper-entry safety pause.
+ // No simulated positions may open while the circuit breaker is active.
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const globalModel=await hdb.get('training/model',{type:'json'});
  const research={model:globalModel,status:training};
- const roundAudit={at:now,running:true,markets:{}};
+ const roundAudit={at:now,running:true,entriesPaused,markets:{}};
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
@@ -131,6 +127,12 @@ export default async()=>{
     }
    }catch(e){console.warn('Signal observation journal unavailable',asset,String(e))}
 
+   // Keep the first-observation research journal active, but never open a new
+   // simulated position while the loss-review circuit breaker is enabled.
+   if(entryPaused){
+    roundAudit.markets[asset]={status:'PAPER_ENTRIES_PAUSED',ticker:m.ticker,signal:signal.action,reason:'Safety circuit breaker: research continues; no new paper entries'};
+    continue;
+   }
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
