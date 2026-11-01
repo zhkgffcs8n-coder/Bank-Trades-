@@ -1,3 +1,4 @@
+import {sampleTimestampFromKey} from '../../src/sample-archive-key.mjs';
 import {getStore} from '@netlify/blobs';
 const ASSETS=new Set(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']);
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -12,7 +13,7 @@ export default async req=>{
  const keys=[];let cursor,hasMore=false;
  for(let page=0;page<20;page++){
   const listed=await db.list({prefix:'samples/'+asset+'/',limit:1000,...(cursor?{cursor}:{})});
-  keys.push(...listed.blobs.filter(b=>Number(b.key.split('/').at(-1))>=cutoff).map(b=>b.key));
+  keys.push(...listed.blobs.filter(b=>sampleTimestampFromKey(b.key,asset)>=cutoff).map(b=>b.key));
   cursor=listed.cursor;hasMore=!!cursor;
   if(!cursor)break;
  }
