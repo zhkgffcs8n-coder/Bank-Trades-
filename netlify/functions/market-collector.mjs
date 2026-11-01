@@ -294,7 +294,7 @@ export default async()=>{
   }
   // Cost-stressed comparison uses only prospective matched markets with explicit
   // finalized-outcome provenance. Legacy rows without provenance are excluded.
-  report.costAwareMatched=costAwarePairedAudit(rows);
+  report.costAwareMatched=costAwarePairedAudit(rows,{archiveComplete:!all.cursor});
   await db.setJSON('comparison/report-v1',report);
   // Settle only frozen, late-window paired predictions against independently
   // verified official binary outcomes. Separate resolved keys prevent recounting.
