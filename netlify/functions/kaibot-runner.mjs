@@ -82,6 +82,21 @@ export default async()=>{
  const paperMaxAsk=adaptiveGate?.status==='ACTIVE'?Math.min(65,Number(adaptiveGate.gate?.maxAsk)||65):65;
  const stats=performance(ledger.trades);
  await s.setJSON('performance',stats);
+ // Temporary fail-closed research circuit breaker after observed severe paper losses.
+ // Continue settlement and exit processing above; never erase or reset the ledger.
+ const entryPaused=true;
+ const initialCash=1000;
+ const openCost=ledger.trades.filter(t=>t.status==='OPEN').reduce((sum,t)=>sum+(Number(t.cost)||0),0);
+ const recordedPnl=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status)&&Number.isFinite(Number(t.pnl))).reduce((sum,t)=>sum+Number(t.pnl),0);
+ const expectedCash=initialCash+recordedPnl-openCost;
+ const cashDifference=Number((Number(ledger.cash)-expectedCash).toFixed(2));
+ await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
+ if(entryPaused){
+  ledger.updatedAt=now;
+  await s.setJSON('ledger',ledger);
+  await s.setJSON('last-run',{at:now,running:!!state?.running,entriesPaused:true,reason:'Safety circuit breaker; exits and settlement still processed'});
+  return new Response(null,{status:204});
+ }
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const globalModel=await hdb.get('training/model',{type:'json'});
  const research={model:globalModel,status:training};
