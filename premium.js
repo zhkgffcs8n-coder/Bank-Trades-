@@ -100,6 +100,25 @@ function showScreenAlert(asset,kind,label,ticker){
  overlay.querySelector('.bank-detail').textContent=label;
  overlay.querySelector('button').focus();
 }
+const voicedMarketStatuses=new Set();
+function evaluateLiveVoiceAlerts(){
+ if(document.hidden||Date.now()-latestPositionQuoteAt>10000)return;
+ for(const tr of document.querySelectorAll('#premiumRows tr')){
+  const asset=tr.dataset.asset,ticker=roundSeen.get(asset)?.ticker;
+  const label=tr.children[3]?.textContent||'';
+  if(!ticker)continue;
+  let action=null;
+  if(/SELL FAST|TAKE PROFITS|EXIT ALERT/.test(label))action=label.includes('TAKE PROFITS')?'TAKE PROFITS':'SELL FAST';
+  else if(/POSSIBLE FLIP/.test(label))action='POSSIBLE FLIP';
+  else if(/BUY UP/.test(label))action='BUY UP';
+  else if(/BUY DOWN/.test(label))action='BUY DOWN';
+  if(!action)continue;
+  const key=[asset,ticker,action].join('|');
+  if(voicedMarketStatuses.has(key))continue;
+  voicedMarketStatuses.add(key);if(voicedMarketStatuses.size>200)voicedMarketStatuses.clear();
+  window.dispatchEvent(new CustomEvent('banktrades:live-voice-alert',{detail:{asset,ticker,action}}));
+ }
+}
 function evaluateScreenAlerts(){
  if(!screenAlertsEnabled||document.hidden)return;
  for(const tr of document.querySelectorAll('#premiumRows tr')){
@@ -185,6 +204,7 @@ function syncSignals(){
   }
  });
  evaluateScreenAlerts();
+ evaluateLiveVoiceAlerts();
 }
 window.addEventListener('banktrades:shared-signals',event=>{engineSignals=Array.isArray(event.detail)?event.detail:[];syncSignals();const s=engineSignals.find(x=>x.asset===selected);if(s)$('premiumAI').textContent=selected+' · '+s.action+' · '+s.reason;});
 window.addEventListener('banktrades:signals',event=>{const incoming=Array.isArray(event.detail)?event.detail:[];if(incoming.some(x=>x?.roundAssessment||x?.forecast||x?.position))engineSignals=incoming;else if(!engineSignals.length)engineSignals=incoming;syncSignals();const panel=$('premiumAI');if(!panel)return;const sig=engineSignals.find(s=>s.asset===selected);if(!sig){panel.textContent=selected+' · Waiting for a verified signal evaluation.';return}const action=(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');panel.textContent=selected+' · '+action+' · '+(sig.reason||'No reason provided')+(sig.action==='WAIT'?'':' · EXPERIMENTAL — not a calibrated win probability');});
