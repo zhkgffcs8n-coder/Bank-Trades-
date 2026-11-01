@@ -95,24 +95,17 @@ export default async()=>{
  // Track every sampled contract, not just the latest contract for each asset.
  // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
-  // Scan pending settlements across pages so the first 1,000 old keys cannot
-  // permanently starve newer contracts of official outcome verification.
-  const pendingKeys=[];let pendingCursor;
-  do{
-   const page=await db.list({prefix:'pending/',limit:1000,...(pendingCursor?{cursor:pendingCursor}:{})});
-   pendingKeys.push(...page.blobs.map(b=>b.key));
-   pendingCursor=page.cursor;
-  }while(pendingCursor&&pendingKeys.length<10000);
-  if(pendingCursor)console.warn('Pending settlement scan capped at 10,000 records; next run will retry');
-  const pending=(await Promise.all(pendingKeys.map(key=>db.get(key,{type:'json'})))).filter(Boolean);
+  // Process bounded, resumable settlement pages to avoid exceeding scheduled
+  // function runtime or starving new contracts behind older pending keys.
   let model=await db.get('training/model',{type:'json'})||initialModel();
   const assetModels={};
-  for(const rec of pending){
-   if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)continue;
+  await scanBlobPage(db,{prefix:'pending/',cursorKey:'scan-cursors/pending-settlements-v1',limit:150},async item=>{
+   const rec=await db.get(item.key,{type:'json'});
+   if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)return;
    const labelKey='outcomes/'+rec.ticker;
    const cached=await db.get(labelKey,{type:'json'});
    // Reverify legacy labels instead of discarding pending records on sight.
-   if(trustedStoredFinalizedOutcome(cached,rec.ticker)){await db.delete('pending/'+rec.ticker);continue;}
+   if(trustedStoredFinalizedOutcome(cached,rec.ticker)){await db.delete('pending/'+rec.ticker);return;}
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
     const result=verifiedFinalizedBinaryOutcome(m,rec.ticker);
@@ -129,8 +122,8 @@ export default async()=>{
      }
      await db.delete('pending/'+rec.ticker);
     }
-   }catch{}
-  }
+   }catch(e){console.warn('Pending settlement lookup unavailable',rec.ticker,String(e))}
+  });
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
