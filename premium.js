@@ -177,8 +177,8 @@ document.addEventListener('DOMContentLoaded',()=>{
  button.insertAdjacentElement('afterend',testButton);
  const researchNotice=document.createElement('div');
  researchNotice.id='bankResearchSignalNotice';
- researchNotice.style.cssText='margin:8px 0;padding:8px 12px;border:1px solid #facc15;border-radius:9px;background:rgba(250,204,21,.12);color:#fde68a;font-size:12px;font-weight:800;line-height:1.4';
- researchNotice.textContent='⚠️ RESEARCH UP / DOWN ARROWS ARE NOT OFFICIAL BUY SIGNALS. TEST SCREEN ALERTS ARE DEMOS ONLY. Only a qualified BUY UP or BUY DOWN status is an engine entry signal; no trade is automatically placed.';
+ researchNotice.style.cssText='margin:8px 0;padding:9px 12px;border:2px solid #facc15;border-radius:9px;background:rgba(250,204,21,.18);color:#fde68a;font-size:13px;font-weight:900;line-height:1.4';
+ researchNotice.textContent='⚠️ R: UP ↗ / R: DOWN ↘ ARE RESEARCH ONLY — NOT OFFICIAL BUY SIGNALS. Wait for a qualified BUY UP or BUY DOWN alert. Test screen alerts are demos; no trades are placed automatically.';
  testButton.insertAdjacentElement('afterend',researchNotice);
  let nextTest='buy';
  testButton.addEventListener('click',()=>{
