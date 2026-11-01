@@ -67,6 +67,30 @@ function chart(){
  pts.forEach((p,i)=>{const x=i*w/(pts.length-1),y=h-12-(p.v-lo)/(hi-lo)*(h-25);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.stroke();
  ctx.fillStyle='#f5c455';ctx.font='bold 12px system-ui';ctx.fillText(pts[pts.length-1].v.toFixed(2)+'¢',12,20);
 }
+// Foreground-only fast paper exit alerts; does not mutate the server ledger or place orders.
+const exitAlerted=new Map();
+function monitorPaperExits(results,age){
+ if(!paperBotRunning||!Number.isFinite(age)||age<0||age>10000)return;
+ const now=Date.now();
+ for(const t of paperPositions.filter(x=>x.status==='OPEN')){
+  const m=results.find(x=>x.asset===t.asset)?.market;
+  if(!m||m.ticker!==t.ticker)continue;
+  const bid=price(m,t.side==='up'?'yes_bid':'no_bid');
+  const ask=price(m,t.side==='up'?'yes_ask':'no_ask');
+  const entry=Number(t.ask);
+  if(!Number.isFinite(bid)||!Number.isFinite(ask)||!Number.isFinite(entry)||entry<=0||bid<=0||ask<bid||ask-bid>5)continue;
+  const roi=(bid-entry)/entry;
+  const reason=roi<=-.12?'STOP LOSS':roi>=.20?'TAKE PROFIT':null;
+  if(!reason)continue;
+  const key=t.id+':'+reason;
+  if(now-(exitAlerted.get(key)||0)<60000)continue;
+  exitAlerted.set(key,now);
+  const message='PAPER EXIT ALERT · '+t.asset+' '+String(t.side).toUpperCase()+' · '+reason+' · bid '+bid.toFixed(1)+'¢ · estimated '+(roi*100).toFixed(1)+'% before fees. NOT EXECUTED.';
+  const panel=$('premiumAI');if(panel)panel.textContent=message;
+  window.dispatchEvent(new CustomEvent('banktrades:paper-exit-alert',{detail:{id:t.id,asset:t.asset,ticker:t.ticker,reason,bid,roi,at:now,executed:false}}));
+ }
+ if(exitAlerted.size>500)exitAlerted.clear();
+}
 let fetching=false,lastFetch=0,failures=0;
 async function update(){
  if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:3000))return;fetching=true;lastFetch=Date.now();
@@ -76,6 +100,7 @@ async function update(){
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
+ monitorPaperExits(d.results,age);
  $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
  let open=0;
  for(const asset of assets){
