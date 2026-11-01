@@ -2,7 +2,7 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
-import {initialModel,predict,learn,learningReport} from '../../src/research-model.mjs';
+import {initialModel,predict,learn,learningReport,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
@@ -39,7 +39,7 @@ export default async()=>{
    recent.push(record);
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
-  await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
+  await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
   // One immutable late-window observation per contract, scored independently
   // by A and B on the same fetched quote. Research only, never an order.
