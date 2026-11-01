@@ -231,7 +231,7 @@ function syncSignals(){
    if(windows.length){
     const watch=document.createElement('small');
     watch.style.display='block';watch.style.fontSize='10px';watch.style.marginTop='4px';watch.style.opacity='.9';
-    watch.textContent='40–60¢ PRICE WATCH · '+windows.join(' / ')+' · entry not validated';
+    watch.textContent='ENTRY CANDIDATE · '+windows.join(' / ')+' · watch only, not a qualified BUY';
     cell.append(watch);
    }
   }
