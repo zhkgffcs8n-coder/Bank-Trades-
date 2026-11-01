@@ -37,3 +37,15 @@ export function learningReport(model,minCount=100){
   status:count<minCount?'INSUFFICIENT VERIFIED OUTCOMES':improvement===null?'MISSING PERFORMANCE DATA':improvement>0?'OUTPERFORMED BASELINE IN RECORDED SAMPLE':'DID NOT BEAT BASELINE',
   caveat:'Retrospective aggregate only. Not independent forward validation or proof of profitable trades.'};
 }
+
+// Conservative, read-only model selection for prospective research.
+// A candidate must improve out-of-sample prediction error before replacing a baseline.
+export function compareValidationWindows(candidate,baseline,{minimum=100,margin=0.005}={}){
+ const usable=x=>x&&Number.isInteger(x.count)&&x.count>=minimum&&Number.isFinite(x.brier)&&x.brier>=0;
+ if(!usable(candidate)||!usable(baseline))return {eligible:false,reason:'Insufficient verified holdout observations for both models'};
+ const candidateError=candidate.brier/candidate.count,baselineError=baseline.brier/baseline.count;
+ const improvement=baselineError-candidateError;
+ return {eligible:improvement>margin,candidateError,baselineError,improvement,
+  reason:improvement>margin?'Candidate beats baseline on recorded holdout':'No material out-of-sample improvement',
+  caution:'Holdout records must be genuinely prospective, non-overlapping, and scored before settlement. No automatic trade authorization.'};
+}
