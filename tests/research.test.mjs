@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialModel,predict,learn} from '../src/research-model.mjs';
+import {initialModel,predict,learn,modelValidated} from '../src/research-model.mjs';
 import legacy from '../netlify/functions/lib/legacy/data.cjs';
 import {paperSignal} from '../netlify/functions/lib/shared-paper-signals.mjs';
 import {buildCommitteeSnapshot,coordinateEngines} from '../src/engine-team.mjs';
@@ -83,4 +83,14 @@ test('shadow committee requires fresh same-contract features and normalized exec
  const invalidQuote=buildCommitteeSnapshot({...market,yes_ask_dollars:'NaN'},records,now);
  assert.equal(invalidQuote.status,'MISSING_INPUT');
  assert.ok(invalidQuote.missing.some(x=>x.includes('bid/ask')));
+});
+
+test('learned forecasts require enough finalized predictions and better Brier score than baseline',()=>{
+ const good={weights:[0.1,0,0,0],count:100,brier:18,baselineBrier:22};
+ assert.equal(modelValidated(good),true);
+ assert.equal(modelValidated({...good,count:99}),false);
+ assert.equal(modelValidated({...good,brier:22}),false);
+ assert.equal(modelValidated({...good,brier:NaN}),false);
+ assert.equal(modelValidated({...good,weights:[Infinity,0,0,0]}),false);
+ assert.equal(modelValidated(null),false);
 });
