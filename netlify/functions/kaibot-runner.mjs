@@ -115,7 +115,7 @@ export default async()=>{
    // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
    // A quote-implied direction is not a validated edge and is never a real-money order.
    const yesAsk=q(m,'yes_ask'),noAsk=q(m,'no_ask'),yesBid=q(m,'yes_bid'),noBid=q(m,'no_bid');
-   if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote'};continue;}
+   if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote',secondsLeft:Math.round((m._e-now)/1000),quote:{yesAsk,noAsk,yesBid,noBid}};continue;}
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
    const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
@@ -139,7 +139,7 @@ export default async()=>{
    // Keep the first-observation research journal active, but never open a new
    // simulated position while the loss-review circuit breaker is enabled.
    if(entryPaused){
-    roundAudit.markets[asset]={status:'PAPER_ENTRIES_PAUSED',ticker:m.ticker,signal:signal.action,reason:'Safety circuit breaker: research continues; no new paper entries'};
+    roundAudit.markets[asset]={status:'PAPER_ENTRIES_PAUSED',ticker:m.ticker,signal:signal.action,qualified:['BUY UP','BUY DOWN'].includes(signal.action),score:Number.isFinite(Number(signal.score))?Number(signal.score):null,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null,quote:{yesAsk,noAsk,yesBid,noBid},reason:'Safety circuit breaker: research continues; no new paper entries'};
     continue;
    }
    // Only qualified shared-engine signals can open automatic paper positions.
