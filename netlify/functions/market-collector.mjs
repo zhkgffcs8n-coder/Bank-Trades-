@@ -28,7 +28,9 @@ export default async()=>{
   const yesBid=price(m,'yes_bid'),yesAsk=price(m,'yes_ask'),noBid=price(m,'no_bid'),noAsk=price(m,'no_ask');
   if(![yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||yesAsk<yesBid||noAsk<noBid){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,ticker:m.ticker,valid:false,error:'Incomplete or crossed bid/ask quotes'});return;}
   const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
-  const sampleKey='samples/'+asset+'/'+bucket;
+  // Include the contract ticker in the immutable sample key. Two contracts
+  // observed in the same minute must not silently share one training sample.
+  const sampleKey='samples/'+asset+'/'+bucket+'/'+m.ticker;
   const existing=await db.get(sampleKey,{type:'json'});
   // One immutable training sample per asset/minute. A fast UI refresh is not new training evidence.
   if(!existing)await db.setJSON(sampleKey,record);
