@@ -341,7 +341,7 @@ function syncSignals(){
   badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   cell.prepend(badge);
   // Small research-direction chip stays visible beside WAIT in compact mode.
-  // This is quote-implied research, NOT an approved buy signal.
+  // This is observed momentum research, NOT an approved buy signal.
   const researchChip=sig?.researchDirection;
   const researchFresh=researchChip?.mode==='SHADOW_ONLY'&&researchChip.roundTicker===ticker&&
     Number.isFinite(researchChip.asOf)&&Date.now()-researchChip.asOf>=0&&Date.now()-researchChip.asOf<90000;
@@ -350,8 +350,8 @@ function syncSignals(){
    const chip=document.createElement('span');
    const hue=direction==='UP'?'#4ade80':'#fb7185';
    chip.style.cssText='display:inline-block;vertical-align:middle;margin-left:7px;padding:3px 7px;border-radius:8px;border:1px solid '+hue+';color:'+hue+';font-size:11px;font-weight:800;white-space:nowrap';
-   chip.textContent=direction==='UP'?'↗ R: UP':'↘ R: DOWN';
-   chip.title='Research direction only, inferred from current quotes. Not a qualified BUY signal.';
+   chip.textContent=direction==='UP'?'↗ WATCH BUY UP':'↘ WATCH BUY DOWN';
+   chip.title='Research watch candidate based on observed momentum. NOT a qualified BUY signal or automatic order.';
    badge.after(chip);
   }
   const original=Array.from(cell.childNodes).find(n=>n.nodeType===3&&n.textContent.trim());
