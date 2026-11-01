@@ -138,7 +138,7 @@ export default async()=>{
    const model=assetModelForPrediction||globalModelForPrediction;
    const baseline=Math.max(.02,Math.min(.98,record.yesMid));
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
-   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),globalPrediction:predict(globalModelForPrediction,baseline,features)});
+   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),assetPrediction:assetModelForPrediction?predict(assetModelForPrediction,baseline,features):null,globalPrediction:predict(globalModelForPrediction,baseline,features)});
    collection.newPredictions++;
   }
  }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
@@ -185,7 +185,13 @@ export default async()=>{
       }
       const assetKey=String(rec.asset||'UNKNOWN');
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
-      assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
+      // Do not score an asset model using a global fallback forecast.
+      // Only an asset-specific prediction frozen before settlement is valid.
+      if(Number.isFinite(rec.assetPrediction)&&rec.assetPrediction>0&&rec.assetPrediction<1){
+       assetModels[assetKey]=learn(assetModel,{...rec,prediction:rec.assetPrediction},result==='yes'?1:0);
+      }else{
+       assetModels[assetKey]=assetModel;
+      }
       trainedThisRun++;
       trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
       await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
