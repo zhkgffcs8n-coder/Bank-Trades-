@@ -25,7 +25,8 @@ test('collector rechecks legacy outcomes and gates all new research resolutions'
   const source=readFileSync(new URL('../netlify/functions/market-collector.mjs',import.meta.url),'utf8');
   assert.match(source,/const cached=await db\.get\(labelKey,/);
   assert.match(source,/trustedStoredFinalizedOutcome\(cached,rec\.ticker\)/);
-  assert.match(source,/if\(!cached&&Array\.isArray\(rec\.features\)/);
+  assert.match(source,/const targets=frozenTrainingTargets\(rec\)/);
+  assert.match(source,/if\(!cached&&\(targets\.global\|\|targets\.asset\)\)/);
   const verifiedReaders=source.match(/trustedStoredFinalizedOutcome\(outcome,rec\.ticker\)/g)||[];
   assert.equal(verifiedReaders.length,2,'both shadow comparison readers must require verified finality');
   assert.doesNotMatch(source,/if\(!\['yes','no'\]\.includes\(outcome\?\.result\)\)continue;/);
