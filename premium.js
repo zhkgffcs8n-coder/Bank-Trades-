@@ -101,7 +101,7 @@ function monitorPaperExits(results,age){
   const peak=Math.max(prior.peak,bid);
   paperExitState.set(t.id,{peak,at:now});
   const drawdown=peak>0?(bid-peak)/peak:0;
-  const reason=roi<=-.12?'STOP LOSS':roi>=.20?'TAKE PROFIT':peak>entry*1.08&&drawdown<=-.10?'TRAILING EXIT':null;
+  const reason=roi<=-.12?'STOP LOSS':peak>entry*1.08&&drawdown<=-.10?'TRAILING EXIT':null;
   if(!reason)continue;
   const key=t.id+':'+reason;
   if(now-(exitAlerted.get(key)||0)<60000)continue;
