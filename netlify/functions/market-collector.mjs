@@ -4,6 +4,7 @@ import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
+import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2';
@@ -133,12 +134,12 @@ export default async()=>{
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
-   const listing=await db.list({prefix:'signal-observations/v1/',limit:1000});
-   const observations=(await Promise.all(listing.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-   for(const rec of observations){
-    if(rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
+   // Advance through bounded pages; old unresolved rows cannot starve new contracts.
+   await scanBlobPage(db,{prefix:'signal-observations/v1/',cursorKey:'scan-cursors/signal-observations-v1',limit:250},async item=>{
+    const rec=await db.get(item.key,{type:'json'});
+    if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)return;
     const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-    if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
+    if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))return;
     const yesWon=outcome.result==='yes';
     rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
     rec.counterfactual={
@@ -146,10 +147,12 @@ export default async()=>{
      downPnl:Number(((yesWon?0:100)-Number(rec.quote.noAsk)).toFixed(2)),
      unit:'cents per hypothetical contract; no fees, slippage or fills'
     };
-    await db.setJSON('signal-observations/v1/'+rec.ticker,rec);
-   }
+    await db.setJSON(item.key,rec);
+   });
+   const listing=await db.list({prefix:'signal-observations/v1/',limit:1000});
+   const observations=(await Promise.all(listing.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
    const resolved=observations.filter(x=>x.status==='RESOLVED'&&x.counterfactual);
-   const summary={at:now,version:1,observed:observations.length,resolved:resolved.length,pending:observations.length-resolved.length,truncated:Boolean(listing.cursor),
+   const summary={at:now,version:1,observed:observations.length,resolved:resolved.length,pending:observations.length-resolved.length,truncated:Boolean(listing.cursor),scope:listing.cursor?'FIRST_PAGE_ONLY':'ALL_OBSERVED',
     qualified:{n:0,wins:0,losses:0,pnlCents:0},abstained:{n:0,avoidedLosses:0,missedWins:0},
     note:'Retrospective first-observation comparison only; no actual fills and no causal proof of strategy improvement.'};
    for(const rec of resolved){
@@ -168,12 +171,11 @@ export default async()=>{
    await db.setJSON('signal-observations/report-v1',summary);
   }catch(e){console.warn('Signal outcome comparison unavailable',String(e))}
   // Resolve the same observed contracts for both strategies using official finalized outcomes.
-  const comparisons=await db.list({prefix:'comparison/v1/',limit:1000});
-  for(const item of comparisons.blobs){
+  await scanBlobPage(db,{prefix:'comparison/v1/',cursorKey:'scan-cursors/comparison-v1',limit:250},async item=>{
    const rec=await db.get(item.key,{type:'json'});
-   if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)continue;
+   if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)return;
    const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
-   if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))continue;
+   if(!trustedStoredFinalizedOutcome(outcome,rec.ticker))return;
    for(const engine of Object.values(rec.engines||{})){
     if(!['up','down'].includes(engine.side)||engine.action==='WAIT')continue;
     const won=(engine.side==='up')===(outcome.result==='yes');
@@ -182,11 +184,11 @@ export default async()=>{
    }
    rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
    await db.setJSON(item.key,rec);
-  }
+  });
   // Persist a transparent side-by-side report; one hypothetical contract per BUY.
   const all=await db.list({prefix:'comparison/v1/',limit:1000});
   const rows=(await Promise.all(all.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-  const report={at:now,version:1,totalObserved:rows.length,pending:rows.filter(r=>r.status==='PENDING').length,truncated:!!all.cursor,engines:{}};
+  const report={at:now,version:1,totalObserved:rows.length,pending:rows.filter(r=>r.status==='PENDING').length,truncated:!!all.cursor,scope:all.cursor?'FIRST_PAGE_ONLY':'ALL_OBSERVED',engines:{}};
   for(const name of ['original','upgraded']){
    const trades=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.[name]?.resolved).sort((a,b)=>a.at-b.at);
    let equity=0,peak=0,maxDrawdown=0;
@@ -199,26 +201,25 @@ export default async()=>{
   // Settle only frozen, late-window paired predictions against independently
   // verified official binary outcomes. Separate resolved keys prevent recounting.
   try{
-   const pendingPaired=await db.list({prefix:'paired-shadow/pending/v1/',limit:1000});
-   for(const blob of pendingPaired.blobs){
+   await scanBlobPage(db,{prefix:'paired-shadow/pending/v1/',cursorKey:'scan-cursors/paired-shadow-v1',limit:250},async blob=>{
     const row=await db.get(blob.key,{type:'json'});
-    if(!row||!Number.isFinite(row.expiresAt)||row.expiresAt>now-60000)continue;
+    if(!row||!Number.isFinite(row.expiresAt)||row.expiresAt>now-60000)return;
     const resolvedKey='paired-shadow/resolved/v1/'+row.ticker;
-    if(await db.get(resolvedKey,{type:'json'})){await db.delete(blob.key);continue;}
+    if(await db.get(resolvedKey,{type:'json'})){await db.delete(blob.key);return;}
     const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
     const resolved=resolvePairedShadow(row,outcome,now);
     if(resolved){
      await db.setJSON(resolvedKey,resolved);
      await db.delete(blob.key);
     }
-   }
-   if(pendingPaired.cursor)console.warn('Paired shadow pending list truncated; later contracts will retry');
+   });
   }catch(e){console.warn('Paired A/B settlement evaluation unavailable',String(e))}
   // Shared loss review: update a conservative research-only threshold from resolved
   // outcomes. The original strategy remains frozen as an unbiased baseline.
   // Never retrain on unresolved outcomes or automatically loosen risk limits.
   const resolved=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.original?.resolved).sort((a,b)=>a.at-b.at);
-  const training=resolved.slice(0,-30),holdout=resolved.slice(-30);
+  // Never select a research candidate from the oldest 1,000 rows if newer rows are excluded.
+  const training=all.cursor?[]:resolved.slice(0,-30),holdout=all.cursor?[]:resolved.slice(-30);
   const candidates=[{score:70,maxAsk:65},{score:75,maxAsk:65},{score:80,maxAsk:60},{score:85,maxAsk:55}];
   const evaluate=(set,gate)=>{
    const selected=set.filter(r=>Number(r.engines.original.score)>=gate.score&&Number(r.engines.original.ask)<=gate.maxAsk);
@@ -285,7 +286,7 @@ export default async()=>{
    registry={createdAt:now,after:resolved.length,afterAt:now,gate:{score:chosen.score,maxAsk:chosen.maxAsk},status:'COLLECTING',version:1};
    await db.setJSON(registryKey,registry);
   }
-  if(registry){
+  if(registry&&!all.cursor){
    const future=Number.isFinite(registry.afterAt)?resolved.filter(x=>x.at>registry.afterAt):resolved.slice(registry.after);
    const evalGate=evaluate(future,registry.gate);
    const baseline=evaluate(future,{score:0,maxAsk:100});
@@ -319,7 +320,7 @@ export default async()=>{
   await db.setJSON('comparison/research-gate-v1',{
    at:now,mode:'RESEARCH ONLY',baseline:'original unchanged',trainingCount:training.length,holdoutCount:holdout.length,
    candidates:scored,proposed:chosen?{score:chosen.score,maxAsk:chosen.maxAsk}:null,
-   note:'Uses past finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
+   note:all.cursor?'Archive exceeds first-page report; candidate selection and forward evaluation paused until complete aggregation. No automatic execution or promotion.':'Uses past finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
   });
 
   const perAsset={};
