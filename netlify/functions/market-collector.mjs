@@ -147,6 +147,8 @@ export default async()=>{
   // function runtime or starving new contracts behind older pending keys.
   let model=await db.get('training/model',{type:'json'})||initialModel();
   const assetModels={};
+  let trainedThisRun=0;
+  const trainedByAsset={};
   await scanBlobPage(db,{prefix:'pending/',cursorKey:'scan-cursors/pending-settlements-v1',limit:150},async item=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)return;
@@ -178,6 +180,8 @@ export default async()=>{
       const assetKey=String(rec.asset||'UNKNOWN');
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
+      trainedThisRun++;
+      trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
       await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
       // Persist idempotency evidence after both models have been updated.
       await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalCount:model.count,assetCount:assetModels[assetKey].count});
@@ -414,11 +418,11 @@ export default async()=>{
      warning:report.validated?'Aggregate prequential improvement only; independent future validation still required':'Do not use this model to justify a BUY signal'};
    }
   }
-  await db.setJSON('training/status',{at:now,measuredLearning:learningReport(model),count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset validation uses the same 100-outcome threshold as the live model gate.'});
+  await db.setJSON('training/status',{trainedThisRun,trainedByAsset,at:now,measuredLearning:learningReport(model),count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset validation uses the same 100-outcome threshold as the live model gate.'});
   collection.trainingSucceeded=true;
  }catch(e){collection.trainingError=String(e).slice(0,240);console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
- await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
+ await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainedThisRun,trainedByAsset,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };
