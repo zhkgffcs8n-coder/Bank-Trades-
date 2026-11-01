@@ -6,6 +6,7 @@ import {initialModel,predict,learn,learningReport,multiWindowMomentum} from '../
 import {pendingTrainingReview} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
+import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
 import {getStore} from '@netlify/blobs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 
@@ -107,6 +108,24 @@ export default async()=>{
     await db.setJSON(key,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,source:'hypothetical paper-only round forecast',direction,probability,edgeShadow,modelVersion:model.version||null,up:{ask:upCost,maxLoss:upCost,winProfit:1-upCost,expectedValue:probability-upCost},down:{ask:downCost,maxLoss:downCost,winProfit:1-downCost,expectedValue:(1-probability)-downCost},status:'PENDING',feeExcluded:true});
    }
   }catch(e){console.warn('Round paper forecast failed',asset,String(e))}
+  // Forward-only, read-only audit of the already frozen round forecast.
+  // Never pick an entry retrospectively or issue an order.
+  try{
+   const frozen=await db.get('round-paper/v1/'+m.ticker,{type:'json'});
+   if(frozen&&Number.isFinite(frozen.at)&&['UP','DOWN'].includes(frozen.direction)){
+    const side=frozen.direction==='UP'?'yes':'no';
+    const quotePath=recentContractSamples(recent,m.ticker,now).map(q=>({
+     t:q.observedAt,ask:q[side+'Ask'],bid:q[side+'Bid']
+    }));
+    const first=quotePath.find(q=>q.t>=frozen.at&&q.t<=frozen.at+65000);
+    const audit=earlyExitAudit([{id:m.ticker,signalAt:first?.t,expiresAt:m._expiry,quotes:quotePath}]);
+    await db.setJSON('early-exit/shadow/current/'+m.ticker,{
+     at:Date.now(),asset,ticker:m.ticker,frozenPredictionAt:frozen.at,
+     direction:frozen.direction,mode:'SHADOW_ONLY',audit,
+     note:'Research-only provisional quote path; incomplete until round closes. No actual trade or guaranteed fill.'
+    });
+   }
+  }catch(e){console.warn('Early-exit shadow audit unavailable',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
    const model=await db.get('training/model/'+asset,{type:'json'})||await db.get('training/model',{type:'json'})||initialModel();
