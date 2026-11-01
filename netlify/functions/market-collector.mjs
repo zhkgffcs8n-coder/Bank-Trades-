@@ -64,7 +64,14 @@ export default async()=>{
    const key='primal-brain/shadow/v1/'+m.ticker;
    if(!await db.get(key,{type:'json'})){
     const snapshot=recentContractSamples(recent,m.ticker,now);
-    await db.setJSON(key,{...analyzeBrain(m,snapshot,now),asset,expiresAt:m._expiry,status:'PENDING'});
+    // Do not permanently freeze an early insufficient-history WAIT.
+    // Evaluate at the first adequately sampled opportunity, or in the late window
+    // once at least four distinct same-contract minutes have been observed.
+    const distinct=new Set(snapshot.map(r=>r.t));
+    const span=snapshot.length?snapshot.at(-1).t-snapshot[0].t:0;
+    if(distinct.size>=4&&span>=180000&&m._expiry-now<=540000&&m._expiry-now>180000){
+     await db.setJSON(key,{...analyzeBrain(m,snapshot,now),asset,expiresAt:m._expiry,status:'PENDING'});
+    }
    }
   }catch(e){console.warn('Primal shadow brain observation unavailable',asset,String(e))}
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
