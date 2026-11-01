@@ -177,6 +177,22 @@ export default async()=>{
    summary.qualified.pnlCents=Number(summary.qualified.pnlCents.toFixed(2));
    await db.setJSON('signal-observations/report-v1',summary);
   }catch(e){console.warn('Signal outcome comparison unavailable',String(e))}
+  // Score the shadow brain only after official settlement. Never rewrite its earlier decision.
+  try{
+   await scanBlobPage(db,{prefix:'primal-brain/shadow/v1/',cursorKey:'scan-cursors/primal-brain-v1',limit:200},async item=>{
+    const row=await db.get(item.key,{type:'json'});
+    if(!row||row.status!=='PENDING'||row.expiresAt>now-60000)return;
+    const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
+    if(!trustedStoredFinalizedOutcome(outcome,row.ticker))return;
+    const direction=row.candidateDirection;
+    const cost=Number(row.metrics?.ask);
+    const evaluated=row.eligible===true&&['up','down'].includes(direction)&&Number.isFinite(cost)&&cost>0&&cost<1;
+    const correct=evaluated?((direction==='up')===(outcome.result==='yes')):null;
+    row.status='RESOLVED';row.resolvedAt=now;row.outcome=outcome.result;
+    row.evaluation={evaluated,correct,grossPnl:evaluated?Number(((correct?1:0)-cost).toFixed(4)):null,netPnl:null,feeExcluded:true,source:'Official finalized binary outcome; hypothetical one-contract entry only'};
+    await db.setJSON(item.key,row);
+   });
+  }catch(e){console.warn('Primal shadow settlement scoring unavailable',String(e))}
   // Resolve the same observed contracts for both strategies using official finalized outcomes.
   await scanBlobPage(db,{prefix:'comparison/v1/',cursorKey:'scan-cursors/comparison-v1',limit:250},async item=>{
    const rec=await db.get(item.key,{type:'json'});
