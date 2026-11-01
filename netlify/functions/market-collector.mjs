@@ -19,7 +19,11 @@ async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort()
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 export default async()=>{
  const db=store(),now=Date.now(),bucket=Math.floor(now/60000)*60000;
- const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0};
+ const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0,researchFailures:0,researchErrors:[]};
+ const researchFailure=(scope,error,asset=null)=>{
+  collection.researchFailures++;
+  if(collection.researchErrors.length<16)collection.researchErrors.push({scope,asset,error:String(error).slice(0,160)});
+ };
  await db.setJSON('collector/heartbeat',{startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
@@ -45,7 +49,7 @@ export default async()=>{
    // Repeated scheduled invocations must not silently rewrite historical momentum.
    recent.push(existing&&existing.ticker===m.ticker?existing:record);
    await db.setJSON(key,recent.slice(-12));
-  }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
+  }catch(e){researchFailure('recent-snapshot',e,asset);console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
   // One immutable late-window observation per contract, scored independently
@@ -65,7 +69,7 @@ export default async()=>{
      }
     }
    }
-  }catch(e){console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
+  }catch(e){researchFailure('paired-shadow-snapshot',e,asset);console.warn('Paired A/B shadow snapshot unavailable',asset,String(e))}
   // Independently journal one Primal research decision per contract, including abstentions.
   // Never promote this shadow output into live/paper execution without prospective proof.
   try{
@@ -81,7 +85,7 @@ export default async()=>{
      await db.setJSON(key,{...analyzeBrain(m,snapshot,now),asset,expiresAt:m._expiry,status:'PENDING'});
     }
    }
-  }catch(e){console.warn('Primal shadow brain observation unavailable',asset,String(e))}
+  }catch(e){researchFailure('primal-shadow-snapshot',e,asset);console.warn('Primal shadow brain observation unavailable',asset,String(e))}
   // Parallel shadow comparison: immutable per-market entry decisions; never place orders.
   try{
    const comparisonKey='comparison/v1/'+m.ticker;
@@ -96,7 +100,7 @@ export default async()=>{
      await db.setJSON(comparisonKey,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,engines:{original:a,upgraded:b},status:'PENDING',version:1});
     }
    }
-  }catch(e){console.warn('Shadow comparison collection failed',asset,String(e))}
+  }catch(e){researchFailure('comparison-snapshot',e,asset);console.warn('Shadow comparison collection failed',asset,String(e))}
 
   // One immutable, explicitly hypothetical paper direction per contract round.
   // Record both sides and their entry costs even if the live recommendation is WAIT.
@@ -112,7 +116,7 @@ export default async()=>{
     const direction=probability>=0.5?'UP':'DOWN';
     await db.setJSON(key,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,source:'hypothetical paper-only round forecast',direction,probability,edgeShadow,modelVersion:model.version||null,up:{ask:upCost,maxLoss:upCost,winProfit:1-upCost,expectedValue:probability-upCost},down:{ask:downCost,maxLoss:downCost,winProfit:1-downCost,expectedValue:(1-probability)-downCost},status:'PENDING',feeExcluded:true});
    }
-  }catch(e){console.warn('Round paper forecast failed',asset,String(e))}
+  }catch(e){researchFailure('round-forecast',e,asset);console.warn('Round paper forecast failed',asset,String(e))}
   // Forward-only, read-only audit of the already frozen round forecast.
   // Never pick an entry retrospectively or issue an order.
   try{
@@ -130,7 +134,7 @@ export default async()=>{
      note:'Research-only provisional quote path; incomplete until round closes. No actual trade or guaranteed fill.'
     });
    }
-  }catch(e){console.warn('Early-exit shadow audit unavailable',asset,String(e))}
+  }catch(e){researchFailure('early-exit-shadow',e,asset);console.warn('Early-exit shadow audit unavailable',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
    const assetModelForPrediction=await db.get('training/model/'+asset,{type:'json'})||initialModel();
@@ -246,7 +250,7 @@ export default async()=>{
    }
    summary.qualified.pnlCents=Number(summary.qualified.pnlCents.toFixed(2));
    await db.setJSON('signal-observations/report-v1',summary);
-  }catch(e){console.warn('Signal outcome comparison unavailable',String(e))}
+  }catch(e){researchFailure('signal-outcome-scoring',e);console.warn('Signal outcome comparison unavailable',String(e))}
   // Score the shadow brain only after official settlement. Never rewrite its earlier decision.
   try{
    await scanBlobPage(db,{prefix:'primal-brain/shadow/v1/',cursorKey:'scan-cursors/primal-brain-v1',limit:200},async item=>{
@@ -262,7 +266,7 @@ export default async()=>{
     row.evaluation={evaluated,correct,grossPnl:evaluated?Number(((correct?1:0)-cost).toFixed(4)):null,netPnl:null,feeExcluded:true,source:'Official finalized binary outcome; hypothetical one-contract entry only'};
     await db.setJSON(item.key,row);
    });
-  }catch(e){console.warn('Primal shadow settlement scoring unavailable',String(e))}
+  }catch(e){researchFailure('primal-shadow-scoring',e);console.warn('Primal shadow settlement scoring unavailable',String(e))}
   // Resolve the same observed contracts for both strategies using official finalized outcomes.
   await scanBlobPage(db,{prefix:'comparison/v1/',cursorKey:'scan-cursors/comparison-v1',limit:250},async item=>{
    const rec=await db.get(item.key,{type:'json'});
@@ -311,7 +315,7 @@ export default async()=>{
      await db.delete(blob.key);
     }
    });
-  }catch(e){console.warn('Paired A/B settlement evaluation unavailable',String(e))}
+  }catch(e){researchFailure('paired-shadow-scoring',e);console.warn('Paired A/B settlement evaluation unavailable',String(e))}
   // Shared loss review: update a conservative research-only threshold from resolved
   // outcomes. The original strategy remains frozen as an unbiased baseline.
   // Never retrain on unresolved outcomes or automatically loosen risk limits.
@@ -436,7 +440,7 @@ export default async()=>{
   collection.trainingSucceeded=true;
  }catch(e){collection.trainingError=String(e).slice(0,240);console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
- await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainedThisRun,trainedByAsset,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
+ await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0&&collection.researchFailures===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainedThisRun,trainedByAsset,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,researchFailures:collection.researchFailures,researchErrors:collection.researchErrors,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };
