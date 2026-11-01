@@ -127,6 +127,7 @@ export default async()=>{
      await hdb.setJSON(key,{version:1,asset,ticker:m.ticker,at:now,expiresAt:m._e,
       action:signal.action,score:signal.score||0,reason:signal.reason||'',
       quote:{yesAsk,noAsk,yesBid,noBid},secondsLeft:(m._e-now)/1000,
+      research:{modelForecast:Number.isFinite(signal.researchForecast)?signal.researchForecast:null,modelValidated:signal.researchValidated===true,modelMode:signal.researchMode||'NOT_VALIDATED',sampleCount:records.length,latestSampleAt:records.at(-1)?.t||null,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null,spreadCents:Math.max(yesAsk-yesBid,noAsk-noBid),baselineUpProbability:(yesBid+yesAsk)/200,estimatedUpEntryCost:yesAsk/100,estimatedDownEntryCost:noAsk/100,feeAndSlippageIncluded:false},
       decision:['BUY UP','BUY DOWN'].includes(signal.action)?'QUALIFIED':'ABSTAIN',
       status:'PENDING',source:'KaiBot scheduled shared signal evaluation; paper research only'});
     }
