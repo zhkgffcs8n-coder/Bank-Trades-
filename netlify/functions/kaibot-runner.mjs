@@ -46,9 +46,16 @@ export default async()=>{
  }
  // Paper-only exit simulation: use the executable bid, never the mid/ask.
  // This does not imply a real Kalshi order could fill at that price or quantity.
- for(const t of ledger.trades.filter(x=>x.status==='OPEN')){
+ const openForExit=ledger.trades.filter(x=>x.status==='OPEN');
+ // Fetch independent exit quotes concurrently so one slow market does not delay every other market.
+ const exitQuotes=await Promise.all(openForExit.map(async t=>{
+  try{return {market:(await get(base+'/markets/'+encodeURIComponent(t.ticker)))?.market};}
+  catch(e){return {error:e};}
+ }));
+ for(const [index,t] of openForExit.entries()){
   try{
-   const result=await get(base+'/markets/'+encodeURIComponent(t.ticker)),m=result?.market;
+   if(exitQuotes[index].error)throw exitQuotes[index].error;
+   const m=exitQuotes[index].market;
    if(!m||!['open','active'].includes(String(m.status||'').toLowerCase()))continue;
    const bid=q(m,t.side==='up'?'yes_bid':'no_bid'),ask=q(m,t.side==='up'?'yes_ask':'no_ask');
    if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5)continue;
