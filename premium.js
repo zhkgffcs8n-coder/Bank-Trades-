@@ -251,5 +251,10 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
-update();refreshSharedSignalTable();refreshPaperPositions();setInterval(refreshPaperPositions,12000);setInterval(()=>{update();refreshSharedSignalTable();reconcileHealth()},1000);
+update();refreshSharedSignalTable();refreshPaperPositions();
+// Recheck immediately on return from background or after connectivity is restored.
+function resumeLiveMonitoring(){if(document.hidden)return;lastFetch=0;signalLastFetch=0;update();refreshSharedSignalTable();refreshPaperPositions();reconcileHealth()}
+document.addEventListener('visibilitychange',resumeLiveMonitoring);
+window.addEventListener('online',resumeLiveMonitoring);
+setInterval(refreshPaperPositions,12000);setInterval(()=>{update();refreshSharedSignalTable();reconcileHealth()},1000);
 })();
