@@ -206,6 +206,18 @@ function syncSignals(){
   }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  // Surface the actual entry rejection instead of a generic WAIT.
+  const diag=sig?.entryDiagnostics;
+  if(action==='WAIT'&&diag?.filters){
+   const failed=Object.entries(diag.filters).filter(([,passed])=>passed===false).map(([name])=>name);
+   const detail=document.createElement('small');
+   detail.style.display='block';detail.style.fontSize='10px';detail.style.marginTop='4px';detail.style.opacity='.95';
+   detail.textContent='ENTRY CHECK · '+(diag.direction||'?')+' '+(Number.isFinite(diag.askCents)?diag.askCents+'¢':'')+
+    ' · '+(failed.length?'BLOCKED: '+failed.join(', '):'review pending')+
+    (Number.isFinite(diag.agreement)?' · agreement '+Math.round(diag.agreement*100)+'%':'')+
+    (Number.isFinite(diag.reversals)?' · reversals '+diag.reversals:'');
+   cell.append(detail);
+  }
   // Price-window watch uses current Kalshi quotes, never a fabricated fill or model signal.
   const liveMarket=latestPositionQuotes.find(x=>x.asset===tr.dataset.asset)?.market;
   if(liveMarket?.ticker===ticker&&Date.now()-latestPositionQuoteAt<10000){
