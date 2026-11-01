@@ -53,9 +53,13 @@ export default async()=>{
    const bid=q(m,t.side==='up'?'yes_bid':'no_bid'),ask=q(m,t.side==='up'?'yes_ask':'no_ask');
    if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5)continue;
    const roi=(bid-Number(t.ask))/Number(t.ask);
+   // Track the best observed sellable bid for a conservative paper trailing exit.
+   // Observations are only as frequent as the scheduled runner, not tick-by-tick.
+   t.peakObservedBid=Math.max(Number.isFinite(Number(t.peakObservedBid))?Number(t.peakObservedBid):0,bid);
+   const trailingDrawdown=t.peakObservedBid>0?(bid-t.peakObservedBid)/t.peakObservedBid:0;
    const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'');
    const secondsLeft=(expiry-now)/1000;
-   const reason=roi<=-.12?'PAPER STOP LOSS':roi>=.20?'PAPER TAKE PROFIT':secondsLeft>0&&secondsLeft<=90?'PAPER TIME EXIT':null;
+   const reason=roi<=-.12?'PAPER STOP LOSS':roi>=.20?'PAPER TAKE PROFIT':t.peakObservedBid>Number(t.ask)*1.08&&trailingDrawdown<=-.10?'PAPER TRAILING EXIT':secondsLeft>0&&secondsLeft<=90?'PAPER TIME EXIT':null;
    if(!reason)continue;
    const proceeds=Math.round(Number(t.qty)*bid)/100;
    t.status='CLOSED';t.exitReason=reason;t.exitBid=bid;t.exitedAt=now;
