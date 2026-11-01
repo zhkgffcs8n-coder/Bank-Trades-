@@ -25,4 +25,5 @@ test('legacy paper settlements are reverified without replaying payouts',()=>{
  assert.doesNotMatch(review,/ledger\.cash\s*=/);
  assert.doesNotMatch(review,/t\.pnl\s*=/);
  assert.match(source,/unverifiedSettledRecordCount:/);
+ assert.match(source,/settlementConflictCount:/);
 });
