@@ -39,6 +39,18 @@ function syncSignals(){
   const sampleIssue=/collecting scheduled samples/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':'⏳ WAIT · NO QUALIFIED ENTRY';
   if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
+  // Independent BTC spot evidence is research context, never a trade authorization.
+  if(tr.dataset.asset==='BTC'){
+   const evidence=window.__BANK_TRADES_BTC_EVIDENCE__;
+   const fresh=evidence&&Number.isFinite(evidence.at)&&Date.now()-evidence.at<90000&&Number.isFinite(evidence.candleAt)&&Date.now()-evidence.candleAt<180000;
+   const dir=fresh?evidence.direction:'unavailable';
+   const context=dir==='up'?'📈 BTC CHART: BULLISH':dir==='down'?'📉 BTC CHART: BEARISH':dir==='mixed'?'↔ BTC CHART: MIXED':'⚠️ BTC CHART: STALE';
+   const detail=document.createElement('small');detail.style.display='block';detail.style.fontSize='10px';detail.style.marginTop='4px';detail.style.opacity='.8';
+   detail.textContent=context+' · research only';cell.append(detail);
+   if(fresh&&['up','down'].includes(dir)&&['BUY UP','BUY DOWN'].includes(action)&&dir!==(action==='BUY UP'?'up':'down')){
+    cell.firstChild.textContent='⚠️ '+action+' · BTC CHART DISAGREES';
+   }
+  }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
   if(sig?.forecast&&sig.forecast.direction){
