@@ -212,7 +212,7 @@ function syncSignals(){
      ['UP','DOWN'].includes(research.direction)){
    const note=document.createElement('small');
    note.style.display='block';note.style.fontSize='10px';note.style.marginTop='4px';note.style.opacity='.8';
-   note.textContent='RESEARCH '+research.direction+' · quote-implied, not an entry/exit alert';
+   note.textContent='RESEARCH '+research.direction+' · 40–60¢ ENTRY / 70–100¢ EXIT STUDY · not a trade alert';
    cell.append(note);
   }
   if(sig?.forecast&&sig.forecast.direction){
