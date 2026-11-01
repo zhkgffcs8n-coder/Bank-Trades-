@@ -205,6 +205,16 @@ function syncSignals(){
   }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  // Display separate research context without converting it into an actionable signal.
+  const research=sig?.researchDirection;
+  if(research?.mode==='SHADOW_ONLY'&&research.roundTicker===ticker&&
+     Number.isFinite(research.asOf)&&Date.now()-research.asOf>=0&&Date.now()-research.asOf<90000&&
+     ['UP','DOWN'].includes(research.direction)){
+   const note=document.createElement('small');
+   note.style.display='block';note.style.fontSize='10px';note.style.marginTop='4px';note.style.opacity='.8';
+   note.textContent='RESEARCH '+research.direction+' · quote-implied, not an entry/exit alert';
+   cell.append(note);
+  }
   if(sig?.forecast&&sig.forecast.direction){
    const forecast=sig.forecast,side=forecast.direction,details=side==='UP'?forecast.up:forecast.down;
    if(details){
