@@ -20,7 +20,7 @@ test('rejects missing ticker, unverified labels and unknown review reasons',()=>
 });
 
 test('only frozen per-model predictions authorize counted training updates',()=>{
- const rec={features:[.1,.2,-.3,.4],baseline:.55,prediction:.56};
+ const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[.1,.2,-.3,.4],baseline:.55,prediction:.56};
  assert.deepEqual(frozenTrainingTargets(rec),{global:false,asset:false});
  assert.deepEqual(frozenTrainingTargets({...rec,globalPrediction:.52}),{global:true,asset:false});
  assert.deepEqual(frozenTrainingTargets({...rec,assetPrediction:.53}),{global:false,asset:true});
@@ -28,4 +28,13 @@ test('only frozen per-model predictions authorize counted training updates',()=>
  assert.deepEqual(frozenTrainingTargets({...rec,features:[1,2],globalPrediction:.52}),{global:false,asset:false});
  assert.deepEqual(frozenTrainingTargets({...rec,globalPrediction:Infinity,assetPrediction:0}),{global:false,asset:false});
  assert.deepEqual(frozenTrainingTargets({...rec,baseline:1,globalPrediction:.52}),{global:false,asset:false});
+});
+
+test('rejects missing or post-expiration forecast provenance even with valid probabilities',()=>{
+ const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
+ const rejected=[{at:200},{at:201},{at:NaN},{at:0},{expiresAt:NaN},{expiresAt:100},{ticker:''},{asset:''},{asset:null}];
+ for(const change of rejected){
+  assert.deepEqual(frozenTrainingTargets({...rec,...change}),{global:false,asset:false},JSON.stringify(change));
+ }
+ assert.deepEqual(frozenTrainingTargets(rec),{global:true,asset:true});
 });
