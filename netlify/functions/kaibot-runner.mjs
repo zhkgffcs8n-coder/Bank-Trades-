@@ -66,7 +66,10 @@ export default async()=>{
    const trailingDrawdown=t.peakObservedBid>0?(bid-t.peakObservedBid)/t.peakObservedBid:0;
    const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'');
    const secondsLeft=(expiry-now)/1000;
-   const reason=roi<=-.12?'PAPER STOP LOSS':t.peakObservedBid>Number(t.ask)*1.08&&trailingDrawdown<=-.10?'PAPER TRAILING EXIT':secondsLeft>0&&secondsLeft<=90?'PAPER TIME EXIT':null;
+   // Paper-only adaptive trailing: protect modest observed gains, allow stronger moves more room.
+   const peakGain=(t.peakObservedBid-Number(t.ask))/Number(t.ask);
+   const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
+   const reason=roi<=-.12?'PAPER STOP LOSS':trail!==null&&trailingDrawdown<=-trail?'PAPER TRAILING EXIT':secondsLeft>0&&secondsLeft<=90?'PAPER TIME EXIT':null;
    if(!reason)continue;
    const proceeds=Math.round(Number(t.qty)*bid)/100;
    t.status='CLOSED';t.exitReason=reason;t.exitBid=bid;t.exitedAt=now;
