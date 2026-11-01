@@ -1,3 +1,5 @@
+import {SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
+
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
 export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
 // Require paper P/L to reconcile to the recorded entry and outcome. A label or
@@ -8,6 +10,9 @@ export function reconciledPaperTrade(t){
  if(!Number.isInteger(qty)||qty<1||cost<=0||ask<=0||ask>=100||Math.abs(cost-qty*ask/100)>.03)return false;
  let expected;
  if(t.status==='SETTLED'){
+  // Legacy settlement labels are not proof of an official finalized market.
+  // Do not count their apparent wins or losses until independently reverified.
+  if(t.outcomeVerification!==SETTLEMENT_VERIFICATION)return false;
   const outcome=String(t.marketResult).toLowerCase();
   if(!['yes','no'].includes(outcome))return false;
   const won=(t.side==='up')===(outcome==='yes');
