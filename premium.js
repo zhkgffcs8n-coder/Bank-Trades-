@@ -112,12 +112,22 @@ function evaluateScreenAlerts(){
 }
 document.addEventListener('DOMContentLoaded',()=>{
  const button=document.getElementById('enablePush');if(!button)return;
+ const style=document.createElement('style');
+ style.textContent='#enablePush[data-screen-alerts="on"]{background:#facc15!important;color:#171717!important;border:4px solid #fff176!important;box-shadow:0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)!important;font-weight:900!important}';
+ document.head.append(style);
+ const paint=()=>{
+  button.dataset.screenAlerts=screenAlertsEnabled?'on':'off';
+  button.setAttribute('aria-pressed',String(screenAlertsEnabled));
+  button.textContent=screenAlertsEnabled?'🔔 SCREEN ALERTS ON':'🔔 ENABLE ALERTS';
+  button.title=screenAlertsEnabled?'Green entry / red exit screen alerts ON while dashboard is open. Background push not configured.':'Turn on green entry / red exit screen alerts while dashboard is open.';
+ };
  button.addEventListener('click',()=>{
-  screenAlertsEnabled=true;
-  button.dataset.screenAlerts='on';
-  button.title='Full-screen entry/exit alerts enabled while this page is open. Background push requires separate server configuration.';
-  evaluateScreenAlerts();
+  screenAlertsEnabled=!screenAlertsEnabled;
+  if(!screenAlertsEnabled)document.getElementById('bankScreenAlert')?.remove();
+  paint();
+  if(screenAlertsEnabled)evaluateScreenAlerts();
  });
+ paint();
 });
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
