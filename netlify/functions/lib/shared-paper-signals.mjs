@@ -1,4 +1,4 @@
-import {predict,validFeatures} from '../../../src/research-model.mjs';
+import {predict,validFeatures,modelValidated} from '../../../src/research-model.mjs';
 export function paperSignal(m,records=[],position=null,now=Date.now(),research=null){
  const q=k=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
  const yb=q('yes_bid'),ya=q('yes_ask'),nb=q('no_bid'),na=q('no_ask');
@@ -24,12 +24,12 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  const baseline=Math.max(.02,Math.min(.98,(yb+ya)/200));
  const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,spread/10)),Math.max(-1,Math.min(1,left/900)),Math.max(-1,Math.min(1,(yb-nb)/100))];
  let researchForecast=null;
- try{if(research?.model&&validFeatures(features))researchForecast=predict(research.model,baseline,features)}catch{}
+ try{if(modelValidated(research?.model)&&validFeatures(features))researchForecast=predict(research.model,baseline,features)}catch{}
 
  if(!side)return {...base,reason:'No directional momentum',researchForecast};
  const agreement=changes.filter(x=>side==='up'?x>0:x<0).length/changes.length;
  const reversals=changes.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(changes[i])&&Math.abs(x)>.4&&Math.abs(changes[i])>.4).length;
  const ask=side==='up'?ya:na;
  if(agreement<.6||reversals>2||ask<20||ask>85)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast};
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length,researchForecast,researchValidated:Boolean(research?.status?.validated),researchMode:'observation only; does not change entry decisions'};
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:'observation only; does not change entry decisions'};
 }
