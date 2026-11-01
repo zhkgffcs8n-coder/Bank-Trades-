@@ -7,6 +7,7 @@ import {pendingTrainingReview} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
 import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
+import {costAwarePairedAudit} from '../../src/cost-aware-paired-audit.mjs';
 import {getStore} from '@netlify/blobs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 
@@ -245,6 +246,8 @@ export default async()=>{
     engine.won=won;engine.resolved=true;
    }
    rec.status='RESOLVED';rec.outcome=outcome.result;rec.resolvedAt=now;
+   // A trusted finalized label was checked above; freeze provenance for cost-aware audits.
+   rec.outcomeVerification=SETTLEMENT_VERIFICATION;
    await db.setJSON(item.key,rec);
   });
   // Persist a transparent side-by-side report; one hypothetical contract per BUY.
@@ -259,6 +262,9 @@ export default async()=>{
    const invested=trades.reduce((sum,row)=>sum+Number(row.engines[name].ask)/100,0);
    report.engines[name]={trades:trades.length,wins:trades.filter(row=>row.engines[name].won).length,losses:trades.filter(row=>!row.engines[name].won).length,winRate:trades.length?trades.filter(row=>row.engines[name].won).length/trades.length:null,netPnl:Number(pnl.toFixed(4)),roi:invested?Number((pnl/invested).toFixed(4)):null,maxDrawdown:Number(maxDrawdown.toFixed(4)),method:'One hypothetical contract per signal; binary settlement, entry ask; excludes fees, slippage and early exits'};
   }
+  // Cost-stressed comparison uses only prospective matched markets with explicit
+  // finalized-outcome provenance. Legacy rows without provenance are excluded.
+  report.costAwareMatched=costAwarePairedAudit(rows);
   await db.setJSON('comparison/report-v1',report);
   // Settle only frozen, late-window paired predictions against independently
   // verified official binary outcomes. Separate resolved keys prevent recounting.
