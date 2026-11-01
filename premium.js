@@ -206,6 +206,19 @@ function syncSignals(){
   }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  if(sig?.entryGate?.blockedByPerformance){
+   const gate=document.createElement('small');
+   gate.style.display='block';gate.style.fontSize='10px';gate.style.marginTop='4px';
+   gate.textContent='MOMENTUM CALLED '+sig.entryGate.rawAction+
+    ' · BLOCKED BY PAPER PERFORMANCE: '+(sig.entryGate.validation||'unverified edge')+
+    ' · no order signal';
+   cell.append(gate);
+  }else if(action==='WAIT'&&sig?.entryGate?.rawAction==='WAIT'&&sig?.reason){
+   const gate=document.createElement('small');
+   gate.style.display='block';gate.style.fontSize='10px';gate.style.marginTop='4px';
+   gate.textContent='ENTRY ENGINE WAIT · '+sig.reason;
+   cell.append(gate);
+  }
   // Surface the actual entry rejection instead of a generic WAIT.
   const diag=sig?.entryDiagnostics;
   if(action==='WAIT'&&diag?.filters){
