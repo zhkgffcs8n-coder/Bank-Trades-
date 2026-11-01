@@ -104,10 +104,10 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
   overlay.querySelector('button').addEventListener('click',()=>overlay.remove());
  }
  document.body.append(overlay);
- const color=kind==='sell'?'#ed2929':'#16a34a';
+ const color=kind==='sell'||kind==='down'?'#ed2929':kind==='up'?'#16a34a':'#eab308';
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
- overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT ALERT':'🟢 BUY / ENTRY ALERT');
+ overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  overlay.querySelector('button').focus();
 }
@@ -136,8 +136,12 @@ function evaluateScreenAlerts(){
   const asset=tr.dataset.asset,label=tr.children[3]?.textContent||'';
   const ticker=roundSeen.get(asset)?.ticker;
   if(!ticker)continue;
-  const kind=/SELL FAST|TAKE PROFITS|SELL\s*·\s*SIGNAL|EXIT ALERT/.test(label)?'sell':/BUY UP|BUY DOWN/.test(label)?'buy':null;
-  if(kind)showScreenAlert(asset,kind,label,ticker);
+  const signal=engineSignals.find(x=>x.asset===asset&&x.ticker===ticker);
+  // Read the final qualified action, not explanatory text such as
+  // "MOMENTUM CALLED BUY DOWN · BLOCKED" or non-actionable RESEARCH.
+  const action=signal?.action;
+  const kind=action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
+  if(kind)showScreenAlert(asset,kind,kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':label,ticker);
  }
 }
 document.addEventListener('DOMContentLoaded',()=>{
@@ -154,7 +158,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  testButton.addEventListener('click',()=>{
   if(document.hidden)return;
   const kind=nextTest;nextTest=kind==='buy'?'sell':'buy';
-  showScreenAlert('BTC',kind,kind==='buy'?'DEMO BUY UP — GREEN SCREEN TEST':'DEMO SELL FAST — RED SCREEN TEST','demo',true);
+  showScreenAlert('BTC',kind==='buy'?'up':'sell',kind==='buy'?'DEMO BUY UP — GREEN SCREEN TEST':'DEMO SELL FAST — RED SCREEN TEST','demo',true);
   testButton.textContent=kind==='buy'?'🧪 TEST RED EXIT NEXT':'🧪 TEST GREEN ENTRY NEXT';
  });
  const paint=()=>{
