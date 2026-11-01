@@ -8,6 +8,7 @@ import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_
 import {edgeResearch} from '../../src/edge-research.mjs';
 import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
 import {costAwarePairedAudit} from '../../src/cost-aware-paired-audit.mjs';
+import {verifiedComparisonEvidence} from '../../src/verified-comparison-evidence.mjs';
 import {getStore} from '@netlify/blobs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 
@@ -287,9 +288,12 @@ export default async()=>{
   // Persist a transparent side-by-side report; one hypothetical contract per BUY.
   const all=await db.list({prefix:'comparison/v1/',limit:1000});
   const rows=(await Promise.all(all.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-  const report={at:now,version:1,totalObserved:rows.length,pending:rows.filter(r=>r.status==='PENDING').length,truncated:!!all.cursor,scope:all.cursor?'FIRST_PAGE_ONLY':'ALL_OBSERVED',engines:{}};
+  // Legacy RESOLVED labels without official provenance are not evidence of wins,
+  // losses, lessons, or a better paper gate. Quarantine contradictory tickers.
+  const evidence=verifiedComparisonEvidence(rows);
+  const report={at:now,version:1,totalObserved:rows.length,pending:rows.filter(r=>r.status==='PENDING').length,truncated:!!all.cursor,scope:all.cursor?'FIRST_PAGE_ONLY':'ALL_OBSERVED',verifiedResolved:evidence.rows.length,excludedFromVerifiedComparison:evidence.rejected,conflictingMarketCount:evidence.conflictingMarketCount,engines:{}};
   for(const name of ['original','upgraded']){
-   const trades=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.[name]?.resolved).sort((a,b)=>a.at-b.at);
+   const trades=evidence.rows.filter(r=>r.engines?.[name]?.resolved).sort((a,b)=>a.at-b.at);
    let equity=0,peak=0,maxDrawdown=0;
    for(const row of trades){equity+=row.engines[name].pnl;peak=Math.max(peak,equity);maxDrawdown=Math.max(maxDrawdown,peak-equity)}
    const pnl=trades.reduce((sum,row)=>sum+row.engines[name].pnl,0);
@@ -319,9 +323,9 @@ export default async()=>{
   // Shared loss review: update a conservative research-only threshold from resolved
   // outcomes. The original strategy remains frozen as an unbiased baseline.
   // Never retrain on unresolved outcomes or automatically loosen risk limits.
-  const resolved=rows.filter(r=>r.status==='RESOLVED'&&r.engines?.original?.resolved).sort((a,b)=>a.at-b.at);
+  const resolved=evidence.rows.slice().sort((a,b)=>a.at-b.at);
   // Never select a research candidate from the oldest 1,000 rows if newer rows are excluded.
-  const training=all.cursor?[]:resolved.slice(0,-30),holdout=all.cursor?[]:resolved.slice(-30);
+  const training=all.cursor||evidence.conflictingMarketCount?[]:resolved.slice(0,-30),holdout=all.cursor||evidence.conflictingMarketCount?[]:resolved.slice(-30);
   const candidates=[{score:70,maxAsk:65},{score:75,maxAsk:65},{score:80,maxAsk:60},{score:85,maxAsk:55}];
   const evaluate=(set,gate)=>{
    const selected=set.filter(r=>Number(r.engines.original.score)>=gate.score&&Number(r.engines.original.ask)<=gate.maxAsk);
@@ -388,7 +392,7 @@ export default async()=>{
    registry={createdAt:now,after:resolved.length,afterAt:now,gate:{score:chosen.score,maxAsk:chosen.maxAsk},status:'COLLECTING',version:1};
    await db.setJSON(registryKey,registry);
   }
-  if(registry&&!all.cursor){
+  if(registry&&!all.cursor&&!evidence.conflictingMarketCount){
    const future=Number.isFinite(registry.afterAt)?resolved.filter(x=>x.at>registry.afterAt):resolved.slice(registry.after);
    const evalGate=evaluate(future,registry.gate);
    const baseline=evaluate(future,{score:0,maxAsk:100});
@@ -422,7 +426,7 @@ export default async()=>{
   await db.setJSON('comparison/research-gate-v1',{
    at:now,mode:'RESEARCH ONLY',baseline:'original unchanged',trainingCount:training.length,holdoutCount:holdout.length,
    candidates:scored,proposed:chosen?{score:chosen.score,maxAsk:chosen.maxAsk}:null,
-   note:all.cursor?'Archive exceeds first-page report; candidate selection and forward evaluation paused until complete aggregation. No automatic execution or promotion.':'Uses past finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
+   note:all.cursor||evidence.conflictingMarketCount?'Incomplete or conflicting archive: candidate selection and forward evaluation paused until evidence is reconciled. No automatic execution or promotion.':'Uses prospectively recorded, strictly verified finalized observations; rolling holdout is reused for candidate selection and is not an independent final validation. No automatic execution or strategy promotion.'
   });
 
   const perAsset={};
