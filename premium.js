@@ -77,12 +77,10 @@ function manualPositionAdvice(asset){
 // Large in-page visual alerts. Only works while the dashboard page is active.
 let screenAlertsEnabled=false;
 const seenScreenAlerts=new Set();
-function showScreenAlert(asset,kind,label,ticker){
- if(!screenAlertsEnabled||document.hidden)return;
+function showScreenAlert(asset,kind,label,ticker,isTest=false){
+ if((!screenAlertsEnabled&&!isTest)||document.hidden)return;
  const key=[asset,kind,label,ticker].join('|');
- if(seenScreenAlerts.has(key))return;
- seenScreenAlerts.add(key);
- if(seenScreenAlerts.size>150)seenScreenAlerts.clear();
+ if(!isTest){if(seenScreenAlerts.has(key))return;seenScreenAlerts.add(key);if(seenScreenAlerts.size>150)seenScreenAlerts.clear();}
  let overlay=document.getElementById('bankScreenAlert');
  if(!overlay){
   const style=document.createElement('style');
@@ -97,7 +95,7 @@ function showScreenAlert(asset,kind,label,ticker){
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
  overlay.querySelector('.bank-head').textContent=(kind==='sell'?'🚨 EXIT ALERT':'🟢 ENTRY ALERT')+' · '+asset;
- overlay.querySelector('.bank-detail').textContent=label;
+ overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  overlay.querySelector('button').focus();
 }
 const voicedMarketStatuses=new Set();
@@ -134,6 +132,18 @@ document.addEventListener('DOMContentLoaded',()=>{
  const style=document.createElement('style');
  style.textContent='#enablePush[data-screen-alerts="on"]{background:#facc15!important;color:#171717!important;border:4px solid #fff176!important;box-shadow:0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)!important;font-weight:900!important}';
  document.head.append(style);
+ const testButton=document.createElement('button');
+ testButton.type='button';testButton.id='bankTestScreenAlerts';
+ testButton.textContent='🧪 TEST SCREEN ALERTS';
+ testButton.style.cssText='margin-left:8px;padding:12px;border:2px solid #facc15;border-radius:10px;font-weight:800;cursor:pointer;background:#273449;color:#fff';
+ button.insertAdjacentElement('afterend',testButton);
+ let nextTest='buy';
+ testButton.addEventListener('click',()=>{
+  if(document.hidden)return;
+  const kind=nextTest;nextTest=kind==='buy'?'sell':'buy';
+  showScreenAlert('BTC',kind,kind==='buy'?'DEMO BUY UP — GREEN SCREEN TEST':'DEMO SELL FAST — RED SCREEN TEST','demo',true);
+  testButton.textContent=kind==='buy'?'🧪 TEST RED EXIT NEXT':'🧪 TEST GREEN ENTRY NEXT';
+ });
  const paint=()=>{
   button.dataset.screenAlerts=screenAlertsEnabled?'on':'off';
   button.setAttribute('aria-pressed',String(screenAlertsEnabled));
