@@ -14,6 +14,7 @@ async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort()
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 export default async()=>{
  const db=store(),now=Date.now(),bucket=Math.floor(now/60000)*60000;
+ const collection={sampled:new Set(),newPredictions:0,errors:new Set()};
  await db.setJSON('collector/heartbeat',{startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
@@ -37,6 +38,7 @@ export default async()=>{
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true});
+  collection.sampled.add(asset);
   // One immutable late-window observation per contract, scored independently
   // by A and B on the same fetched quote. Research only, never an order.
   try{
@@ -91,8 +93,9 @@ export default async()=>{
    const baseline=Math.max(.02,Math.min(.98,record.yesMid));
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
    await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features)});
+   collection.newPredictions++;
   }
- }catch(e){console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
+ }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
  // Track every sampled contract, not just the latest contract for each asset.
  // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
@@ -325,7 +328,7 @@ export default async()=>{
   await db.setJSON('training/status',{at:now,count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset models fall back to global model until sufficient history.'});
  }catch(e){console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
- await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:'COMPLETED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
+ await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };
