@@ -1,4 +1,5 @@
 import {sampleTimestampFromKey} from '../../src/sample-archive-key.mjs';
+import {mergeRecentMarketHistory} from '../../src/recent-market-history.mjs';
 import {trustedStoredFinalizedOutcome} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 const ASSETS=new Set(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']);
@@ -18,7 +19,12 @@ export default async req=>{
   cursor=listed.cursor;hasMore=!!cursor;
   if(!cursor)break;
  }
- const records=(await Promise.all(keys.slice(-300).map(key=>db.get(key,{type:'json'})))).filter(x=>x&&x.t>=cutoff).sort((a,b)=>a.t-b.t);
+ // A 20-page bounded scan may stop before the newest chronological archive
+ // keys. Recover recent samples from the collector's small rolling cache, but
+ // explicitly report incomplete four-hour coverage instead of implying it.
+ const archiveRecords=await Promise.all(keys.slice(-300).map(key=>db.get(key,{type:'json'})));
+ const rolling=await db.get('recent/'+asset,{type:'json'}).catch(()=>[]);
+ const {records,recoveredFromRolling}=mergeRecentMarketHistory(archiveRecords,rolling,asset,cutoff,Date.now());
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
  let unverifiedOutcomeRecords=0;
  for(const ticker of tickers){
@@ -42,5 +48,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
