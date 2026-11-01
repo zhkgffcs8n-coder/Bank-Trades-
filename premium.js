@@ -175,6 +175,11 @@ document.addEventListener('DOMContentLoaded',()=>{
  testButton.textContent='🧪 TEST SCREEN ALERTS';
  testButton.style.cssText='margin-left:8px;padding:12px;border:2px solid #facc15;border-radius:10px;font-weight:800;cursor:pointer;background:#273449;color:#fff';
  button.insertAdjacentElement('afterend',testButton);
+ const researchNotice=document.createElement('div');
+ researchNotice.id='bankResearchSignalNotice';
+ researchNotice.style.cssText='margin:8px 0;padding:8px 12px;border:1px solid #facc15;border-radius:9px;background:rgba(250,204,21,.12);color:#fde68a;font-size:12px;font-weight:800;line-height:1.4';
+ researchNotice.textContent='⚠️ RESEARCH UP / DOWN ARROWS ARE NOT OFFICIAL BUY SIGNALS. TEST SCREEN ALERTS ARE DEMOS ONLY. Only a qualified BUY UP or BUY DOWN status is an engine entry signal; no trade is automatically placed.';
+ testButton.insertAdjacentElement('afterend',researchNotice);
  let nextTest='buy';
  testButton.addEventListener('click',()=>{
   if(document.hidden)return;
