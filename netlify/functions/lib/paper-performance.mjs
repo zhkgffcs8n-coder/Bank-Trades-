@@ -80,6 +80,16 @@ export function performance(trades=[]){
 export function gatePaperEntry(signal,stats){
  if(!['BUY UP','BUY DOWN'].includes(signal.action))return signal;
  const cohort=stats?.byStrategy?.[signal.asset+'_'+signal.side];
+ // A broad deterioration signal pauses NEW paper entries, not existing exits.
+ // This uses already-finalized positions and never rewrites past results.
+ const recent=stats?.lossReview?.recent50;
+ const prior=stats?.lossReview?.previous50;
+ if(recent?.trades>=30&&prior?.trades>=30&&
+    Number.isFinite(recent.roi)&&Number.isFinite(prior.roi)&&
+    recent.roi<0&&recent.roi<prior.roi)
+  return {...signal,action:'WAIT',validation:'RECENT PAPER DRAWDOWN',
+    reason:'Recent 50 finalized paper trades are losing and worse than the preceding 50; new entries paused pending prospective validation'};
+
  // Keep initial research observations, but do not claim profitability before sufficient data.
  if(cohort&&cohort.trades>=8&&(cohort.netPnl<=0||cohort.roi<=0))return {...signal,action:'WAIT',validation:'PAPER COHORT LOSS GATE',reason:'At least 8 resolved paper trades in this asset/direction show nonpositive return; paused pending further validation'};
  if(!cohort||cohort.trades<20)return {...signal,validation:'INSUFFICIENT COHORT DATA',reason:signal.reason+'; fewer than 20 resolved trades in this asset/direction'};
