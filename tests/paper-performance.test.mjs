@@ -36,3 +36,27 @@ test('missing P/L or exit bid never becomes a fabricated break-even paper trade'
  assert.equal(stats.overall.ties,1);
  assert.equal(stats.excluded,3);
 });
+
+test('paper outcomes must reconcile to recorded quantity, cost and official side',async()=>{
+ const {reconciledPaperTrade}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const settled={asset:'BTC',side:'up',qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1};
+ const exited={asset:'BTC',side:'down',qty:2,ask:50,cost:1,status:'CLOSED',paperExitOnly:true,exitBid:30,pnl:-0.4,settlement:'LOSS'};
+ assert.equal(reconciledPaperTrade(settled),true);
+ assert.equal(reconciledPaperTrade(exited),true);
+ const bad=[
+  {...settled,marketResult:'no'},
+  {...settled,pnl:100},
+  {...settled,qty:0},
+  {...settled,cost:0.01},
+  {...settled,settlement:'LOSS'},
+  {...exited,pnl:0.4},
+  {...exited,exitBid:null},
+  {...exited,settlement:'WIN'}
+ ];
+ for(const row of bad)assert.equal(reconciledPaperTrade(row),false,JSON.stringify(row));
+ const stats=performance([settled,exited,...bad]);
+ assert.equal(stats.overall.trades,2);
+ assert.equal(stats.overall.wins,1);
+ assert.equal(stats.overall.losses,1);
+ assert.equal(stats.excluded,bad.length);
+});
