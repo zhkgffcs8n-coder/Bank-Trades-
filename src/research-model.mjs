@@ -22,3 +22,18 @@ export function learn(model,observation,outcome){
 export function modelValidated(model,minCount=100){
  return !!model&&Number.isInteger(model.count)&&model.count>=minCount&&Number.isFinite(model.brier)&&Number.isFinite(model.baselineBrier)&&model.brier>=0&&model.baselineBrier>=0&&model.brier<model.baselineBrier&&Array.isArray(model.weights)&&model.weights.length===4&&model.weights.every(w=>Number.isFinite(w)&&Math.abs(w)<=1);
 }
+
+// Read-only learning report: compare predictions recorded before settlement
+// against the frozen market baseline. This never authorizes trading.
+export function learningReport(model,minCount=100){
+ const count=Number.isInteger(model?.count)&&model.count>=0?model.count:0;
+ const brier=count&&Number.isFinite(model?.brier)?model.brier/count:null;
+ const baselineBrier=count&&Number.isFinite(model?.baselineBrier)?model.baselineBrier/count:null;
+ const improvement=brier!==null&&baselineBrier!==null&&baselineBrier>0
+  ?(baselineBrier-brier)/baselineBrier:null;
+ return {verifiedObservations:count,modelBrier:brier,baselineBrier,
+  relativeBrierImprovement:improvement,minimumObservations:minCount,
+  validated:modelValidated(model,minCount),
+  status:count<minCount?'INSUFFICIENT VERIFIED OUTCOMES':improvement===null?'MISSING PERFORMANCE DATA':improvement>0?'OUTPERFORMED BASELINE IN RECORDED SAMPLE':'DID NOT BEAT BASELINE',
+  caveat:'Retrospective aggregate only. Not independent forward validation or proof of profitable trades.'};
+}
