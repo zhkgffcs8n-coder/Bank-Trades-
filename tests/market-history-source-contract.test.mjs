@@ -16,3 +16,10 @@ test('market-history excludes unverified cached labels from official outcome res
  assert.match(source,/records,outcomes,unverifiedOutcomeRecords,hasMore/);
  assert.doesNotMatch(source,/if\(o\)outcomes\[ticker\]=o/);
 });
+
+test('bounded archive history uses fresh rolling samples and discloses incomplete coverage',()=>{
+ assert.match(source,/import \{mergeRecentMarketHistory\} from '\.\.\/\.\.\/src\/recent-market-history\.mjs'/);
+ assert.match(source,/db\.get\('recent\/'\+asset,\{type:'json'\}\)/);
+ assert.match(source,/mergeRecentMarketHistory\(archiveRecords,rolling,asset,cutoff,Date\.now\(\)\)/);
+ assert.match(source,/historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling/);
+});
