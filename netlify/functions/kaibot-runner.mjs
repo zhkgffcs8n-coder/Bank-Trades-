@@ -42,8 +42,37 @@ export default async()=>{
    ledger.cash=Math.round((ledger.cash+payout)*100)/100;
    t.status='SETTLED';t.marketResult=result;t.settlement=won?'WIN':'LOSS';
    t.pnl=Math.round((payout-t.cost)*100)/100;t.settledAt=now;
+   t.outcomeVerification=SETTLEMENT_VERIFICATION;t.outcomeVerifiedAt=now;
   }
  }
+ // Gradually reverify legacy SETTLED paper records without touching historical cash,
+ // payouts, or P/L. A legacy yes/no label alone must not qualify as official.
+ // Bound remote lookups and rotate the review window so an unavailable contract
+ // cannot starve all later legacy records.
+ const legacySettled=ledger.trades.filter(t=>t.status==='SETTLED'&&
+  t.outcomeVerification!==SETTLEMENT_VERIFICATION&&typeof t.ticker==='string'&&
+  ['yes','no'].includes(t.marketResult));
+ const reviewCount=Math.min(4,legacySettled.length);
+ const reviewStart=Number.isSafeInteger(ledger.settlementReviewOffset)&&ledger.settlementReviewOffset>=0?
+  ledger.settlementReviewOffset%Math.max(legacySettled.length,1):0;
+ for(let i=0;i<reviewCount;i++){
+  const t=legacySettled[(reviewStart+i)%legacySettled.length];
+  try{
+   let result=trustedStoredFinalizedOutcome(await hdb.get('outcomes/'+t.ticker,{type:'json'}),t.ticker);
+   if(!result){
+    const official=await get(base+'/markets/'+encodeURIComponent(t.ticker));
+    result=verifiedFinalizedBinaryOutcome(official?.market,t.ticker);
+    if(result)await hdb.setJSON('outcomes/'+t.ticker,{ticker:t.ticker,result,
+     source:'Kalshi official finalized market',verification:SETTLEMENT_VERIFICATION,verifiedAt:now});
+   }
+   if(result===t.marketResult){
+    t.outcomeVerification=SETTLEMENT_VERIFICATION;t.outcomeVerifiedAt=now;
+   }else if(result){
+    t.outcomeConflict=true; // Preserve the original ledger for manual reconciliation.
+   }
+  }catch(e){console.warn('Legacy paper settlement verification unavailable',t.ticker,String(e))}
+ }
+ ledger.settlementReviewOffset=reviewStart+reviewCount;
  // Paper-only exit simulation: use the executable bid, never the mid/ask.
  // This does not imply a real Kalshi order could fill at that price or quantity.
  const openForExit=ledger.trades.filter(x=>x.status==='OPEN');
@@ -98,7 +127,7 @@ export default async()=>{
  const unreconciledRecords=resolvedRecords.filter(t=>!reconciledPaperTrade(t));
  const pnlSum=rows=>Number(rows.filter(t=>hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2));
  const excludedFromEligible=resolvedRecords.filter(t=>t.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST');
- await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
+ await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
  // Keep quote-based signal observations flowing during the paper-entry safety pause.
  // No simulated positions may open while the circuit breaker is active.
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
