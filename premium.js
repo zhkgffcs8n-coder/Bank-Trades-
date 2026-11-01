@@ -205,6 +205,23 @@ function syncSignals(){
   }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  // Price-window watch uses current Kalshi quotes, never a fabricated fill or model signal.
+  const liveMarket=latestPositionQuotes.find(x=>x.asset===tr.dataset.asset)?.market;
+  if(liveMarket?.ticker===ticker&&Date.now()-latestPositionQuoteAt<10000){
+   const windows=[];
+   for(const [side,askKey,bidKey] of [['UP','yes_ask','yes_bid'],['DOWN','no_ask','no_bid']]){
+    const ask=price(liveMarket,askKey),bid=price(liveMarket,bidKey);
+    if(Number.isFinite(ask)&&ask>=40&&ask<=60&&Number.isFinite(bid)&&bid>=0&&bid<=ask){
+     windows.push(side+' '+ask.toFixed(0)+'¢ ask');
+    }
+   }
+   if(windows.length){
+    const watch=document.createElement('small');
+    watch.style.display='block';watch.style.fontSize='10px';watch.style.marginTop='4px';watch.style.opacity='.9';
+    watch.textContent='40–60¢ PRICE WATCH · '+windows.join(' / ')+' · entry not validated';
+    cell.append(watch);
+   }
+  }
   // Display separate research context without converting it into an actionable signal.
   const research=sig?.researchDirection;
   if(research?.mode==='SHADOW_ONLY'&&research.roundTicker===ticker&&
