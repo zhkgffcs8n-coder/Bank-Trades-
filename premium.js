@@ -101,7 +101,10 @@ function monitorPaperExits(results,age){
   const peak=Math.max(prior.peak,bid);
   paperExitState.set(t.id,{peak,at:now});
   const drawdown=peak>0?(bid-peak)/peak:0;
-  const reason=roi<=-.12?'STOP LOSS':peak>entry*1.08&&drawdown<=-.10?'TRAILING EXIT':null;
+  // Adaptive paper-only trail: protect smaller observed gains while giving stronger moves room.
+  const peakGain=(peak-entry)/entry;
+  const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
+  const reason=roi<=-.12?'STOP LOSS':trail!==null&&drawdown<=-trail?'TRAILING EXIT':null;
   if(!reason)continue;
   const key=t.id+':'+reason;
   if(now-(exitAlerted.get(key)||0)<60000)continue;
