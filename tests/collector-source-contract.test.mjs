@@ -37,3 +37,13 @@ test('collector research validation uses full model integrity gate rather than B
 test('collector passes pagination completeness to cost-aware paired audit',()=>{
  assert.match(collector,/report\.costAwareMatched\s*=\s*costAwarePairedAudit\(rows,\s*\{archiveComplete:\s*!all\.cursor\}\)/);
 });
+
+test('collector cannot report healthy while Primal or paired shadow research fails',()=>{
+ assert.match(collector,/researchFailures:0,researchErrors:\[\]/);
+ for(const scope of ['recent-snapshot','paired-shadow-snapshot','primal-shadow-snapshot','comparison-snapshot','round-forecast','early-exit-shadow','signal-outcome-scoring','primal-shadow-scoring','paired-shadow-scoring']){
+  assert.ok(collector.includes("researchFailure('"+scope+"',e"),'Missing research failure accounting: '+scope);
+ }
+ assert.match(collector,/collection\.researchFailures===0\?'COMPLETED':'DEGRADED'/);
+ assert.match(collector,/researchFailures:collection\.researchFailures,researchErrors:collection\.researchErrors/);
+ assert.match(collector,/collection\.researchErrors\.length<16/);
+});
