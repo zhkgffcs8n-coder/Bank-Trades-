@@ -335,6 +335,20 @@ function syncSignals(){
   badge.style.cssText='display:inline-block;padding:4px 9px;margin:1px 0 3px;border:2px solid '+color+';border-radius:9px;background:'+color+'20;color:'+color+';font-size:clamp(12px,1.1vw,16px);font-weight:900;letter-spacing:.2px;box-shadow:0 0 8px '+color+'44';
   badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   cell.prepend(badge);
+  // Small research-direction chip stays visible beside WAIT in compact mode.
+  // This is quote-implied research, NOT an approved buy signal.
+  const researchChip=sig?.researchDirection;
+  const researchFresh=researchChip?.mode==='SHADOW_ONLY'&&researchChip.roundTicker===ticker&&
+    Number.isFinite(researchChip.asOf)&&Date.now()-researchChip.asOf>=0&&Date.now()-researchChip.asOf<90000;
+  if(decision==='WAIT'&&researchFresh&&['UP','DOWN'].includes(researchChip.direction)){
+   const direction=researchChip.direction;
+   const chip=document.createElement('span');
+   const hue=direction==='UP'?'#4ade80':'#fb7185';
+   chip.style.cssText='display:inline-block;vertical-align:middle;margin-left:7px;padding:3px 7px;border-radius:8px;border:1px solid '+hue+';color:'+hue+';font-size:11px;font-weight:800;white-space:nowrap';
+   chip.textContent=direction==='UP'?'↗ R: UP':'↘ R: DOWN';
+   chip.title='Research direction only, inferred from current quotes. Not a qualified BUY signal.';
+   badge.after(chip);
+  }
   const original=Array.from(cell.childNodes).find(n=>n.nodeType===3&&n.textContent.trim());
   if(original)original.textContent='';
   // Compact desktop rows: show the action and one live tracker line by default.
