@@ -219,6 +219,18 @@ function syncSignals(){
    gate.textContent='ENTRY ENGINE WAIT · '+sig.reason;
    cell.append(gate);
   }
+  // High-contrast directional BUY callout; only for actual qualified engine actions.
+  if(action==='BUY UP'||action==='BUY DOWN'){
+   const label=cell.firstChild;
+   if(label&&label.nodeType===3)label.textContent=(action==='BUY UP'?'🟢 BUY UP':'🔴 BUY DOWN')+' · QUALIFIED PAPER SIGNAL';
+   cell.style.borderLeft='4px solid '+(action==='BUY UP'?'#22c55e':'#ef4444');
+   cell.style.background=action==='BUY UP'?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
+   cell.style.fontWeight='700';
+  }else{
+   cell.style.borderLeft='';
+   cell.style.background='';
+   cell.style.fontWeight='';
+  }
   // Surface the actual entry rejection instead of a generic WAIT.
   const diag=sig?.entryDiagnostics;
   if(action==='WAIT'&&diag?.filters){
