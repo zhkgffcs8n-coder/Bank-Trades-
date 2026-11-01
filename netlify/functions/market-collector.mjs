@@ -151,9 +151,14 @@ export default async()=>{
    // Reverify legacy labels instead of discarding pending records on sight.
    const trustedCached=trustedStoredFinalizedOutcome(cached,rec.ticker);
    if(trustedCached){
-    // A legacy cached label does not prove this prediction was learned.
-    // Preserve its evidence rather than silently deleting or double-training it.
-    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME',now));
+    // A previously finalized outcome must never silently lose its pending prediction.
+    // The historical ledger does not prove whether its gradient was already applied.
+    // Quarantine for reconciliation rather than replaying an unsafe duplicate update.
+    const learnedMarker=await db.get('training/learned/v1/'+rec.ticker,{type:'json'});
+    if(learnedMarker?.result===trustedCached){
+     await db.delete('pending/'+rec.ticker);return;
+    }
+    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME_REQUIRES_RECONCILIATION',now));
     collection.trainingReviewCount++;
     await db.delete('pending/'+rec.ticker);return;
    }
@@ -170,6 +175,9 @@ export default async()=>{
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
       await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
+      // Persist idempotency evidence after both models have been updated.
+      await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalCount:model.count,assetCount:assetModels[assetKey].count});
+
      }else{
       await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
       collection.trainingReviewCount++;
