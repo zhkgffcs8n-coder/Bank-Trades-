@@ -340,6 +340,18 @@ function syncSignals(){
   badge.style.cssText='display:inline-block;padding:4px 9px;margin:1px 0 3px;border:2px solid '+color+';border-radius:9px;background:'+color+'20;color:'+color+';font-size:clamp(12px,1.1vw,16px);font-weight:900;letter-spacing:.2px;box-shadow:0 0 8px '+color+'44';
   badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   cell.prepend(badge);
+  // Display the per-round directional call next to WAIT; do not mislabel an
+  // unqualified quote-based prediction as an approved trading entry.
+  const roundCall=sig?.roundCall;
+  if(decision==='WAIT'&&roundCall?.ticker===ticker&&
+     Number.isFinite(roundCall.asOf)&&Date.now()-roundCall.asOf<90000&&
+     ['UP','DOWN'].includes(roundCall.direction)){
+   const chip=document.createElement('span');
+   chip.style.cssText='display:inline-block;margin-left:7px;padding:4px 8px;border-radius:8px;border:1px solid #38bdf8;color:#7dd3fc;font-size:12px;font-weight:900;white-space:nowrap';
+   chip.textContent='ROUND CALL: '+roundCall.direction;
+   chip.title='Direction call only, not a qualified BUY signal or order. '+roundCall.basis;
+   badge.after(chip);
+  }
   // Small research-direction chip stays visible beside WAIT in compact mode.
   // This is observed momentum research, NOT an approved buy signal.
   const researchChip=sig?.researchDirection;
