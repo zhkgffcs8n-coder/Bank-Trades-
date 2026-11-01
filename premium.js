@@ -208,9 +208,9 @@ function flipWatchFor(asset,sig,ticker){
     !Number.isFinite(call.asOf)||Date.now()-call.asOf>90000)return null;
  const prev=flipWatchHistory.get(asset);
  const direction=call.direction;
- const changed=prev&&prev.ticker===ticker&&prev.direction!==direction;
+ const changed=prev&&prev.ticker===ticker&&prev.direction!==direction&&call.basis==='observed same-round momentum'&&prev.observed;
  const flippedAt=changed?Date.now():prev?.ticker===ticker?prev.flippedAt:0;
- flipWatchHistory.set(asset,{ticker,direction,flippedAt});
+ flipWatchHistory.set(asset,{ticker,direction,flippedAt,observed:call.basis==='observed same-round momentum'});
  return {direction,recentFlip:!!flippedAt&&Date.now()-flippedAt<60000,observed:call.basis==='observed same-round momentum'};
 }
 function syncSignals(){
@@ -368,9 +368,9 @@ function syncSignals(){
   if(flip){
    const icon=document.createElement('span');
    const hue=flip.direction==='UP'?'#4ade80':'#fb7185';
-   icon.style.cssText='display:inline-block;margin-left:6px;padding:4px 7px;border-radius:8px;border:1px solid '+hue+';color:'+hue+';font-size:12px;font-weight:900;white-space:nowrap';
-   icon.textContent=(flip.recentFlip?'⚡ FLIP WATCH ':'↗↘ WATCH ')+(flip.direction==='UP'?'▲ UP':'▼ DOWN');
-   icon.title=(flip.recentFlip?'Direction reversed in recent observations. ':'Current directional watch. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
+   icon.style.cssText='display:inline-block;margin-left:6px;padding:4px 7px;border-radius:8px;border:2px solid '+hue+';color:'+hue+';font-size:13px;font-weight:900;white-space:nowrap;box-shadow:0 0 9px '+hue+'66';
+   icon.textContent=(flip.recentFlip?'⚡ FLIP DETECTED ':'👀 FLIP WATCH ')+(flip.direction==='UP'?'▲ UP':'▼ DOWN');
+   icon.title=(flip.recentFlip?'Observed momentum reversed this round. ':'Current directional watch; not necessarily a reversal. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
    badge.after(icon);
   }
   // Small research-direction chip stays visible beside WAIT in compact mode.
