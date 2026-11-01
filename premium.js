@@ -201,6 +201,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  });
  paint();
 });
+if(!document.getElementById('btFlipPulseStyle')){const style=document.createElement('style');style.id='btFlipPulseStyle';style.textContent='@keyframes btFlipPulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.07);filter:brightness(1.9)}}';document.head.append(style);}
 const flipWatchHistory=new Map();
 function flipWatchFor(asset,sig,ticker){
  const call=sig?.roundCall;
@@ -370,6 +371,7 @@ function syncSignals(){
    const hue=flip.direction==='UP'?'#4ade80':'#fb7185';
    icon.style.cssText='display:inline-block;margin-left:6px;padding:4px 7px;border-radius:8px;border:2px solid '+hue+';color:'+hue+';font-size:13px;font-weight:900;white-space:nowrap;box-shadow:0 0 9px '+hue+'66';
    icon.textContent=(flip.recentFlip?'⚡ FLIP DETECTED ':'👀 FLIP WATCH ')+(flip.direction==='UP'?'▲ UP':'▼ DOWN');
+   if(flip.recentFlip){icon.style.animation='btFlipPulse .7s ease-in-out 3';icon.setAttribute('aria-live','polite');}
    icon.title=(flip.recentFlip?'Observed momentum reversed this round. ':'Current directional watch; not necessarily a reversal. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
    badge.after(icon);
   }
@@ -505,7 +507,7 @@ async function update(){
 }
 let signalFetchBusy=false,signalLastFetch=0;
 async function refreshSharedSignalTable(){
- if(signalFetchBusy||document.hidden||Date.now()-signalLastFetch<5000)return;
+ if(signalFetchBusy||document.hidden||Date.now()-signalLastFetch<3000)return;
  signalFetchBusy=true;signalLastFetch=Date.now();
  try{
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
