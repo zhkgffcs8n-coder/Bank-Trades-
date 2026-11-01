@@ -113,6 +113,15 @@ function updateSidebarConfidence(){
 }
 window.addEventListener('banktrades:shared-signals',updateSidebarConfidence);
 setInterval(updateSidebarConfidence,10000);
+// Late-round research visibility: inspect the live feed through contract expiry.
+// This diagnostic does not open a position or override entry qualification.
+function lateRoundResearchStatus(asset,market){
+ const expires=expiryMs(market),seconds=Math.floor((expires-Date.now())/1000);
+ const signal=sharedSignals.get(asset);
+ if(!Number.isFinite(seconds)||seconds<=0)return 'Contract expired or expiry unavailable';
+ if(Date.now()-sharedFetched>45000||!signal||signal.ticker!==market?.ticker)return 'Awaiting fresh same-contract signal';
+ return seconds<=120?'Final '+seconds+' seconds · '+signal.action+' · '+(signal.reason||'Research only'):'Monitoring · '+signal.action;
+}
 const signalDisplayCache=new Map();
 function signalFor(asset,m,stale){
  const s=sharedSignals.get(asset),now=Date.now(),valid=!stale&&!!m&&now-sharedFetched<=45000&&!!s&&s.ticker===m.ticker;
