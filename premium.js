@@ -47,6 +47,10 @@ function syncSignals(){
    const context=dir==='up'?'📈 BTC CHART: BULLISH':dir==='down'?'📉 BTC CHART: BEARISH':dir==='mixed'?'↔ BTC CHART: MIXED':'⚠️ BTC CHART: STALE';
    const detail=document.createElement('small');detail.style.display='block';detail.style.fontSize='10px';detail.style.marginTop='4px';detail.style.opacity='.8';
    detail.textContent=context+' · research only';cell.append(detail);
+   if(fresh&&['up','down'].includes(dir)&&action==='WAIT'){
+    const watch=document.createElement('small');watch.style.display='block';watch.style.fontSize='10px';watch.style.opacity='.8';
+    watch.textContent='SPOT '+dir.toUpperCase()+' WATCH · no validated Kalshi entry';cell.append(watch);
+   }
    if(fresh&&['up','down'].includes(dir)&&['BUY UP','BUY DOWN'].includes(action)&&dir!==(action==='BUY UP'?'up':'down')){
     cell.firstChild.textContent='⚠️ '+action+' · BTC CHART DISAGREES';
    }
