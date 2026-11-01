@@ -85,6 +85,7 @@ function chart(){
 }
 // Foreground-only fast paper exit alerts; does not mutate the server ledger or place orders.
 const exitAlerted=new Map();
+const paperExitState=new Map();
 function monitorPaperExits(results,age){
  if(!paperBotRunning||!Number.isFinite(age)||age<0||age>10000)return;
  const now=Date.now();
@@ -96,7 +97,11 @@ function monitorPaperExits(results,age){
   const entry=Number(t.ask);
   if(!Number.isFinite(bid)||!Number.isFinite(ask)||!Number.isFinite(entry)||entry<=0||bid<=0||ask<bid||ask-bid>5)continue;
   const roi=(bid-entry)/entry;
-  const reason=roi<=-.12?'STOP LOSS':roi>=.20?'TAKE PROFIT':null;
+  const prior=paperExitState.get(t.id)||{peak:bid};
+  const peak=Math.max(prior.peak,bid);
+  paperExitState.set(t.id,{peak,at:now});
+  const drawdown=peak>0?(bid-peak)/peak:0;
+  const reason=roi<=-.12?'STOP LOSS':roi>=.20?'TAKE PROFIT':peak>entry*1.08&&drawdown<=-.10?'TRAILING EXIT':null;
   if(!reason)continue;
   const key=t.id+':'+reason;
   if(now-(exitAlerted.get(key)||0)<60000)continue;
@@ -106,6 +111,7 @@ function monitorPaperExits(results,age){
   window.dispatchEvent(new CustomEvent('banktrades:paper-exit-alert',{detail:{id:t.id,asset:t.asset,ticker:t.ticker,reason,bid,roi,at:now,executed:false}}));
  }
  if(exitAlerted.size>500)exitAlerted.clear();
+ if(paperExitState.size>500)paperExitState.clear();
 }
 let fetching=false,lastFetch=0,failures=0;
 async function update(){
