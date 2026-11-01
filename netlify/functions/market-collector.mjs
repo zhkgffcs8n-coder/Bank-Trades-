@@ -406,7 +406,13 @@ export default async()=>{
   const perAsset={};
   for(const asset of Object.keys(SERIES)){
    const am=assetModels[asset]||await db.get('training/model/'+asset,{type:'json'});
-   if(am?.count)perAsset[asset]={count:am.count,brier:am.brier/am.count,baselineBrier:am.baselineBrier/am.count,validated:am.count>=100&&am.brier<am.baselineBrier};
+   if(am?.count){
+    const report=learningReport(am);
+    perAsset[asset]={count:am.count,brier:report.modelBrier,baselineBrier:report.baselineBrier,
+     relativeBrierImprovement:report.relativeBrierImprovement,
+     validated:report.validated,status:report.status,
+     warning:report.validated?'Aggregate prequential improvement only; independent future validation still required':'Do not use this model to justify a BUY signal'};
+   }
   }
   await db.setJSON('training/status',{at:now,measuredLearning:learningReport(model),count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset validation uses the same 100-outcome threshold as the live model gate.'});
   collection.trainingSucceeded=true;
