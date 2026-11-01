@@ -2,7 +2,7 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
-import {initialModel,predict,learn,learningReport,multiWindowMomentum} from '../../src/research-model.mjs';
+import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview,frozenTrainingTargets} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
@@ -432,7 +432,7 @@ export default async()=>{
      warning:report.validated?'Aggregate prequential improvement only; independent future validation still required':'Do not use this model to justify a BUY signal'};
    }
   }
-  await db.setJSON('training/status',{trainedThisRun,trainedByAsset,at:now,measuredLearning:learningReport(model),count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:model.count>=100&&model.brier<model.baselineBrier,perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset validation uses the same 100-outcome threshold as the live model gate.'});
+  await db.setJSON('training/status',{trainedThisRun,trainedByAsset,at:now,measuredLearning:learningReport(model),count:model.count,brier:model.count?model.brier/model.count:null,baselineBrier:model.count?model.baselineBrier/model.count:null,validated:modelValidated(model),perAsset,mode:'PAPER RESEARCH',method:'Prequential finalized-outcome calibration; per-asset validation uses the same 100-outcome threshold as the live model gate.'});
   collection.trainingSucceeded=true;
  }catch(e){collection.trainingError=String(e).slice(0,240);console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
