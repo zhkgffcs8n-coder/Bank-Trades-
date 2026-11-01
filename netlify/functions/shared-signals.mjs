@@ -62,7 +62,12 @@ export default async req=>{
    const fairUp=Number.isFinite(upBid)&&Number.isFinite(upAsk)?(upBid+upAsk)/2:NaN;
    const valid=Number.isFinite(upAsk)&&Number.isFinite(downAsk)&&upAsk>0&&downAsk>0&&upAsk<1&&downAsk<1;
    const forecast=valid?{direction:signal.action==='BUY UP'?'UP':signal.action==='BUY DOWN'?'DOWN':Number.isFinite(fairUp)?fairUp>=.5?'UP':'DOWN':null,method:signal.action.startsWith('BUY')?'qualified experimental entry':'quote-implied direction only; not a predictive edge',up:{askCents:Math.round(upAsk*1000)/10,maxProfitPerContract:Math.round((1-upAsk)*1000)/1000,maxLossPerContract:upAsk},down:{askCents:Math.round(downAsk*1000)/10,maxProfitPerContract:Math.round((1-downAsk)*1000)/1000,maxLossPerContract:downAsk},expiresAt:market._expiry,actionable:signal.action.startsWith('BUY')}:null;
-   return {asset,...signal,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   // Separate a round-level research direction from a qualified trade recommendation.
+   // This field is non-actionable and never bypasses paper entry gates or sends orders.
+   const researchDirection=Number.isFinite(fairUp)&&valid
+    ?{direction:fairUp>=.5?'UP':'DOWN',method:'Current quote midpoint, not validated predictive signal',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now}
+    :{direction:null,method:'Insufficient valid quotes',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now};
+   return {asset,...signal,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,results});
