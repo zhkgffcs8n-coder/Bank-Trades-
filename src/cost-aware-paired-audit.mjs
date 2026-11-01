@@ -11,9 +11,9 @@ const round=(n)=>Number(n.toFixed(4));
 
 export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum=100,archiveComplete=true}={}){
  if(![feeCents,slippageCents].every(x=>Number.isFinite(x)&&x>=0&&x<=100)||!Number.isInteger(minimum)||minimum<1||typeof archiveComplete!=='boolean')throw Error('Invalid research cost assumptions');
- const seen=new Set(),paired=[];
+ const byTicker=new Map(),conflicted=new Set();
  for(const r of Array.isArray(records)?records:[]){
-  if(!r||typeof r.ticker!=='string'||!r.ticker||seen.has(r.ticker)||
+  if(!r||typeof r.ticker!=='string'||!r.ticker||
    r.status!=='RESOLVED'||r.outcomeVerification!==SETTLEMENT_VERIFICATION||
    !['yes','no'].includes(r.outcome)||!Number.isFinite(r.at)||!Number.isFinite(r.expiresAt)||
    !Number.isFinite(r.resolvedAt)||r.at>=r.expiresAt||r.resolvedAt<r.expiresAt||
@@ -22,9 +22,17 @@ export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum
   if(!candidate||!(candidate.action==='WAIT'||validBuy(candidate)))continue;
   // A WAIT is an explicit abstention on the same contract, not a missing record.
   if(candidate.action==='WAIT'&&candidate.resolved===true)continue;
-  seen.add(r.ticker);
-  paired.push(r);
+  // Do not let archive order select whichever conflicting forecast or outcome
+  // appeared first. Identical duplicates are harmless; disagreements quarantine
+  // the entire contract until provenance is reconciled.
+  const decision=x=>[x.action,x.side??null,x.ask??null,x.resolved===true];
+  const fingerprint=JSON.stringify([r.at,r.expiresAt,r.outcome,
+   decision(r.engines.original),decision(candidate)]);
+  const prior=byTicker.get(r.ticker);
+  if(prior&&prior.fingerprint!==fingerprint)conflicted.add(r.ticker);
+  else if(!prior)byTicker.set(r.ticker,{row:r,fingerprint});
  }
+ const paired=[...byTicker].filter(([ticker])=>!conflicted.has(ticker)).map(([,v])=>v.row);
  paired.sort((a,b)=>a.at-b.at||a.ticker.localeCompare(b.ticker));
  const evaluate=name=>{
   let pnl=0,peak=0,maxDrawdown=0,spent=0,trades=0,wins=0,losses=0;
@@ -43,11 +51,11 @@ export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum
    maxDrawdown:round(maxDrawdown)};
  };
  const original=evaluate('original'),candidate=evaluate('upgraded');
- return {mode:'SHADOW_ONLY',matchedOfficialMarkets:paired.length,minimum,
+ return {mode:'SHADOW_ONLY',matchedOfficialMarkets:paired.length,conflictingMarketCount:conflicted.size,minimum,
   archiveComplete,scope:archiveComplete?'COMPLETE_ARCHIVE':'PARTIAL_FIRST_PAGE',
-  sufficientMatchedMarkets:archiveComplete&&paired.length>=minimum,
+  sufficientMatchedMarkets:archiveComplete&&conflicted.size===0&&paired.length>=minimum,
   original,candidate,candidateMinusOriginalPnl:round(candidate.costStressedPnl-original.costStressedPnl),
   brierOriginal:null,brierCandidate:null,automaticPromotionAllowed:false,
   assumptions:{feeCents,slippageCents,entryAtRecordedAsk:true,oneContractPerEntry:true},
-  note:(archiveComplete?'':'Incomplete archive: first-page counts and PnL are partial; do not infer sample sufficiency. ')+'Illustrative per-contract costs, not verified Kalshi fees or actual fills. Candidate is a stricter Original gate, not an independently calibrated model. Missing probability forecasts prevent Brier comparison. Requires prospective official settlement verification; no promotion.'};
+  note:(archiveComplete?'':'Incomplete archive: first-page counts and PnL are partial; do not infer sample sufficiency. ')+(conflicted.size?'Conflicting duplicate contracts quarantined; do not infer sample sufficiency until reconciled. ':'')+'Illustrative per-contract costs, not verified Kalshi fees or actual fills. Candidate is a stricter Original gate, not an independently calibrated model. Missing probability forecasts prevent Brier comparison. Requires prospective official settlement verification; no promotion.'};
 }
