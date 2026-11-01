@@ -94,7 +94,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  const color=kind==='sell'?'#ed2929':'#16a34a';
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
- overlay.querySelector('.bank-head').textContent=(kind==='sell'?'🚨 EXIT ALERT':'🟢 ENTRY ALERT')+' · '+asset;
+ overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT ALERT':'🟢 BUY / ENTRY ALERT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  overlay.querySelector('button').focus();
 }
