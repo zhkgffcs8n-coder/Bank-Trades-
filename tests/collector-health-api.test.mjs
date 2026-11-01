@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {assessCollectorHealth} from '../src/collector-health.mjs';
+const now=2000000;
+const healthy={completedAt:now-60000,status:'COMPLETED',sampledAssetCount:8,failedAssets:[],trainingSucceeded:true};
+test('healthy collector requires fresh completed full coverage',()=>assert.equal(assessCollectorHealth(healthy,now).fresh,true));
+test('stale collection is not healthy',()=>assert.equal(assessCollectorHealth({...healthy,completedAt:now-240000},now).fresh,false));
+test('partial market coverage is not healthy',()=>assert.equal(assessCollectorHealth({...healthy,sampledAssetCount:7},now).fresh,false));
+test('failed training is not healthy',()=>assert.equal(assessCollectorHealth({...healthy,trainingSucceeded:false},now).fresh,false));
+test('missing heartbeat is not proof of collection',()=>assert.equal(assessCollectorHealth(null,now).fresh,false));
