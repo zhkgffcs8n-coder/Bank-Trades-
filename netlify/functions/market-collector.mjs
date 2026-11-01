@@ -142,6 +142,9 @@ export default async()=>{
    collection.newPredictions++;
   }
  }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
+ // These counters must remain in scope for the final heartbeat, even if training fails.
+ let trainedThisRun=0;
+ const trainedByAsset={};
  // Track every sampled contract, not just the latest contract for each asset.
  // This prevents a new 15-minute round from hiding the previous round's settlement.
  try{
@@ -149,8 +152,6 @@ export default async()=>{
   // function runtime or starving new contracts behind older pending keys.
   let model=await db.get('training/model',{type:'json'})||initialModel();
   const assetModels={};
-  let trainedThisRun=0;
-  const trainedByAsset={};
   await scanBlobPage(db,{prefix:'pending/',cursorKey:'scan-cursors/pending-settlements-v1',limit:150},async item=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)return;
@@ -166,7 +167,7 @@ export default async()=>{
     if(learnedMarker?.result===trustedCached){
      await db.delete('pending/'+rec.ticker);return;
     }
-    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME_REQUIRES_RECONCILIATION',now));
+    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME',now));
     collection.trainingReviewCount++;
     await db.delete('pending/'+rec.ticker);return;
    }
