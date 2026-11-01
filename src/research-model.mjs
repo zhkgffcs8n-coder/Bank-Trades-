@@ -16,3 +16,9 @@ export function learn(model,observation,outcome){
  return {weights:model.weights.map((w,i)=>clamp(w-rate*((p-outcome)*observation.features[i]+.002*w),-1,1)),count:model.count+1,
   brier:model.brier+(p-outcome)**2,baselineBrier:model.baselineBrier+(observation.baseline-outcome)**2};
 }
+
+// Do not surface a learned forecast as validated until it beats the frozen baseline
+// on a minimum number of prospectively scored, finalized observations.
+export function modelValidated(model,minCount=100){
+ return !!model&&Number.isInteger(model.count)&&model.count>=minCount&&Number.isFinite(model.brier)&&Number.isFinite(model.baselineBrier)&&model.brier>=0&&model.baselineBrier>=0&&model.brier<model.baselineBrier&&Array.isArray(model.weights)&&model.weights.length===4&&model.weights.every(w=>Number.isFinite(w)&&Math.abs(w)<=1);
+}
