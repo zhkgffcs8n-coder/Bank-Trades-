@@ -31,6 +31,18 @@ export default async req=>{
  await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{}),timed(db.get('collector/heartbeat',{type:'json'}),1800,'collector heartbeat').then(v=>research.heartbeat=v).catch(()=>{})]);
  // Learning continues in the scheduled collector. Keep optional reports out of
  // the latency-critical signal endpoint to avoid overwhelming Netlify Blobs.
+ const collector=assessCollectorHealth(research.heartbeat,now);
+ const collectionDiagnostics={lastStartedAt:research.heartbeat?.startedAt||null,
+  lastCompletedAt:research.heartbeat?.completedAt||null,
+  sampledAssets:research.heartbeat?.sampledAssets||[],
+  sampledAssetCount:research.heartbeat?.sampledAssetCount??null,
+  failedAssets:research.heartbeat?.failedAssets||[],
+  trainingSucceeded:research.heartbeat?.trainingSucceeded??null,
+  trainingError:research.heartbeat?.trainingError||null,
+  settlementFailures:research.heartbeat?.settlementFailures??null,
+  trainingReviewCount:research.heartbeat?.trainingReviewCount??null,
+  newPendingPredictions:research.heartbeat?.newPendingPredictions??null,
+  collectorHealth:collector};
  const learning={mode:'AUTOMATIC PAPER RESEARCH',model:research.status,
   status:research.status?.validated?'MODEL RESEARCH CHECK PASSED':'COLLECTING VERIFIED OUTCOMES',
   liveRuleAutoPromotion:false,
@@ -87,5 +99,5 @@ export default async req=>{
    return {asset,...signal,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
- return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,learningMetrics:learningReport(research.model),results});
+ return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),results});
 };
