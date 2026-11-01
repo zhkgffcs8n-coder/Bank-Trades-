@@ -8,3 +8,11 @@ test('market-history filters timestamp from the immutable sample key, not its co
  assert.match(source,/sampleTimestampFromKey\(b\.key,asset\)\s*>=\s*cutoff/);
  assert.doesNotMatch(source,/Number\(b\.key\.split\('\/'\)\.at\(-1\)\)/);
 });
+
+test('market-history excludes unverified cached labels from official outcome results',()=>{
+ assert.match(source,/import \{trustedStoredFinalizedOutcome\} from '\.\.\/\.\.\/src\/official-settlement\.mjs'/);
+ assert.match(source,/if\(trustedStoredFinalizedOutcome\(o,ticker\)\)outcomes\[ticker\]=o/);
+ assert.match(source,/else if\(o\)unverifiedOutcomeRecords\+\+/);
+ assert.match(source,/records,outcomes,unverifiedOutcomeRecords,hasMore/);
+ assert.doesNotMatch(source,/if\(o\)outcomes\[ticker\]=o/);
+});
