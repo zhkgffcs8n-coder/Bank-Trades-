@@ -17,7 +17,6 @@ async function refreshPaperPositions(){
 const roundSeen=new Map();
 let latestPositionQuotes=[],latestPositionQuoteAt=0;
 const manualPeaks=new Map();
-const calledEntries=new Map();
 const simulatedCalls=new Map();
 function rememberEntryCalls(signals){
  for(const sig of signals){
@@ -76,7 +75,6 @@ function syncSignals(){
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const advice=manualPositionAdvice(tr.dataset.asset);
-  const call=simulatedCalls.get(tr.dataset.asset);
   const hypothetical=hypotheticalAdvice(tr.dataset.asset,sig);
   const action=sig?.action||'WAIT';
   const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
