@@ -101,7 +101,7 @@ export default async()=>{
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const globalModel=await hdb.get('training/model',{type:'json'});
  const research={model:globalModel,status:training};
- const roundAudit={at:now,running:true,entriesPaused,markets:{}};
+ const roundAudit={at:now,running:true,entriesPaused:entryPaused,markets:{}};
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
