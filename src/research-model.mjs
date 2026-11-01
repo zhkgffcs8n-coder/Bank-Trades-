@@ -49,3 +49,18 @@ export function compareValidationWindows(candidate,baseline,{minimum=100,margin=
   reason:improvement>margin?'Candidate beats baseline on recorded holdout':'No material out-of-sample improvement',
   caution:'Holdout records must be genuinely prospective, non-overlapping, and scored before settlement. No automatic trade authorization.'};
 }
+
+// Time-window features from timestamped, same-contract samples.
+// Missing history is explicit; never fill gaps with invented candles.
+export function multiWindowMomentum(samples,now=Date.now()){
+ const rows=(Array.isArray(samples)?samples:[]).filter(r=>Number.isFinite(r?.t)&&r.t<=now&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1).sort((a,b)=>a.t-b.t);
+ const last=rows.at(-1);
+ const windows=[1,3,5,10].map(minutes=>{
+  const target=(last?.t??now)-minutes*60000;
+  const start=rows.filter(r=>r.t<=target).at(-1);
+  return {minutes,change:start&&last?last.yesMid-start.yesMid:null,
+   available:!!start&&!!last,observedSpanSeconds:start&&last?Math.round((last.t-start.t)/1000):null};
+ });
+ return {asOf:last?.t??null,sampleCount:rows.length,windows,
+  note:'Sampled quote momentum, not OHLC candles or independently verified market edge'};
+}
