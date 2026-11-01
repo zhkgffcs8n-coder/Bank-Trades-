@@ -18,18 +18,43 @@ const roundSeen=new Map();
 let latestPositionQuotes=[],latestPositionQuoteAt=0;
 const manualPeaks=new Map();
 const calledEntries=new Map();
+const simulatedCalls=new Map();
 function rememberEntryCalls(signals){
  for(const sig of signals){
   if(!['BUY UP','BUY DOWN'].includes(sig?.action))continue;
-  const ticker=roundSeen.get(sig.asset)?.ticker;
-  if(!ticker)continue;
-  const prior=calledEntries.get(sig.asset);
-  if(prior?.ticker===ticker)returnIfSame(prior,sig);
-  else calledEntries.set(sig.asset,{ticker,action:sig.action,at:Date.now()});
+  const asset=sig.asset,ticker=roundSeen.get(asset)?.ticker;
+  const market=latestPositionQuotes.find(x=>x.asset===asset)?.market;
+  if(!ticker||market?.ticker!==ticker||Date.now()-latestPositionQuoteAt>10000)continue;
+  const side=sig.action==='BUY UP'?'up':'down',entry=price(market,side==='up'?'yes_ask':'no_ask');
+  if(!Number.isFinite(entry)||entry<=0||entry>=100)continue;
+  const prior=simulatedCalls.get(asset);
+  if(prior?.ticker===ticker&&prior.status==='OPEN')continue;
+  if(prior?.ticker===ticker&&prior.status==='EXIT')continue;
+  simulatedCalls.set(asset,{ticker,side,entry,peak:entry,status:'OPEN',at:Date.now()});
  }
 }
-function returnIfSame(prior,sig){if(prior.action!==sig.action)prior.action=sig.action}
-
+function hypotheticalAdvice(asset,sig){
+ const p=simulatedCalls.get(asset);if(!p)return null;
+ const m=latestPositionQuotes.find(x=>x.asset===asset)?.market;
+ if(m?.ticker!==p.ticker||Date.now()-latestPositionQuoteAt>10000)return {action:'⚠️ TRACKED CALL · QUOTE UNAVAILABLE',reason:'Simulated signal only; no verified current exit bid'};
+ if(p.status==='EXIT')return {action:'📋 EXIT ALERT ISSUED · AWAIT NEXT ROUND',reason:'Hypothetical exit signal; no Kalshi order was placed'};
+ const bid=price(m,p.side==='up'?'yes_bid':'no_bid'),ask=price(m,p.side==='up'?'yes_ask':'no_ask');
+ if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||ask<bid)return {action:'⚠️ HOLD · BID UNAVAILABLE',reason:'Cannot evaluate a reliable sell price'};
+ p.peak=Math.max(p.peak,bid);
+ const roi=(bid-p.entry)/p.entry,peakGain=(p.peak-p.entry)/p.entry,drawdown=(bid-p.peak)/p.peak;
+ const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
+ const stop=roi<=-.12,exit=stop||(trail!==null&&drawdown<=-trail);
+ const remaining=(expiry(m)-Date.now())/1000;
+ const opposite=sig?.action===(p.side==='up'?'BUY DOWN':'BUY UP');
+ const oppositeAsk=price(m,p.side==='up'?'no_ask':'yes_ask');
+ if(exit){
+  p.status='EXIT';
+  return {action:roi>0?'💰 TAKE PROFITS · EXIT ALERT':'🚨 SELL FAST · EXIT ALERT',reason:'Hypothetical '+p.side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees. No order executed.'};
+ }
+ if(opposite&&Number.isFinite(oppositeAsk)&&oppositeAsk>0&&oppositeAsk<100)return {action:'🔄 POSSIBLE FLIP · REVIEW',reason:'Opposite BUY signal appeared; compare fees, spread and executable prices. No automatic reversal.'};
+ if(remaining>0&&remaining<=90&&bid>=90&&roi>=.10)return {action:'🟢 HOLD TILL END · REVIEW',reason:'Strong current bid but settlement can still reverse; simulated position only.'};
+ return {action:'🟢 HOLD · MONITOR',reason:'Hypothetical '+p.side.toUpperCase()+' · entry '+p.entry.toFixed(1)+'¢ · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees'};
+}
 function manualPositionAdvice(asset){
  let p;try{p=JSON.parse(localStorage.getItem('banktrades:manual-positions:v1')||'{}')?.[asset]}catch{return null}
  if(!p)return null;
@@ -51,7 +76,8 @@ function syncSignals(){
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
   if(!cell)return;
   const advice=manualPositionAdvice(tr.dataset.asset);
-  const call=calledEntries.get(tr.dataset.asset);
+  const call=simulatedCalls.get(tr.dataset.asset);
+  const hypothetical=hypotheticalAdvice(tr.dataset.asset,sig);
   const action=sig?.action||'WAIT';
   const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
   const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
@@ -72,7 +98,7 @@ function syncSignals(){
   const sampleIssue=/collecting scheduled samples/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':'⏳ WAIT · NO QUALIFIED ENTRY';
   if(advice){cell.textContent=advice.action;cell.title=advice.reason;cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';cell.className='premium-action'+(/SELL|PROFITS/.test(advice.action)?' sell':' hold');return;}
-  if(!advice&&call?.ticker===ticker&&action==='WAIT'&&!unavailable){cell.textContent='📍 '+call.action+' CALLED · CONFIRM ENTRY TO TRACK';cell.title='Prior entry signal for this contract. No trade has been confirmed; use MY POSITION — EASY MODE if you bought.';cell.className='premium-action hold';return;}
+  if(!advice&&hypothetical){cell.textContent=hypothetical.action;cell.title=hypothetical.reason;cell.style.whiteSpace='normal';cell.className='premium-action hold';return;}
   if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
   // Independent BTC spot evidence is research context, never a trade authorization.
   if(tr.dataset.asset==='BTC'){
@@ -169,7 +195,7 @@ async function update(){
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
   const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
   const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
-  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});calledEntries.delete(asset);}}
+  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});simulatedCalls.delete(asset);}}
   const tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
   const state=cell(tr,valid&&active?(ya<=na?'↑ UP WATCH':'↓ DOWN WATCH'):valid?'CHECK ROUND':'NO QUOTE');state.className='premium-action';state.title='Directional quote watch, not a filled order or guaranteed profit';
   cell(tr,m?remaining:'—');$('premiumRows').append(tr);
