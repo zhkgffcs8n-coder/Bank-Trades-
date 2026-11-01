@@ -101,7 +101,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
   document.head.append(style);
   overlay=document.createElement('div');overlay.id='bankScreenAlert';overlay.setAttribute('role','alertdialog');overlay.setAttribute('aria-modal','true');
   overlay.innerHTML='<div class="bank-flash"></div><div class="bank-box"><div class="bank-head"></div><p class="bank-detail" style="font-size:clamp(18px,3vw,27px)"></p><p style="font-size:14px">Signal guidance only · no order placed · verify live Kalshi price</p><button type="button">DISMISS</button></div>';
-  overlay.querySelector('button').addEventListener('click',()=>overlay.remove());
+  overlay.querySelector('button').addEventListener('click',()=>{clearTimeout(overlay._autoDismissTimer);overlay.remove();});
  }
  document.body.append(overlay);
  const color=kind==='sell'||kind==='down'?'#ed2929':kind==='up'?'#16a34a':kind==='hold'?'#a78bfa':'#eab308';
@@ -109,6 +109,8 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  overlay.querySelector('.bank-box').style.borderColor=color;
  overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD TILL END · REVIEW':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
+ clearTimeout(overlay._autoDismissTimer);
+ overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},4500);
  overlay.querySelector('button').focus();
 }
 const voicedMarketStatuses=new Set();
