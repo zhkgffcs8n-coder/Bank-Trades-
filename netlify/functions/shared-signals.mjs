@@ -75,7 +75,15 @@ export default async req=>{
    const researchDirection=observed&&['UP','DOWN'].includes(observed.side)
     ?{direction:observed.side,method:'Observed same-contract price momentum; not a validated forecast',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now}
     :{direction:null,method:'No qualified fresh directional momentum observation; quote prices alone do not predict movement',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now};
-   return {asset,...signal,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   // Always publish a separate directional round call when executable quotes exist.
+   // This does not change the gated entry action or place an order.
+   const roundCall=valid&&Number.isFinite(fairUp)
+    ?{direction:researchDirection.direction||(fairUp>=.5?'UP':'DOWN'),
+      basis:researchDirection.direction?'observed same-round momentum':'market-implied quote direction',
+      qualified:['BUY UP','BUY DOWN'].includes(signal.action),
+      ticker:market.ticker,asOf:now}
+    :null;
+   return {asset,...signal,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,results});
