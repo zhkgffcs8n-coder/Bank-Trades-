@@ -133,10 +133,12 @@ export default async()=>{
   }catch(e){console.warn('Early-exit shadow audit unavailable',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
   if(!await db.get(pendingKey,{type:'json'})){
-   const model=await db.get('training/model/'+asset,{type:'json'})||await db.get('training/model',{type:'json'})||initialModel();
+   const assetModelForPrediction=await db.get('training/model/'+asset,{type:'json'});
+   const globalModelForPrediction=await db.get('training/model',{type:'json'})||initialModel();
+   const model=assetModelForPrediction||globalModelForPrediction;
    const baseline=Math.max(.02,Math.min(.98,record.yesMid));
    const features=[Math.max(-1,Math.min(1,(record.yesMid-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
-   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features)});
+   await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),globalPrediction:predict(globalModelForPrediction,baseline,features)});
    collection.newPredictions++;
   }
  }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
@@ -175,8 +177,12 @@ export default async()=>{
      await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
      // Existing legacy labels may already have trained weights. Never count them twice.
      if(!cached&&Array.isArray(rec.features)&&Number.isFinite(rec.prediction)&&Number.isFinite(rec.baseline)){
-      model=learn(model,rec,result==='yes'?1:0);
-      await db.setJSON('training/model',model);
+      // The global model must be scored against its OWN prediction frozen
+      // before settlement, not the separate asset model's prediction.
+      if(Number.isFinite(rec.globalPrediction)&&rec.globalPrediction>0&&rec.globalPrediction<1){
+       model=learn(model,{...rec,prediction:rec.globalPrediction},result==='yes'?1:0);
+       await db.setJSON('training/model',model);
+      }
       const assetKey=String(rec.asset||'UNKNOWN');
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
