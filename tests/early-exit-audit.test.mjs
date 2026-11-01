@@ -22,3 +22,18 @@ test('no exit quotes means no invented profit',()=>{
  const r=earlyExitAudit([round([{t:100,ask:.5,bid:.48}])]);
  assert.equal(r.trades,0);
 });
+
+test('does not invent a completed last-quote exit while round remains open',()=>{
+ const r=earlyExitAudit([round([{t:100,ask:.5,bid:.48},{t:200,ask:.58,bid:.55}])],{asOf:500});
+ assert.equal(r.trades,0);
+});
+test('rejects a stale last quote at expiry rather than assuming a sale',()=>{
+ const r=earlyExitAudit([{id:'old',signalAt:100,expiresAt:300000,quotes:[{t:100,ask:.5,bid:.48},{t:200,ask:.6,bid:.55}]}],{asOf:300000});
+ assert.equal(r.trades,0);
+});
+test('never reads future quotes or entries after the contract expired',()=>{
+ const future=earlyExitAudit([round([{t:100,ask:.5,bid:.48},{t:800,ask:.85,bid:.8}])],{asOf:500});
+ assert.equal(future.trades,0);
+ const late=earlyExitAudit([round([{t:1000,ask:.5,bid:.48},{t:1100,ask:.85,bid:.8}],1000)],{asOf:1200});
+ assert.equal(late.trades,0);
+});
