@@ -1,9 +1,9 @@
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
-const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
 export function performance(trades=[]){
  const eligible=trades.filter(t=>t.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
  const explorationExcluded=trades.length-eligible.length;
- const valid=eligible.filter(t=>((t.status==='SETTLED'&&['WIN','LOSS'].includes(String(t.settlement).toUpperCase())&&['yes','no'].includes(String(t.marketResult).toLowerCase()))||(t.status==='CLOSED'&&t.paperExitOnly===true&&Number.isFinite(Number(t.exitBid))))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&Number.isFinite(Number(t.pnl))&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
+ const valid=eligible.filter(t=>((t.status==='SETTLED'&&['WIN','LOSS'].includes(String(t.settlement).toUpperCase())&&['yes','no'].includes(String(t.marketResult).toLowerCase()))||(t.status==='CLOSED'&&t.paperExitOnly===true&&hasRecordedNumber(t.exitBid)))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&hasRecordedNumber(t.pnl)&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
  const summarize=rows=>{
   const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=rows.filter(t=>Number(t.pnl)<0).length,ties=n-wins-losses;
   const spent=rows.reduce((s,t)=>s+Number(t.cost),0),pnl=rows.reduce((s,t)=>s+Number(t.pnl),0);
