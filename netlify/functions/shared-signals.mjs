@@ -71,9 +71,10 @@ export default async req=>{
    const forecast=valid?{direction:signal.action==='BUY UP'?'UP':signal.action==='BUY DOWN'?'DOWN':Number.isFinite(fairUp)?fairUp>=.5?'UP':'DOWN':null,method:signal.action.startsWith('BUY')?'qualified experimental entry':'quote-implied direction only; not a predictive edge',up:{askCents:Math.round(upAsk*1000)/10,maxProfitPerContract:Math.round((1-upAsk)*1000)/1000,maxLossPerContract:upAsk},down:{askCents:Math.round(downAsk*1000)/10,maxProfitPerContract:Math.round((1-downAsk)*1000)/1000,maxLossPerContract:downAsk},expiresAt:market._expiry,actionable:signal.action.startsWith('BUY')}:null;
    // Separate a round-level research direction from a qualified trade recommendation.
    // This field is non-actionable and never bypasses paper entry gates or sends orders.
-   const researchDirection=Number.isFinite(fairUp)&&valid
-    ?{direction:fairUp>=.5?'UP':'DOWN',method:'Current quote midpoint, not validated predictive signal',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now}
-    :{direction:null,method:'Insufficient valid quotes',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now};
+   const observed=rawSignal.entryResearch;
+   const researchDirection=observed&&['UP','DOWN'].includes(observed.side)
+    ?{direction:observed.side,method:'Observed same-contract price momentum; not a validated forecast',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now}
+    :{direction:null,method:'No qualified fresh directional momentum observation; quote prices alone do not predict movement',mode:'SHADOW_ONLY',actionable:false,roundTicker:market.ticker,asOf:now};
    return {asset,...signal,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
