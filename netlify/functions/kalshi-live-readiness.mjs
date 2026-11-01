@@ -1,5 +1,6 @@
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
+import {assessCollectorHealth} from '../../src/collector-health.mjs';
 
 // This endpoint intentionally never accepts credentials or places orders.
 // Production trading remains fail-closed until an independently audited,
@@ -17,11 +18,11 @@ export default async function(req){
   ]);
   const now=Date.now();
   const age=x=>Number.isFinite(Number(x))&&Number(x)>0?Math.round((now-Number(x))/1000):null;
-  const runnerAge=age(runner?.at),collectorAge=age(collector?.completedAt);
+  const runnerAge=age(runner?.at),collectorHealth=assessCollectorHealth(collector);
   const cashDifference=Number(audit?.cashDifference);
   const checks={
    runnerFresh:runnerAge!==null&&runnerAge>=0&&runnerAge<=180,
-   collectorFresh:collectorAge!==null&&collectorAge>=0&&collectorAge<=180,
+   collectorFresh:collectorHealth.fresh,
    ledgerReconciled:!!audit&&Number.isFinite(cashDifference)&&Math.abs(cashDifference)<0.01,
    orderExecutionVerified:false,
    fillReconciliationVerified:false,
@@ -29,7 +30,7 @@ export default async function(req){
    emergencyStopVerified:false
   };
   return json({mode:'LIVE DISABLED',canTrade:false,canAcceptApiKeys:false,
-   checks,runnerAgeSeconds:runnerAge,collectorAgeSeconds:collectorAge,
+   checks,runnerAgeSeconds:runnerAge,collectorAgeSeconds:collectorHealth.ageSeconds,
    proposedLimits:{maxPositionUsd:1,maxDailyLossUsd:5,maxOpenPositions:1},
    note:'No real orders or API key uploads are enabled. A quoted bid does not guarantee a fill.'});
  }catch(e){return errorResponse(e)}
