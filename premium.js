@@ -14,6 +14,18 @@ async function refreshPaperPositions(){
  }catch(e){paperStatusError='Paper positions unavailable';syncSignals();}
 }
 
+// Lightweight comic-style signal effects; respect reduced-motion settings.
+const signalVisualState=new Map();
+const signalFxStyle=document.createElement('style');
+signalFxStyle.textContent=`
+@keyframes btComicPop{0%{transform:scale(.96);filter:brightness(1.6)}45%{transform:scale(1.035)}100%{transform:scale(1);filter:brightness(1)}}
+@keyframes btComicGlow{0%,100%{box-shadow:0 0 0 1px currentColor,0 0 12px rgba(255,255,255,.08)}50%{box-shadow:0 0 0 3px currentColor,0 0 22px currentColor}}
+#premiumRows tr.bt-buy-up td:nth-child(4){color:#4ade80!important;border-radius:12px;border:2px solid #22c55e!important;text-shadow:0 1px 4px #052e16}
+#premiumRows tr.bt-buy-down td:nth-child(4){color:#fda4af!important;border-radius:12px;border:2px solid #fb7185!important;text-shadow:0 1px 4px #450a0a}
+#premiumRows tr.bt-signal-new td:nth-child(4){animation:btComicPop .55s cubic-bezier(.18,1.5,.38,1),btComicGlow 1.4s ease-in-out 2}
+@media(prefers-reduced-motion:reduce){#premiumRows tr.bt-signal-new td:nth-child(4){animation:none}}
+`;
+document.head.appendChild(signalFxStyle);
 const roundSeen=new Map();
 let latestPositionQuotes=[],latestPositionQuoteAt=0;
 const manualPeaks=new Map();
@@ -166,6 +178,18 @@ function syncSignals(){
   const advice=manualPositionAdvice(tr.dataset.asset);
   const hypothetical=hypotheticalAdvice(tr.dataset.asset,sig);
   const action=sig?.action||'WAIT';
+  const assetKey=tr.dataset.asset;
+  const priorVisual=signalVisualState.get(assetKey);
+  const signalIdentity=(sig?.ticker||roundSeen.get(assetKey)?.ticker||'')+'|'+action;
+  tr.classList.toggle('bt-buy-up',action==='BUY UP');
+  tr.classList.toggle('bt-buy-down',action==='BUY DOWN');
+  if((action==='BUY UP'||action==='BUY DOWN')&&priorVisual!==undefined&&priorVisual!==signalIdentity){
+   tr.classList.remove('bt-signal-new');
+   void tr.offsetWidth;
+   tr.classList.add('bt-signal-new');
+  }else if(action!=='BUY UP'&&action!=='BUY DOWN')tr.classList.remove('bt-signal-new');
+  signalVisualState.set(assetKey,signalIdentity);
+
   const ticker=roundSeen.get(tr.dataset.asset)?.ticker;
   const position=paperPositions.find(t=>t.asset===tr.dataset.asset&&t.ticker===ticker);
   // Live signals remain independent recommendations; paper executions are contextual only.
