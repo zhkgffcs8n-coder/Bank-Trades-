@@ -3,6 +3,7 @@ import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn} from '../../src/research-model.mjs';
+import {pendingTrainingReview} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
@@ -15,7 +16,7 @@ async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort()
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 export default async()=>{
  const db=store(),now=Date.now(),bucket=Math.floor(now/60000)*60000;
- const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null};
+ const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0};
  await db.setJSON('collector/heartbeat',{startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
@@ -126,7 +127,14 @@ export default async()=>{
    const labelKey='outcomes/'+rec.ticker;
    const cached=await db.get(labelKey,{type:'json'});
    // Reverify legacy labels instead of discarding pending records on sight.
-   if(trustedStoredFinalizedOutcome(cached,rec.ticker)){await db.delete('pending/'+rec.ticker);return;}
+   const trustedCached=trustedStoredFinalizedOutcome(cached,rec.ticker);
+   if(trustedCached){
+    // A legacy cached label does not prove this prediction was learned.
+    // Preserve its evidence rather than silently deleting or double-training it.
+    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME',now));
+    collection.trainingReviewCount++;
+    await db.delete('pending/'+rec.ticker);return;
+   }
    try{
     const d=await get(base+'/markets/'+encodeURIComponent(rec.ticker)),m=d.market;
     const result=verifiedFinalizedBinaryOutcome(m,rec.ticker);
@@ -140,10 +148,13 @@ export default async()=>{
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       assetModels[assetKey]=learn(assetModel,rec,result==='yes'?1:0);
       await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
+     }else{
+      await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
+      collection.trainingReviewCount++;
      }
      await db.delete('pending/'+rec.ticker);
     }
-   }catch(e){console.warn('Pending settlement lookup unavailable',rec.ticker,String(e))}
+   }catch(e){collection.settlementFailures++;console.warn('Pending settlement lookup unavailable',rec.ticker,String(e))}
   });
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
@@ -362,7 +373,7 @@ export default async()=>{
   collection.trainingSucceeded=true;
  }catch(e){collection.trainingError=String(e).slice(0,240);console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
- await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
+ await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };
