@@ -39,7 +39,9 @@ export default async()=>{
    const key='recent/'+asset;
    const prior=await db.get(key,{type:'json'});
    recent=(Array.isArray(prior)?prior:[]).filter(x=>x?.ticker===m.ticker&&Number.isFinite(x.t)&&x.t>=now-12*60000&&x.t!==record.t);
-   recent.push(record);
+   // Preserve the first immutable observation in each minute bucket.
+   // Repeated scheduled invocations must not silently rewrite historical momentum.
+   recent.push(existing&&existing.ticker===m.ticker?existing:record);
    await db.setJSON(key,recent.slice(-12));
   }catch(e){console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
