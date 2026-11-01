@@ -507,7 +507,7 @@ async function update(){
 }
 let signalFetchBusy=false,signalLastFetch=0;
 async function refreshSharedSignalTable(){
- if(signalFetchBusy||document.hidden||Date.now()-signalLastFetch<3000)return;
+ if(signalFetchBusy||document.hidden||Date.now()-signalLastFetch<1000)return;
  signalFetchBusy=true;signalLastFetch=Date.now();
  try{
   const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
