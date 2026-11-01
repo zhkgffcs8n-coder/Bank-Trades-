@@ -1,5 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
-import {performance,gatePaperEntry,hasRecordedNumber} from './lib/paper-performance.mjs';
+import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
@@ -90,7 +90,12 @@ export default async()=>{
  const recordedPnl=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status)&&hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0);
  const expectedCash=initialCash+recordedPnl-openCost;
  const cashDifference=Number((Number(ledger.cash)-expectedCash).toFixed(2));
- await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
+ const resolvedRecords=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status));
+ const verifiedAccountingRecords=resolvedRecords.filter(reconciledPaperTrade);
+ const unreconciledRecords=resolvedRecords.filter(t=>!reconciledPaperTrade(t));
+ const pnlSum=rows=>Number(rows.filter(t=>hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2));
+ const excludedFromEligible=resolvedRecords.filter(t=>t.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST');
+ await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
  // Keep quote-based signal observations flowing during the paper-entry safety pause.
  // No simulated positions may open while the circuit breaker is active.
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
