@@ -1,9 +1,32 @@
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
 export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
+// Require paper P/L to reconcile to the recorded entry and outcome. A label or
+// a numeric P/L alone is not proof that a simulated trade was accounted for.
+export function reconciledPaperTrade(t){
+ if(!t||!['up','down'].includes(t.side)||!hasRecordedNumber(t.qty)||!hasRecordedNumber(t.cost)||!hasRecordedNumber(t.ask)||!hasRecordedNumber(t.pnl))return false;
+ const qty=Number(t.qty),cost=Number(t.cost),ask=Number(t.ask),pnl=Number(t.pnl);
+ if(!Number.isInteger(qty)||qty<1||cost<=0||ask<=0||ask>=100||Math.abs(cost-qty*ask/100)>.03)return false;
+ let expected;
+ if(t.status==='SETTLED'){
+  const outcome=String(t.marketResult).toLowerCase();
+  if(!['yes','no'].includes(outcome))return false;
+  const won=(t.side==='up')===(outcome==='yes');
+  if(String(t.settlement).toUpperCase()!==(won?'WIN':'LOSS'))return false;
+  expected=(won?qty:0)-cost;
+ }else if(t.status==='CLOSED'&&t.paperExitOnly===true){
+  if(!hasRecordedNumber(t.exitBid))return false;
+  const bid=Number(t.exitBid);
+  if(bid<0||bid>100||bid>ask+100)return false;
+  expected=Math.round(qty*bid)/100-cost;
+  const label=pnl>0?'WIN':pnl<0?'LOSS':'TIE';
+  if(t.settlement!=null&&String(t.settlement).toUpperCase()!==label)return false;
+ }else return false;
+ return Math.abs(expected-pnl)<=.021;
+}
 export function performance(trades=[]){
  const eligible=trades.filter(t=>t.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
  const explorationExcluded=trades.length-eligible.length;
- const valid=eligible.filter(t=>((t.status==='SETTLED'&&['WIN','LOSS'].includes(String(t.settlement).toUpperCase())&&['yes','no'].includes(String(t.marketResult).toLowerCase()))||(t.status==='CLOSED'&&t.paperExitOnly===true&&hasRecordedNumber(t.exitBid)))&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask))&&Number(t.ask)>0&&Number(t.ask)<100&&hasRecordedNumber(t.pnl)&&Number.isFinite(Number(t.cost))&&Number(t.cost)>0);
+ const valid=eligible.filter(reconciledPaperTrade);
  const summarize=rows=>{
   const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=rows.filter(t=>Number(t.pnl)<0).length,ties=n-wins-losses;
   const spent=rows.reduce((s,t)=>s+Number(t.cost),0),pnl=rows.reduce((s,t)=>s+Number(t.pnl),0);
