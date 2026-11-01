@@ -30,6 +30,11 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  const agreement=changes.filter(x=>side==='up'?x>0:x<0).length/changes.length;
  const reversals=changes.slice(1).filter((x,i)=>Math.sign(x)!==Math.sign(changes[i])&&Math.abs(x)>.4&&Math.abs(changes[i])>.4).length;
  const ask=side==='up'?ya:na;
- if(agreement<.6||reversals>2||ask<20||ask>85)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.6,reversals:reversals<=2,price:ask>=20&&ask<=85}}};
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:'observation only; does not change entry decisions'};
+ const entryResearch={side:side.toUpperCase(),askCents:side==='up'?ya:na,
+  momentumCents:Math.round(momentum*10)/10,agreement,reversals,
+  sampleCount:a.length,mode:'SHADOW_ONLY',actionable:false,
+  note:'Directional momentum observation; agreement and reversal rules are not proven edges'};
+
+ if(agreement<.6||reversals>2||ask<20||ask>85)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast,entryResearch,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.6,reversals:reversals<=2,price:ask>=20&&ask<=85}}};
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:'observation only; does not change entry decisions'};
 }
