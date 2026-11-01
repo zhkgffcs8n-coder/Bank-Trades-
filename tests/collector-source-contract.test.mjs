@@ -18,12 +18,13 @@ test('collector heartbeat counters remain in scope after settlement processing, 
 });
 
 test('every cached/fresh finalized-outcome training review reason is accepted by the provenance validator',()=>{
- const calls=[...collector.matchAll(/pendingTrainingReview\(rec,\s*(?:trustedCached|result),\s*'([^']+)'/g)];
- assert.ok(calls.length>=3,'Expected review paths for cached, legacy and invalid predictions');
+ const calls=[...collector.matchAll(/pendingTrainingReview\(rec,\s*(?:trustedCached|result),\s*([^,]+),now\)/g)];
+ const reasons=calls.flatMap(call=>[...call[1].matchAll(/'([^']+)'/g)].map(x=>x[1]));
+ assert.equal(new Set(reasons).size,3,'Expected cached, legacy and invalid prediction review paths');
  const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200};
- for(const match of calls){
-  const review=pendingTrainingReview(rec,'yes',match[1],300);
-  assert.equal(review.reason,match[1]);
+ for(const reason of reasons){
+  const review=pendingTrainingReview(rec,'yes',reason,300);
+  assert.equal(review.reason,reason);
   assert.equal(review.status,'REQUIRES_RECONCILIATION');
  }
 });
