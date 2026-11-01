@@ -47,3 +47,17 @@ test('collector cannot report healthy while Primal or paired shadow research fai
  assert.match(collector,/researchFailures:collection\.researchFailures,researchErrors:collection\.researchErrors/);
  assert.match(collector,/collection\.researchErrors\.length<16/);
 });
+
+test('gross Primal reports, lesson journal and research gates use only strictly verified forward evidence',()=>{
+ assert.match(collector,/import \{verifiedComparisonEvidence\} from '\.\.\/\.\.\/src\/verified-comparison-evidence\.mjs'/);
+ assert.match(collector,/const evidence=verifiedComparisonEvidence\(rows\)/);
+ assert.match(collector,/const trades=evidence\.rows\.filter\(/);
+ assert.match(collector,/const resolved=evidence\.rows\.slice\(\)\.sort\(/);
+ assert.match(collector,/const training=all\.cursor\|\|evidence\.conflictingMarketCount\?\[\]:resolved/);
+ assert.match(collector,/if\(registry&&!all\.cursor&&!evidence\.conflictingMarketCount\)/);
+ assert.match(collector,/excludedFromVerifiedComparison:evidence\.rejected/);
+ // The independent cost-stressed audit must still receive raw rows so it can
+ // detect contradictory duplicates rather than trusting a pre-filtered sample.
+ assert.match(collector,/costAwarePairedAudit\(rows,\{archiveComplete:!all\.cursor\}\)/);
+ assert.doesNotMatch(collector,/const trades=rows\.filter\(r=>r\.status==='RESOLVED'/);
+});
