@@ -140,8 +140,17 @@ function evaluateScreenAlerts(){
   // Read the final qualified action, not explanatory text such as
   // "MOMENTUM CALLED BUY DOWN · BLOCKED" or non-actionable RESEARCH.
   const action=signal?.action;
-  const kind=action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
-  if(kind)showScreenAlert(asset,kind,kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':label,ticker);
+  const manual=manualPositionAdvice(asset);
+  const hypothetical=hypotheticalAdvice(asset,signal);
+  const trackedExit=manual||hypothetical;
+  const exitText=trackedExit?.action||'';
+  const isExit=/SELL FAST|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
+  const kind=isExit?'sell':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
+  if(kind){
+   const message=isExit?exitText+' · '+(trackedExit.reason||'Tracked position exit review'):
+    kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':'Paper position SELL FAST';
+   showScreenAlert(asset,kind,message,ticker);
+  }
  }
 }
 document.addEventListener('DOMContentLoaded',()=>{
