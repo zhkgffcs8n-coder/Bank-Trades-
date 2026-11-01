@@ -54,3 +54,18 @@ test('drawdown and losses use chronological matched contract order',()=>{
  assert.equal(r.original.maxDrawdown,1);
  assert.equal(r.original.losses,2);
 });
+
+test('a truncated first-page archive cannot establish sufficient matched evidence',()=>{
+ const records=[row(1),row(2),row(3)];
+ const partial=costAwarePairedAudit(records,{minimum:2,archiveComplete:false});
+ assert.equal(partial.matchedOfficialMarkets,3);
+ assert.equal(partial.archiveComplete,false);
+ assert.equal(partial.scope,'PARTIAL_FIRST_PAGE');
+ assert.equal(partial.sufficientMatchedMarkets,false);
+ assert.equal(partial.automaticPromotionAllowed,false);
+ assert.match(partial.note,/Incomplete archive/);
+ const complete=costAwarePairedAudit(records,{minimum:2,archiveComplete:true});
+ assert.equal(complete.sufficientMatchedMarkets,true);
+ assert.equal(complete.scope,'COMPLETE_ARCHIVE');
+ assert.throws(()=>costAwarePairedAudit(records,{archiveComplete:'false'}));
+});
