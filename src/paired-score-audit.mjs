@@ -23,9 +23,9 @@ export function pairedScoreAudit(records,{minimum=100,margin=.005,archiveComplet
  const candidateBrier=count?paired.reduce((a,r)=>a+(r.candidate-r.outcome)**2,0)/count:null;
  const baselineBrier=count?paired.reduce((a,r)=>a+(r.baseline-r.outcome)**2,0)/count:null;
  const improvement=count?baselineBrier-candidateBrier:null;
- const eligible=archiveComplete&&count>=minimum&&improvement>margin;
+ const eligible=archiveComplete&&conflicted.size===0&&count>=minimum&&improvement>margin;
  return {mode:'SHADOW_ONLY',count,minimum,archiveComplete,conflictingMarketCount:conflicted.size,
   candidateBrier,baselineBrier,improvement,eligible,
-  reason:!archiveComplete?'Incomplete archive: independent comparison not eligible':count<minimum?'Insufficient paired prospective verified settlements':improvement>margin?'Candidate has lower paired Brier error':'Candidate not demonstrably better',
+  reason:!archiveComplete?'Incomplete archive: independent comparison not eligible':conflicted.size?'Conflicting duplicate contracts require provenance reconciliation':count<minimum?'Insufficient paired prospective verified settlements':improvement>margin?'Candidate has lower paired Brier error':'Candidate not demonstrably better',
   note:'Official finalized provenance and pre-expiry forecasts required. Paired Brier improvement is not profitability or trading authorization.'};
 }
