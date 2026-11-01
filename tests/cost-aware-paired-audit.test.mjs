@@ -69,3 +69,29 @@ test('a truncated first-page archive cannot establish sufficient matched evidenc
  assert.equal(complete.scope,'COMPLETE_ARCHIVE');
  assert.throws(()=>costAwarePairedAudit(records,{archiveComplete:'false'}));
 });
+
+test('quarantines conflicting official outcomes regardless of archive ordering',()=>{
+ const first=row(1,{result:'yes'}),conflict=row(1,{result:'no'}),other=row(2);
+ for(const rows of [[first,conflict,other],[conflict,other,first]]){
+  const report=costAwarePairedAudit(rows,{minimum:1});
+  assert.equal(report.conflictingMarketCount,1);
+  assert.equal(report.matchedOfficialMarkets,1);
+  assert.equal(report.original.trades,1);
+  assert.equal(report.sufficientMatchedMarkets,false);
+  assert.equal(report.automaticPromotionAllowed,false);
+  assert.match(report.note,/Conflicting duplicate contracts quarantined/);
+ }
+});
+
+test('quarantines different frozen entry prices but accepts exact duplicate records',()=>{
+ const first=row(1),changed={...row(1),engines:{...row(1).engines,
+  upgraded:{...row(1).engines.upgraded,ask:60}}};
+ const report=costAwarePairedAudit([first,first,changed,row(2)],{minimum:1});
+ assert.equal(report.conflictingMarketCount,1);
+ assert.equal(report.matchedOfficialMarkets,1);
+ assert.equal(report.sufficientMatchedMarkets,false);
+ const duplicate=costAwarePairedAudit([first,{...first,resolvedAt:300}],{minimum:1});
+ assert.equal(duplicate.conflictingMarketCount,0);
+ assert.equal(duplicate.matchedOfficialMarkets,1);
+ assert.equal(duplicate.sufficientMatchedMarkets,true);
+});
