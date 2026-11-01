@@ -21,6 +21,8 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  if(sampleAge>150000)return {...base,sampleCount:a.length,reason:'Stale momentum history: newest scheduled sample '+Math.round(sampleAge/1000)+'s old; no entry until fresh samples arrive'};
  const changes=a.slice(1).map((r,i)=>(r.yesMid-a[i].yesMid)*100),momentum=changes.reduce((s,x)=>s+x,0);
  const side=momentum>1.5?'up':momentum< -1.5?'down':null;
+ // Match the collector's frozen prediction features exactly: probabilities,
+ // spread in probability units, time remaining, and bid difference.
  const baseline=Math.max(.02,Math.min(.98,(yb+ya)/200));
  const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,spread/10)),Math.max(-1,Math.min(1,left/900)),Math.max(-1,Math.min(1,(yb-nb)/100))];
  let researchForecast=null;
@@ -36,5 +38,16 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
   note:'Directional momentum observation; agreement and reversal rules are not proven edges'};
 
  if(agreement<.55||reversals>3||ask<10||ask>90)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast,entryResearch,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.55,reversals:reversals<=3,price:ask>=10&&ask<=90}}};
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:'observation only; does not change entry decisions'};
+ // A learned model can veto an experimental PAPER entry, never invent one.
+ // This is not live-order authorization. Require a margin above executable ask
+ // for the proposed side, and do not apply unvalidated models.
+ if(researchForecast!==null){
+  const sideProbability=side==='up'?researchForecast:1-researchForecast;
+  const requiredProbability=ask/100+.05;
+  if(sideProbability<requiredProbability)return {...base,side,ask,researchForecast,
+   researchValidated:true,validation:'LEARNED MODEL PAPER VETO',
+   reason:'Validated research forecast does not exceed executable entry cost by 5 percentage points',
+   modelSideProbability:sideProbability,requiredProbability,entryResearch};
+ }
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:researchForecast===null?'unvalidated model; no decision influence':'validated model vetoes insufficient-edge paper entries only'};
 }
