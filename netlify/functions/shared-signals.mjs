@@ -11,7 +11,20 @@ export default async req=>{
  const now=Date.now();
  let db=null,paperDb=null;
  try{db=getStore({name:'bank-trades-market-history',consistency:'strong'});paperDb=getStore({name:'bank-trades-server-kaibot',consistency:'strong'});}catch(e){return json({fetched_at:new Date().toISOString(),results:Object.keys(assets).map(asset=>({asset,action:'WAIT',reason:'Signal storage initialization failed: '+String(e.message||e)})),error:'storage_initialization_failed'});}
- let openPositions=[],stats=performance([]);try{const ledger=await timed(paperDb.get('ledger',{type:'json'}),1800,'ledger');stats=performance(ledger?.trades||[]);openPositions=(ledger?.trades||[]).filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));}catch{}
+ let openPositions=[],stats=performance([]),performanceStatus={state:'UNAVAILABLE',reason:'Paper ledger not loaded',updatedAt:null};
+ try{
+  const ledger=await timed(paperDb.get('ledger',{type:'json'}),1800,'ledger');
+  if(ledger&&Array.isArray(ledger.trades)){
+   stats=performance(ledger.trades);
+   openPositions=ledger.trades.filter(t=>t.status==='OPEN'&&t.ticker&&['up','down'].includes(t.side)&&Number.isFinite(Number(t.ask)));
+   performanceStatus={state:'AVAILABLE',reason:null,updatedAt:ledger.updatedAt||null,recordedTrades:ledger.trades.length};
+  }else{
+   performanceStatus={state:'UNAVAILABLE',reason:'No server paper ledger found',updatedAt:null};
+  }
+ }catch(e){
+  console.error('Server paper performance read failed',e);
+  performanceStatus={state:'ERROR',reason:'Server paper ledger read failed or timed out',updatedAt:null};
+ }
  const research={model:null,status:null};
  await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{})]);
  // Learning continues in the scheduled collector. Keep optional reports out of
@@ -51,5 +64,5 @@ export default async req=>{
    return {asset,...signal,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
- return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:stats,research:research.status,learning,results});
+ return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,research:research.status,learning,results});
 };
