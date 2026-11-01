@@ -5,6 +5,7 @@ import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
+import {edgeResearch} from '../../src/edge-research.mjs';
 import {getStore} from '@netlify/blobs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 
@@ -100,9 +101,10 @@ export default async()=>{
     const model=await db.get('training/model/'+asset,{type:'json'})||await db.get('training/model',{type:'json'})||initialModel();
     const features=[Math.max(-1,Math.min(1,(baseline-.5)*2)),Math.max(-1,Math.min(1,record.spread*10)),Math.max(-1,Math.min(1,(m._expiry-now)/900000)),Math.max(-1,Math.min(1,yesBid-noBid))];
     const probability=predict(model,baseline,features);
+    const edgeShadow=edgeResearch({probability,yesAsk,noAsk,yesBid,noBid,quoteAgeMs:Math.max(0,Date.now()-record.observedAt),fee:0,slippage:0,minEdge:.04});
     const upCost=yesAsk,downCost=noAsk;
     const direction=probability>=0.5?'UP':'DOWN';
-    await db.setJSON(key,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,source:'hypothetical paper-only round forecast',direction,probability,modelVersion:model.version||null,up:{ask:upCost,maxLoss:upCost,winProfit:1-upCost,expectedValue:probability-upCost},down:{ask:downCost,maxLoss:downCost,winProfit:1-downCost,expectedValue:(1-probability)-downCost},status:'PENDING',feeExcluded:true});
+    await db.setJSON(key,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,source:'hypothetical paper-only round forecast',direction,probability,edgeShadow,modelVersion:model.version||null,up:{ask:upCost,maxLoss:upCost,winProfit:1-upCost,expectedValue:probability-upCost},down:{ask:downCost,maxLoss:downCost,winProfit:1-downCost,expectedValue:(1-probability)-downCost},status:'PENDING',feeExcluded:true});
    }
   }catch(e){console.warn('Round paper forecast failed',asset,String(e))}
   const pendingKey='pending/'+m.ticker;
