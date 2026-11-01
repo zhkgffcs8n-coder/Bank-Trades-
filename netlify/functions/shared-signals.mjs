@@ -3,6 +3,7 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 import {buildCommitteeSnapshot} from '../../src/engine-team.mjs';
 import {assessCollectorHealth} from '../../src/collector-health.mjs';
+import {learningReport} from '../../src/research-model.mjs';
 const assets={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const expiry=(m,now)=>[m?.expected_expiration_time,m?.expiration_time,m?.close_time].map(v=>Date.parse(v||'')).filter(v=>Number.isFinite(v)&&v>now).sort((a,b)=>a-b)[0]||null;
 const timed=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error(label+' timeout')),ms))]);
@@ -86,5 +87,5 @@ export default async req=>{
    return {asset,...signal,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
- return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,results});
+ return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:assessCollectorHealth(research.heartbeat,now),research:research.status,learning,learningMetrics:learningReport(research.model),results});
 };
