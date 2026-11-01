@@ -17,6 +17,7 @@ test('legacy paper settlements are reverified without replaying payouts',()=>{
  assert.ok(start>0&&end>start);
  const review=source.slice(start,end);
  assert.match(review,/const reviewCount=Math\.min\(4,legacySettled\.length\)/);
+ assert.match(review,/await Promise\.all\(Array\.from\(\{length:reviewCount\},async/);
  assert.match(review,/trustedStoredFinalizedOutcome/);
  assert.match(review,/verifiedFinalizedBinaryOutcome/);
  assert.match(review,/if\(result===t\.marketResult\)/);
