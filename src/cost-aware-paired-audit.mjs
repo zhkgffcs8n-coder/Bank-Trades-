@@ -9,8 +9,8 @@ const validBuy=(x)=>buy(x)&&x.resolved===true&&
  Number.isFinite(x.ask)&&x.ask>0&&x.ask<100;
 const round=(n)=>Number(n.toFixed(4));
 
-export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum=100}={}){
- if(![feeCents,slippageCents].every(x=>Number.isFinite(x)&&x>=0&&x<=100)||!Number.isInteger(minimum)||minimum<1)throw Error('Invalid research cost assumptions');
+export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum=100,archiveComplete=true}={}){
+ if(![feeCents,slippageCents].every(x=>Number.isFinite(x)&&x>=0&&x<=100)||!Number.isInteger(minimum)||minimum<1||typeof archiveComplete!=='boolean')throw Error('Invalid research cost assumptions');
  const seen=new Set(),paired=[];
  for(const r of Array.isArray(records)?records:[]){
   if(!r||typeof r.ticker!=='string'||!r.ticker||seen.has(r.ticker)||
@@ -44,9 +44,10 @@ export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum
  };
  const original=evaluate('original'),candidate=evaluate('upgraded');
  return {mode:'SHADOW_ONLY',matchedOfficialMarkets:paired.length,minimum,
-  sufficientMatchedMarkets:paired.length>=minimum,
+  archiveComplete,scope:archiveComplete?'COMPLETE_ARCHIVE':'PARTIAL_FIRST_PAGE',
+  sufficientMatchedMarkets:archiveComplete&&paired.length>=minimum,
   original,candidate,candidateMinusOriginalPnl:round(candidate.costStressedPnl-original.costStressedPnl),
   brierOriginal:null,brierCandidate:null,automaticPromotionAllowed:false,
   assumptions:{feeCents,slippageCents,entryAtRecordedAsk:true,oneContractPerEntry:true},
-  note:'Illustrative per-contract costs, not verified Kalshi fees or actual fills. Candidate is a stricter Original gate, not an independently calibrated model. Missing probability forecasts prevent Brier comparison. Requires prospective official settlement verification; no promotion.'};
+  note:(archiveComplete?'':'Incomplete archive: first-page counts and PnL are partial; do not infer sample sufficiency. ')+'Illustrative per-contract costs, not verified Kalshi fees or actual fills. Candidate is a stricter Original gate, not an independently calibrated model. Missing probability forecasts prevent Brier comparison. Requires prospective official settlement verification; no promotion.'};
 }
