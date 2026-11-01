@@ -316,6 +316,16 @@ function syncSignals(){
    tracker.textContent='LIVE TRACKER · STALE / NO MATCHING CONTRACT · do not trade from this quote';
   }
   cell.append(tracker);
+  // Big, instantly readable decision badge above all technical diagnostics.
+  // Never color a blocked momentum observation as an approved BUY.
+  const decision=action==='BUY UP'?'BUY UP':action==='BUY DOWN'?'BUY DOWN':action==='SELL FAST'?'SELL FAST':action==='HOLD'?'HOLD':'WAIT';
+  const color=decision==='BUY UP'?'#22c55e':decision==='BUY DOWN'||decision==='SELL FAST'?'#ef4444':decision==='HOLD'?'#a78bfa':'#facc15';
+  const badge=document.createElement('div');
+  badge.style.cssText='display:inline-block;padding:9px 15px;margin:3px 0 10px;border:3px solid '+color+';border-radius:15px;background:'+color+'20;color:'+color+';font-size:clamp(18px,2vw,28px);font-weight:950;letter-spacing:.6px;box-shadow:0 0 16px '+color+'55;text-shadow:0 1px 1px #000';
+  badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
+  cell.prepend(badge);
+  const original=Array.from(cell.childNodes).find(n=>n.nodeType===3&&n.textContent.trim());
+  if(original)original.textContent='';
   // Display separate research context without converting it into an actionable signal.
   const research=sig?.researchDirection;
   if(research?.mode==='SHADOW_ONLY'&&research.roundTicker===ticker&&
