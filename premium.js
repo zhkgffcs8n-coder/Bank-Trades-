@@ -243,6 +243,27 @@ function syncSignals(){
   const sampleIssue=/collecting scheduled samples/i.test(why);
   const quoteIssue=/missing, stale, illiquid or invalid quotes/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':quoteIssue?'⚠️ NO VALID ENTRY QUOTE':'⏳ WAIT · NO QUALIFIED ENTRY';
+  // Display only fresh, matching Kalshi ask quotes as entry percentages.
+  // A directional round call or flip watch is NOT an executable BUY signal.
+  const liveMarket=latestPositionQuotes.find(x=>x.asset===assetKey)?.market;
+  const quoteFresh=Number.isFinite(latestPositionQuoteAt)&&Date.now()-latestPositionQuoteAt>=0&&Date.now()-latestPositionQuoteAt<=10000;
+  const sameContract=!!liveMarket?.ticker&&liveMarket.ticker===sig?.ticker&&expiry(liveMarket)>Date.now();
+  const upAsk=price(liveMarket,'yes_ask'),downAsk=price(liveMarket,'no_ask');
+  const upBid=price(liveMarket,'yes_bid'),downBid=price(liveMarket,'no_bid');
+  const validSide=(ask,bid)=>Number.isFinite(ask)&&Number.isFinite(bid)&&ask>0&&ask<100&&bid>=0&&bid<=ask;
+  const qualified=['BUY UP','BUY DOWN'].includes(action)&&quoteFresh&&sameContract;
+  const selectedAsk=action==='BUY UP'?upAsk:downAsk;
+  const selectedBid=action==='BUY UP'?upBid:downBid;
+  if(['BUY UP','BUY DOWN'].includes(action)){
+   if(qualified&&validSide(selectedAsk,selectedBid)){
+    cell.textContent=(action==='BUY UP'?'🟢 ':'🔴 ')+action+' · LIVE ENTRY '+selectedAsk.toFixed(1)+'%';
+    const note=document.createElement('small');note.style.cssText='display:block;font-size:11px;opacity:.85';
+    note.textContent='Kalshi '+(action==='BUY UP'?'UP':'DOWN')+' ask · '+new Date(latestPositionQuoteAt).toLocaleTimeString()+' · indicative quote, not guaranteed fill';cell.append(note);
+   }else cell.textContent='⚠️ WAIT · ENTRY QUOTE NOT VERIFIED';
+  }else if(quoteFresh&&liveMarket?.ticker&&expiry(liveMarket)>Date.now()){
+   const note=document.createElement('small');note.style.cssText='display:block;font-size:11px;opacity:.85';
+   note.textContent='LIVE ASK · UP '+(validSide(upAsk,upBid)?upAsk.toFixed(1)+'%':'—')+' / DOWN '+(validSide(downAsk,downBid)?downAsk.toFixed(1)+'%':'—')+' · no qualified entry';cell.append(note);
+  }
   for(const [label,tracked] of [['MY POSITION',advice],['AUTO CALL · SIMULATED',hypothetical]]){
    if(!tracked)continue;
    const box=document.createElement('div');box.className='bt-position-alert';
@@ -250,7 +271,7 @@ function syncSignals(){
    const heading=document.createElement('b');heading.textContent=label+' · '+tracked.action;
    const detail=document.createElement('div');detail.textContent=tracked.reason;box.append(heading,detail);cell.append(box);
   }
-  if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
+  if(unavailable){const warning=document.createElement('small');warning.style.display='block';warning.textContent='⚠️ '+why.slice(0,95);cell.append(warning);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
   // Independent BTC spot evidence is research context, never a trade authorization.
   if(tr.dataset.asset==='BTC'){
    const evidence=window.__BANK_TRADES_BTC_EVIDENCE__;
