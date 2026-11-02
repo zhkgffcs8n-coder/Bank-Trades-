@@ -123,6 +123,19 @@ export function performance(trades=[]){
  const recentSummary=summarize(recent);
  const priorSummary=summarize(ordered.slice(-100,-50));
  const losses=valid.filter(t=>Number(t.pnl)<0);
+ // Legacy ID-less trades may remain in historical reporting, but their identity
+ // cannot be deduplicated. They must never qualify an automatic paper-entry gate.
+ // The gate uses only uniquely identified, reconciled paper records.
+ const gateEligible=valid.filter(t=>typeof t.id==='string'&&t.id.trim());
+ const gateGroups={};
+ for(const t of gateEligible){
+  const key=String(t.asset||'UNKNOWN')+'_'+t.side;
+  (gateGroups[key]??=[]).push(t);
+ }
+ const gateOrdered=[...gateEligible].sort((a,b)=>Number(a.closedAt||a.settledAt||a.at||0)-Number(b.closedAt||b.settledAt||b.at||0));
+ const gateRecent50=summarize(gateOrdered.slice(-50));
+ const gatePrevious50=summarize(gateOrdered.slice(-100,-50));
+ const gateByStrategy=Object.fromEntries(Object.entries(gateGroups).map(([key,rows])=>[key,summarize(rows)]));
  const lossReview={
   at:new Date().toISOString(),totalLosses:losses.length,
   grossLoss:Number(losses.reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2)),
@@ -132,15 +145,17 @@ export function performance(trades=[]){
   insufficientEvidence:Object.entries(byAsset).filter(([,rows])=>rows.length<30).map(([asset])=>asset),
   cautions:['These are retrospective associations, not proven causes of losses.','Do not promote a rule based only on the same trades used to discover it.','Net returns may omit fees and slippage.']
  };
- return {overall:summarize(valid),lossReview,byStrategy,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdExcludedCount:source.filter(t=>typeof t?.id==='string'&&t.id.trim()).length-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
+ return {overall:summarize(valid),lossReview,byStrategy,gateByStrategy,gateRecent50,gatePrevious50,
+  gateEligibleTradeCount:gateEligible.length,idlessResolvedExcludedFromGateCount:valid.length-gateEligible.length,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdExcludedCount:source.filter(t=>typeof t?.id==='string'&&t.id.trim()).length-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
 }
 export function gatePaperEntry(signal,stats){
  if(!['BUY UP','BUY DOWN'].includes(signal.action))return signal;
- const cohort=stats?.byStrategy?.[signal.asset+'_'+signal.side];
+ // Never allow unverifiable ID-less historical rows to establish a cohort edge.
+ const cohort=stats?.gateByStrategy?.[signal.asset+'_'+signal.side];
  // A broad deterioration signal pauses NEW paper entries, not existing exits.
  // This uses already-finalized positions and never rewrites past results.
- const recent=stats?.lossReview?.recent50;
- const prior=stats?.lossReview?.previous50;
+ const recent=stats?.gateRecent50;
+ const prior=stats?.gatePrevious50;
  if(recent?.trades>=30&&prior?.trades>=30&&
     Number.isFinite(recent.roi)&&Number.isFinite(prior.roi)&&
     recent.roi<0&&recent.roi<prior.roi)
