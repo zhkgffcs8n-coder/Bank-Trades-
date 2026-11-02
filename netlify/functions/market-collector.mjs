@@ -1,7 +1,7 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
-import {validCollectorQuote} from '../../src/collector-quote.mjs';
+import {validCollectorQuote,parseCollectorPrice} from '../../src/collector-quote.mjs';
 import {pairedShadow,resolvePairedShadow,originalMomentumShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../../src/training-provenance.mjs';
@@ -16,7 +16,7 @@ import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2';
 const store=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
-const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars']):m?.[k]!=null?Number(m[k])/100:null;
+const price=parseCollectorPrice;
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}finally{clearTimeout(t)}}
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 export default async()=>{
