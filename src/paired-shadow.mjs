@@ -16,8 +16,18 @@ export function engineBTrend(m,records,now){
  if(!ticker||![bid,ask,noBid,noAsk].every(Number.isFinite)||bid<0||noBid<0||ask<=0||noAsk<=0||ask>=1||noAsk>=1||bid>ask||noBid>noAsk)return wait('B: missing or invalid executable bid/ask');
  if(Math.max(ask-bid,noAsk-noBid)>.04)return wait('B: spread exceeds four cents');
  if(!Number.isFinite(expiry)||expiry-now<=180000||expiry-now>930000)return wait('B: contract outside entry-time window');
- const rows=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1)
-  .sort((a,b)=>a.t-b.t).filter((r,i,a)=>i===0||r.t!==a[i-1].t).slice(-6);
+ const eligible=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1)
+  .sort((a,b)=>a.t-b.t);
+ // Multiple quote values for the same contract/timestamp are ambiguous evidence.
+ // Do not let archive order decide a shadow trend direction; identical repeats
+ // are harmless, but contradictory samples must fail closed.
+ const byTimestamp=new Map();
+ for(const r of eligible){
+  const prior=byTimestamp.get(r.t);
+  if(prior&&prior.yesMid!==r.yesMid)return wait('B: conflicting duplicate quote timestamps');
+  byTimestamp.set(r.t,r);
+ }
+ const rows=[...byTimestamp.values()].slice(-6);
  if(rows.length<4)return wait('B: fewer than four distinct same-contract samples');
  if(now-rows.at(-1).t>90000)return wait('B: latest sample older than 90 seconds');
  const last=rows.slice(-4);
