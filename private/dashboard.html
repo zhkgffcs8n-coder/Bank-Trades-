@@ -240,10 +240,12 @@ function syncQuickPosition(){
  if(!quickTrackingActive){quickStatus('✓ '+quickSelectedAsset+(quickPendingSide?' '+quickPendingSide.toUpperCase():'')+' selected · Enter your % and press ▶ START LIVE TRACKING.');return}
  const p=trackedFor(quickSelectedAsset),m=quickMarket(quickSelectedAsset);
  if(!p||!m){quickStatus('⚠️ Waiting for live position data.');return}
+ if(p.ticker!==m.ticker||Date.now()>=p.expiresAt){quickStatus('⚪ CONTRACT CHANGED / EXPIRED — cannot use a different round to value '+quickSelectedAsset+' '+p.side.toUpperCase()+'.');return}
+ if(Date.now()-fetched>15000){quickStatus('⚪ QUOTE STALE — waiting for fresh Kalshi bid. No sell recommendation.');return}
  const side=p.side==='up'?'UP':'DOWN',bid=val(m,p.side==='up'?'yes_bid':'no_bid'),entry=Number(p.entry);
  const roi=Number.isFinite(bid)&&entry>0?(bid-entry)/entry:null,seconds=Math.max(0,Math.round((expiryMs(m)-Date.now())/1000)),mins=Math.ceil(seconds/60);
  let decision='🟢 HOLD',reason='Position has not hit an exit threshold.';
- if(roi==null){decision='⚪ WAITING FOR QUOTE';reason='Need a valid executable sell quote.'}
+ if(roi==null||bid<=0){decision='⚪ WAITING FOR VERIFIED BID';reason='Need a valid executable sell quote.'}
  else if(roi<=-.12){decision='🔴 SELL / GET OUT';reason='Sell value is 12%+ below your entry.'}
  else if(roi<=-.06){decision='🟡 WATCH CLOSELY';reason='Position is moving against your entry.'}
  else if(seconds<=90&&roi>=0){decision='🟢 HOLD TO END — WATCH';reason='Under 90 seconds remain; settlement can still flip.'}
@@ -252,8 +254,8 @@ function syncQuickPosition(){
 }
 const quickAssetBox=$('quickAssets');
 quickAssetBox?.addEventListener('click',e=>{const btn=e.target.closest('button[data-quick-asset]');if(!btn)return;quickSelectedAsset=btn.dataset.quickAsset;localStorage.setItem('bankTradesQuickAsset',quickSelectedAsset);quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');paintQuickAssets();syncQuickPosition()});
-$('quickUp')?.addEventListener('click',()=>{quickPendingSide='up';localStorage.setItem('bankTradesQuickSide','up');paintQuickAssets();syncQuickPosition()});
-$('quickDown')?.addEventListener('click',()=>{quickPendingSide='down';localStorage.setItem('bankTradesQuickSide','down');paintQuickAssets();syncQuickPosition()});
+$('quickUp')?.addEventListener('click',()=>{quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');quickPendingSide='up';localStorage.setItem('bankTradesQuickSide','up');paintQuickAssets();syncQuickPosition()});
+$('quickDown')?.addEventListener('click',()=>{quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');quickPendingSide='down';localStorage.setItem('bankTradesQuickSide','down');paintQuickAssets();syncQuickPosition()});
 $('quickStart')?.addEventListener('click',()=>{if(!quickSave())return;quickTrackingActive=true;localStorage.setItem('bankTradesQuickTracking','1');syncQuickPosition()});
 $('quickClose')?.addEventListener('click',()=>{if(quickSelectedAsset)saveTracked(quickSelectedAsset,null);quickTrackingActive=false;quickPendingSide='';localStorage.removeItem('bankTradesQuickTracking');localStorage.removeItem('bankTradesQuickSide');paintQuickAssets();quickStatus('✅ Position closed. Pick a coin to track another position.')});
 paintQuickAssets();syncQuickPosition();
