@@ -94,3 +94,18 @@ test('interrupted and contradictory training provenance requires review, never r
   assert.equal(review.reason,reason);
  }
 });
+
+test('training intent and committed marker cannot predate contract expiry',()=>{
+ const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,
+  features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
+ const targets=frozenTrainingTargets(rec);
+ assert.throws(()=>trainingWriteIntent(rec,'yes',targets,{count:9},{count:7},199),
+  /Invalid training write intent/);
+ const intent=trainingWriteIntent(rec,'yes',targets,{count:9},{count:7},200);
+ const marker={version:2,ticker:rec.ticker,asset:rec.asset,result:'yes',
+  globalUpdated:true,assetUpdated:true,globalCount:10,assetCount:8,
+  learnedAt:201,observationDigest:intent.observationDigest,intentStartedAt:200};
+ assert.equal(validCommittedTrainingMarker(marker,rec,'yes',intent),true);
+ const forgedIntent={...intent,startedAt:199};
+ assert.equal(validCommittedTrainingMarker({...marker,intentStartedAt:199},rec,'yes',forgedIntent),false);
+});
