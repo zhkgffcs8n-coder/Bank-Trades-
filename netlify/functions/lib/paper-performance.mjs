@@ -64,16 +64,21 @@ export function performance(trades=[]){
  const firstById=new Map(),conflictingIds=new Set();
  for(const t of source){
   if(typeof t?.id!=='string'||!t.id.trim())continue;
-  const fingerprint=JSON.stringify(t);
-  const first=firstById.get(t.id);
-  if(first&&first.fingerprint!==fingerprint)conflictingIds.add(t.id);
-  else if(!first)firstById.set(t.id,{row:t,fingerprint});
+  const id=t.id.trim();
+  // The payout guard already treats whitespace-padded IDs as the same trade.
+  // Normalize both the map key and fingerprint so performance cannot count
+  // padded aliases twice or ignore contradictory copies.
+  const fingerprint=JSON.stringify({...t,id});
+  const first=firstById.get(id);
+  if(first&&first.fingerprint!==fingerprint)conflictingIds.add(id);
+  else if(!first)firstById.set(id,{row:t,fingerprint});
  }
  const seenIds=new Set();
  const unique=source.filter(t=>{
   if(typeof t?.id!=='string'||!t.id.trim())return true;
-  if(conflictingIds.has(t.id)||seenIds.has(t.id))return false;
-  seenIds.add(t.id);return true;
+  const id=t.id.trim();
+  if(conflictingIds.has(id)||seenIds.has(id))return false;
+  seenIds.add(id);return true;
  });
  const eligible=unique.filter(t=>t?.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
  const explorationExcluded=source.filter(t=>t?.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST').length;
