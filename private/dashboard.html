@@ -461,9 +461,20 @@ tbody.replaceChildren();let open=0;
 for(const item of d.results){
 const m=item.market,up=cents(m,'yes_ask'),down=cents(m,'no_ask'),sig=signals.find(s=>s.asset===item.asset),ticker=m?.ticker;
 const verified=!!(sig&&ticker&&sig.ticker===ticker&&['BUY UP','BUY DOWN','WAIT'].includes(sig.action));
-const status=verified?(sig.action==='WAIT'?'WAIT · '+String(sig.reason||'not qualified').slice(0,90):sig.action):m?'SIGNAL UNAVAILABLE · '+String(sig?.reason||signalError).slice(0,80):'NO ACTIVE CONTRACT';
+const round=sig?.roundCall,hasRound=verified&&round?.direction&&round?.ticker===ticker&&['UP','DOWN'].includes(round.direction)&&Number.isFinite(Number(round.asOf))&&Date.now()-Number(round.asOf)<90000;
+const prediction=hasRound?(round.direction==='UP'?'▲ BUY UP':'▼ BUY DOWN'):'NO ROUND CALL';
+const qualified=verified&&['BUY UP','BUY DOWN'].includes(sig.action);
+const reason=verified?String(sig.reason||'No qualified entry').slice(0,105):String(sig?.reason||signalError).slice(0,90);
+const expiryTime=Date.parse(m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
+const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.ceil((expiryTime-Date.now())/60000))+'m left':'Time unavailable';
 const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
-for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢',status,ticker||'—']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
+for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
+const statusCell=document.createElement('td');
+const call=document.createElement('div');call.textContent=prediction;call.style.cssText='font-size:18px;font-weight:950;line-height:1.3;color:'+(hasRound?(round.direction==='UP'?'#4ade80':'#ff718a'):'#facc15');
+const entry=document.createElement('div');entry.textContent=qualified?'⚡ VERIFIED ENTRY · '+sig.action:verified?'🟡 ENTRY: WAIT':'⚠️ SIGNAL UNAVAILABLE';entry.style.cssText='font-size:12px;font-weight:850;margin-top:4px;color:'+(qualified?'#50e6b4':'#ffd477');
+const details=document.createElement('small');details.textContent=reason;details.style.cssText='display:block;opacity:.75;font-size:11px;margin-top:4px;line-height:1.3';
+statusCell.append(call,entry,details);tr.append(statusCell);
+const timeCell=document.createElement('td');timeCell.textContent=remaining;timeCell.title=ticker||'';timeCell.style.whiteSpace='nowrap';tr.append(timeCell);
 tbody.append(tr);if(m)open++;
 }
 previousFallback=true;
