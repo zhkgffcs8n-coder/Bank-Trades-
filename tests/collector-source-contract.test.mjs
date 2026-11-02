@@ -66,13 +66,15 @@ test('collector writes training intent before either model and refuses ambiguous
  assert.match(collector,/import \{pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent\} from/);
  assert.match(collector,/const priorIntent=await db\.get\('training\/intent\/v1\/'\+rec\.ticker/);
  assert.match(collector,/if\(!cached&&!learnedMarker&&!priorIntent&&\(targets\.global\|\|targets\.asset\)\)/);
- const intentWrite=collector.indexOf("await db.setJSON('training/intent/v1/'+rec.ticker,trainingWriteIntent(");
+ const intentWrite=collector.indexOf("await db.setJSON('training/intent/v1/'+rec.ticker,intent);");
+ assert.match(collector,/const intent=trainingWriteIntent\(rec,result,targets,model,assetModel,now\)/);
  const globalWrite=collector.indexOf("await db.setJSON('training/model',model);",intentWrite);
  const assetWrite=collector.indexOf("await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);",intentWrite);
  const learnedWrite=collector.indexOf("await db.setJSON('training/learned/v1/'+rec.ticker",intentWrite);
  assert.ok(intentWrite>0&&globalWrite>intentWrite&&assetWrite>intentWrite&&learnedWrite>globalWrite&&learnedWrite>assetWrite);
- assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,trustedCached\)/);
- assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,result\)/);
+ assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,trustedCached,priorIntent\)/);
+ assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,result,priorIntent\)/);
+ assert.match(collector,/observationDigest:intent\.observationDigest,intentStartedAt:intent\.startedAt/);
  assert.match(collector,/priorIntent\?'INTERRUPTED_TRAINING_INTENT'/);
  assert.match(collector,/learnedMarker\?'CONFLICTING_LEARNED_MARKER'/);
 });
