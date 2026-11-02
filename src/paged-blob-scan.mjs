@@ -1,3 +1,11 @@
+// Only a known-invalid pagination cursor warrants restarting from page one.
+// Transient storage failures must preserve the saved cursor for the next retry.
+function isExpiredCursorError(error){
+ const code=String(error?.code||'');
+ const message=String(error?.message||'');
+ return /^(INVALID_CURSOR|CURSOR_EXPIRED)$/i.test(code)||
+  /\b(?:invalid|expired|unknown|malformed|unrecognized)\s+(?:pagination\s+)?cursor\b|\bcursor\s+(?:is\s+)?(?:invalid|expired|unknown|malformed|unrecognized)\b/i.test(message);
+}
 // Bounded, resumable traversal of an append-only or partially-deleted Blob prefix.
 // Unlike listing the first page every minute, the cursor eventually reaches newer keys.
 // Callbacks must be idempotent: a failed callback leaves the cursor unchanged for retry.
@@ -9,8 +17,8 @@ export async function scanBlobPage(store,{prefix,cursorKey,limit=250},visit){
  try{
   page=await store.list({prefix,limit,...(cursor?{cursor}:{})});
  }catch(e){
-  // An expired cursor must not permanently prevent settlement work.
-  if(!cursor)throw e;
+  // Restart only for an explicitly invalid/expired cursor, never for a transient Blob outage.
+  if(!cursor||!isExpiredCursorError(e))throw e;
   cursor=null;
   page=await store.list({prefix,limit});
  }
