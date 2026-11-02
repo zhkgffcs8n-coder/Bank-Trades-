@@ -273,6 +273,20 @@ function syncSignals(){
   }
   cell.title=(sig?.reason||'Waiting for shared signal engine')+(ticker?' | Contract '+ticker:'')+' | Paper entries this round: '+entryCount+' | Multiple entries require a new qualified signal and an exited prior position';
   cell.className='premium-action'+(action==='BUY UP'?' up':action==='BUY DOWN'?' down':action==='SELL FAST'?' sell':action==='HOLD'?' hold':'');
+  // Show the engine's actual directional BUY research call prominently while preserving the execution veto.
+  // This is never an authorized order, and does not change sig.action or auto-trading.
+  if(action==='WAIT'&&sig?.entryGate?.blockedByPerformance&&['BUY UP','BUY DOWN'].includes(sig.entryGate.rawAction)&&!unavailable){
+   const researchBuy=sig.entryGate.rawAction;
+   const label=cell.firstChild;
+   if(label&&label.nodeType===3)label.textContent=(researchBuy==='BUY UP'?'🟢 ':'🔴 ')+researchBuy+' · RESEARCH ONLY';
+   cell.style.borderLeft='4px solid '+(researchBuy==='BUY UP'?'#22c55e':'#ef4444');
+   cell.style.background='rgba(234,179,8,.10)';
+   cell.style.fontWeight='700';
+   const caution=document.createElement('small');
+   caution.style.display='block';caution.style.fontSize='11px';caution.style.marginTop='4px';
+   caution.textContent='⛔ EXECUTION BLOCKED · NOT AN ORDER OR VERIFIED ENTRY';
+   cell.append(caution);
+  }
   if(sig?.entryGate?.blockedByPerformance){
    const gate=document.createElement('small');
    gate.style.display='block';gate.style.fontSize='10px';gate.style.marginTop='4px';
