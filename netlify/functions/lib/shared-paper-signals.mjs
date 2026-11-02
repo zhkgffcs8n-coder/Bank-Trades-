@@ -37,7 +37,7 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
   sampleCount:a.length,mode:'SHADOW_ONLY',actionable:false,
   note:'Directional momentum observation; agreement and reversal rules are not proven edges'};
 
- if(agreement<.55||reversals>3||ask<10||ask>90)return {...base,reason:'Momentum agreement, reversals or entry price outside paper criteria',researchForecast,entryResearch,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.55,reversals:reversals<=3,price:ask>=10&&ask<=90}}};
+ if(agreement<.55||reversals>3||ask<10||ask>90){const failed=[agreement<.55?'Momentum agreement '+Math.round(agreement*100)+'% below 55%':null,reversals>3?'Reversals '+reversals+' above 3':null,ask<10||ask>90?'Entry ask '+ask.toFixed(1)+'¢ outside 10–90¢':null].filter(Boolean);return {...base,reason:'Paper entry blocked: '+failed.join('; '),researchForecast,entryResearch,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.55,reversals:reversals<=3,price:ask>=10&&ask<=90}}};}
  // A learned model can veto an experimental PAPER entry, never invent one.
  // This is not live-order authorization. Require a margin above executable ask
  // for the proposed side, and do not apply unvalidated models.
