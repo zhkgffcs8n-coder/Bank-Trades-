@@ -123,10 +123,11 @@ export function performance(trades=[]){
  const recentSummary=summarize(recent);
  const priorSummary=summarize(ordered.slice(-100,-50));
  const losses=valid.filter(t=>Number(t.pnl)<0);
- // Legacy ID-less trades may remain in historical reporting, but their identity
- // cannot be deduplicated. They must never qualify an automatic paper-entry gate.
- // The gate uses only uniquely identified, reconciled paper records.
- const gateEligible=valid.filter(t=>typeof t.id==='string'&&t.id.trim());
+ // Historical paper exits remain visible in P/L diagnostics, but a simulated
+ // bid-based exit is not an officially finalized contract outcome or a fill.
+ // Entry gates must use only uniquely identified, officially settled positions.
+ const identified=valid.filter(t=>typeof t.id==='string'&&t.id.trim());
+ const gateEligible=identified.filter(t=>t.status==='SETTLED');
  const gateGroups={};
  for(const t of gateEligible){
   const key=String(t.asset||'UNKNOWN')+'_'+t.side;
@@ -146,7 +147,7 @@ export function performance(trades=[]){
   cautions:['These are retrospective associations, not proven causes of losses.','Do not promote a rule based only on the same trades used to discover it.','Net returns may omit fees and slippage.']
  };
  return {overall:summarize(valid),lossReview,byStrategy,gateByStrategy,gateRecent50,gatePrevious50,
-  gateEligibleTradeCount:gateEligible.length,idlessResolvedExcludedFromGateCount:valid.length-gateEligible.length,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdExcludedCount:source.filter(t=>typeof t?.id==='string'&&t.id.trim()).length-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
+  gateEligibleTradeCount:gateEligible.length,idlessResolvedExcludedFromGateCount:valid.length-identified.length,paperExitExcludedFromGateCount:identified.length-gateEligible.length,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdExcludedCount:source.filter(t=>typeof t?.id==='string'&&t.id.trim()).length-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
 }
 export function gatePaperEntry(signal,stats){
  if(!['BUY UP','BUY DOWN'].includes(signal.action))return signal;
