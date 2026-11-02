@@ -1,5 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
-import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition} from './lib/paper-performance.mjs';
+import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition,duplicatePaperTradeIds} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
 import {getStore} from '@netlify/blobs';
@@ -10,6 +10,9 @@ async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort()
 export default async()=>{
  const s=db(),state=await s.get('state',{type:'json'});
  let ledger=await s.get('ledger',{type:'json'})||{cash:1000,trades:[],updatedAt:null};const now=Date.now(),hdb=hist();
+ // Never mutate virtual cash for duplicate trade IDs; both copies require reconciliation.
+ const duplicateIds=duplicatePaperTradeIds(ledger.trades);
+ const hasDuplicateId=t=>typeof t?.id==='string'&&duplicateIds.has(t.id.trim());
  // Reconcile historical simulated early exits from recorded executable bids without paying cash twice.
  for(const t of ledger.trades.filter(x=>x.status==='CLOSED'&&!x.paperExitOnly)){
   if(hasRecordedNumber(t.exitBid)&&hasRecordedNumber(t.pnl)&&hasRecordedNumber(t.cost)){
@@ -19,7 +22,7 @@ export default async()=>{
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN'||(x.status==='CLOSED'&&!['WIN','LOSS'].includes(x.settlement)))){
   // Preserve malformed OPEN records for manual reconciliation, never pay them.
-  if(t.status==='OPEN'&&!validOpenPaperPosition(t))continue;
+  if(t.status==='OPEN'&&(!validOpenPaperPosition(t)||hasDuplicateId(t)))continue;
   let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
   // Legacy cached labels were not all checked for finality and payout. Reverify.
   let result=trustedStoredFinalizedOutcome(o,t.ticker);
@@ -78,7 +81,7 @@ export default async()=>{
  ledger.settlementReviewOffset=reviewStart+reviewCount;
  // Paper-only exit simulation: use the executable bid, never the mid/ask.
  // This does not imply a real Kalshi order could fill at that price or quantity.
- const openForExit=ledger.trades.filter(x=>x.status==='OPEN');
+ const openForExit=ledger.trades.filter(x=>x.status==='OPEN'&&!hasDuplicateId(x));
  // Fetch independent exit quotes concurrently so one slow market does not delay every other market.
  const exitQuotes=await Promise.all(openForExit.map(async t=>{
   try{return {market:(await get(base+'/markets/'+encodeURIComponent(t.ticker)))?.market};}
@@ -127,7 +130,7 @@ export default async()=>{
  const unreconciledRecords=resolvedRecords.filter(t=>!reconciledPaperTrade(t));
  const pnlSum=rows=>Number(rows.filter(t=>hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2));
  const excludedFromEligible=resolvedRecords.filter(t=>t.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST');
- await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,invalidOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&!validOpenPaperPosition(t)).length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,settlementConflictCount:ledger.trades.filter(t=>t.outcomeConflict===true).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
+ await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,invalidOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&!validOpenPaperPosition(t)).length,duplicatePaperTradeIdCount:duplicateIds.size,duplicateOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&hasDuplicateId(t)).length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,settlementConflictCount:ledger.trades.filter(t=>t.outcomeConflict===true).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
  // Keep quote-based signal observations flowing during the paper-entry safety pause.
  // No simulated positions may open while the circuit breaker is active.
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
