@@ -7,3 +7,14 @@ export function validCollectorQuote(quote){
   yesBid>=0&&noBid>=0&&yesAsk>0&&noAsk>0&&
   yesAsk<1&&noAsk<1&&yesBid<=yesAsk&&noBid<=noAsk;
 }
+
+// Prefer dollar-denominated fields when supplied. A blank or malformed field
+// must not silently become a zero bid through Number('') or boolean coercion.
+export function parseCollectorPrice(m,key){
+ const dollars=m?.[key+'_dollars'];
+ const raw=dollars!=null?dollars:m?.[key];
+ if(typeof raw!=='number'&&
+  !(typeof raw==='string'&&/^(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(raw.trim())))return NaN;
+ const value=Number(raw);
+ return Number.isFinite(value)?(dollars!=null?value:value/100):NaN;
+}
