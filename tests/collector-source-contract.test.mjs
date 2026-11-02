@@ -90,3 +90,15 @@ test('prospective Original-vs-upgraded comparisons remain SHADOW ONLY while pape
  assert.doesNotMatch(block,/const candidate=paperSignal\(/);
  assert.doesNotMatch(block,/\b(?:placeOrder|submitOrder|executeTrade)\s*\(/);
 });
+
+
+test('training counters advance only after durable learned marker write',()=>{
+ const start=collector.indexOf("const intent=trainingWriteIntent(rec,result,targets,model,assetModel,now);");
+ const marker=collector.indexOf("await db.setJSON('training/learned/v1/'+rec.ticker",start);
+ const count=collector.indexOf('trainedThisRun++;',start);
+ const byAsset=collector.indexOf('trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;',start);
+ const end=collector.indexOf("await db.delete('pending/'+rec.ticker);",start);
+ assert.ok(start>=0&&marker>start&&count>marker&&byAsset>marker&&end>byAsset,
+  'Partial or interrupted model writes must not count as committed training');
+ assert.equal(collector.slice(start,count).includes('trainedThisRun++;'),false);
+});
