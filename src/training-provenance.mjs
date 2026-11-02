@@ -1,4 +1,5 @@
 import {validFeatures} from './research-model.mjs';
+import {createHash} from 'node:crypto';
 
 // An old record can have a fallback prediction but no frozen prediction for
 // either actual model. Never count it as a training update or write a learned
@@ -15,18 +16,40 @@ export function frozenTrainingTargets(rec){
   asset:valid&&probability(rec?.assetPrediction)};
 }
 
-// A committed marker is evidence only when it identifies this exact frozen
-// observation, outcome, and both intended model updates. Incomplete or legacy
-// markers are quarantined instead of silently deleting pending evidence.
-export function validCommittedTrainingMarker(marker,rec,result){
+// Bind training provenance to the immutable, prospective model inputs.
+// The hash is not an atomic storage lock; it prevents a marker for a different
+// snapshot of the same contract from being accepted as proof of learning.
+export function trainingObservationDigest(rec){
  const targets=frozenTrainingTargets(rec);
- return !!marker&&['yes','no'].includes(result)&&
-  (targets.global||targets.asset)&&
+ if(!targets.global&&!targets.asset)return null;
+ const frozen=[rec.ticker,rec.asset,rec.at,rec.expiresAt,rec.baseline,
+  rec.features,targets.global?rec.globalPrediction:null,
+  targets.asset?rec.assetPrediction:null];
+ return createHash('sha256').update(JSON.stringify(frozen)).digest('hex');
+}
+
+// Require the exact write-ahead intent, prospective snapshot and expected
+// one-step model counts. Legacy markers lacking this evidence need review;
+// never treat a plausible count alone as proof of exactly-once learning.
+export function validCommittedTrainingMarker(marker,rec,result,intent){
+ const targets=frozenTrainingTargets(rec),digest=trainingObservationDigest(rec);
+ return !!marker&&!!intent&&!!digest&&['yes','no'].includes(result)&&
+  marker.version===2&&intent.version===2&&intent.status==='STARTED'&&
   marker.ticker===rec.ticker&&marker.asset===rec.asset&&marker.result===result&&
+  intent.ticker===rec.ticker&&intent.asset===rec.asset&&intent.verifiedOutcome===result&&
+  intent.predictionAt===rec.at&&intent.expiresAt===rec.expiresAt&&
   marker.globalUpdated===targets.global&&marker.assetUpdated===targets.asset&&
-  Number.isFinite(marker.learnedAt)&&marker.learnedAt>0&&
-  Number.isSafeInteger(marker.globalCount)&&marker.globalCount>=(targets.global?1:0)&&
-  Number.isSafeInteger(marker.assetCount)&&marker.assetCount>=(targets.asset?1:0);
+  intent.globalUpdated===targets.global&&intent.assetUpdated===targets.asset&&
+  marker.observationDigest===digest&&intent.observationDigest===digest&&
+  Number.isFinite(intent.startedAt)&&intent.startedAt>0&&
+  marker.intentStartedAt===intent.startedAt&&
+  Number.isFinite(marker.learnedAt)&&marker.learnedAt>=intent.startedAt&&
+  Number.isSafeInteger(intent.globalCountBefore)&&intent.globalCountBefore>=0&&
+  Number.isSafeInteger(intent.assetCountBefore)&&intent.assetCountBefore>=0&&
+  Number.isSafeInteger(marker.globalCount)&&
+  marker.globalCount===intent.globalCountBefore+(targets.global?1:0)&&
+  Number.isSafeInteger(marker.assetCount)&&
+  marker.assetCount===intent.assetCountBefore+(targets.asset?1:0);
 }
 
 // Durable write-ahead provenance, recorded BEFORE either model mutation.
@@ -40,7 +63,8 @@ export function trainingWriteIntent(rec,result,targets,globalModel,assetModel,no
   !(expected.global||expected.asset)||
   !Number.isSafeInteger(globalModel?.count)||globalModel.count<0||
   !Number.isSafeInteger(assetModel?.count)||assetModel.count<0)throw Error('Invalid training write intent');
- return {version:1,status:'STARTED',ticker:rec.ticker,asset:rec.asset,
+ return {version:2,status:'STARTED',ticker:rec.ticker,asset:rec.asset,
+  observationDigest:trainingObservationDigest(rec),
   verifiedOutcome:result,predictionAt:rec.at,expiresAt:rec.expiresAt,
   globalUpdated:targets.global,assetUpdated:targets.asset,
   globalCountBefore:globalModel.count,assetCountBefore:assetModel.count,
