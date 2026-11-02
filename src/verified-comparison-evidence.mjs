@@ -32,17 +32,21 @@ export function verifiedComparisonEvidence(records) {
       validEngine(original, r.outcome) &&
       (upgraded?.action === 'WAIT' && upgraded.resolved !== true ||
        validEngine(upgraded, r.outcome));
-    if (!valid) { rejected++; continue; }
-    // Identical duplicates are one market; disagreeing frozen decisions or
-    // outcomes quarantine the entire ticker regardless of listing order.
-    const decision = x => [x.action, x.side ?? null, x.ask ?? null, x.resolved === true];
-    const fingerprint = JSON.stringify([r.at, r.expiresAt, r.outcome,
+    if (!valid) rejected++;
+    if (typeof r?.ticker !== 'string' || !r.ticker) continue;
+    // An invalid copy of a ticker can contradict an otherwise verified copy.
+    // Keep it as conflict evidence, never as a usable resolved observation.
+    const decision = x => x ? [x.action ?? null, x.side ?? null,
+      x.ask ?? null, x.resolved === true] : null;
+    const fingerprint = JSON.stringify([r.status, r.outcomeVerification ?? null,
+      r.at ?? null, r.expiresAt ?? null, r.outcome ?? null,
       decision(original), decision(upgraded)]);
     const previous = byTicker.get(r.ticker);
-    if (previous && previous.fingerprint !== fingerprint) conflicts.add(r.ticker);
-    else if (!previous) byTicker.set(r.ticker, {row:r, fingerprint});
+    if (previous && (previous.fingerprint !== fingerprint || previous.valid !== valid))
+      conflicts.add(r.ticker);
+    else if (!previous) byTicker.set(r.ticker, {row:r, fingerprint, valid});
   }
-  const rows = [...byTicker].filter(([ticker]) => !conflicts.has(ticker))
+  const rows = [...byTicker].filter(([ticker,entry]) => entry.valid && !conflicts.has(ticker))
     .map(([,entry]) => entry.row);
   return {rows, rejected, conflictingMarketCount:conflicts.size};
 }
