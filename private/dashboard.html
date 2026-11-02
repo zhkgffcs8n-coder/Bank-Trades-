@@ -301,7 +301,7 @@ $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://
 window.addEventListener('resize',draw);
 window.addEventListener('banktrades:select',event=>{if(!assets.includes(event.detail))return;selected=event.detail;render();if(voice)$('voice').textContent='🔊 VOICE ON · '+selected});
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
-refresh();loadSharedSignals().then(()=>{updateSidebarConfidence();render()});preloadHistory().catch(()=>{});setInterval(()=>{if(!document.hidden)loadSharedSignals().then(()=>{updateSidebarConfidence();render()})},12000);
+refresh();loadSharedSignals().then(()=>{updateSidebarConfidence();render()});preloadHistory().catch(()=>{});setInterval(()=>{if(!document.hidden)loadSharedSignals().then(()=>{updateSidebarConfidence();render()})},20000);
 })();
 </script><script>
 (()=>{'use strict';
@@ -461,7 +461,7 @@ tbody.replaceChildren();let open=0;
 for(const item of d.results){
 const m=item.market,up=cents(m,'yes_ask'),down=cents(m,'no_ask'),sig=signals.find(s=>s.asset===item.asset),ticker=m?.ticker;
 const verified=!!(sig&&ticker&&sig.ticker===ticker&&['BUY UP','BUY DOWN','WAIT'].includes(sig.action));
-const status=verified?sig.action:m?'SIGNAL UNAVAILABLE':'NO ACTIVE CONTRACT';
+const status=verified?(sig.action==='WAIT'?'WAIT · '+String(sig.reason||'not qualified').slice(0,90):sig.action):m?'SIGNAL UNAVAILABLE · '+String(sig?.reason||signalError).slice(0,80):'NO ACTIVE CONTRACT';
 const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
 for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢',status,ticker||'—']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
 tbody.append(tr);if(m)open++;
