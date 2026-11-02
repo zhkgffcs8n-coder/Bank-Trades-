@@ -118,3 +118,27 @@ test('unverified or malformed duplicate cannot hide behind a verified market',()
  assert.equal(singleInvalid.matchedOfficialMarkets,0);
  assert.equal(singleInvalid.conflictingMarketCount,0);
 });
+
+test('conflicting frozen strategy scores or asset labels cannot inflate matched cost evidence',()=>{
+ const original=row('score');original.asset='BTC';original.engines.original.score=80;
+ const independent=row('independent');independent.asset='ETH';
+ const conflicting=[
+  {...original,asset:'ETH'},
+  {...original,engines:{...original.engines,original:{...original.engines.original,score:90}}},
+  {...original,engines:{...original.engines,upgraded:{...original.engines.upgraded,score:75}}}
+ ];
+ for(const duplicate of conflicting){
+  for(const rows of [[original,duplicate,independent],[duplicate,independent,original]]){
+   const audit=costAwarePairedAudit(rows,{minimum:1});
+   assert.equal(audit.conflictingMarketCount,1);
+   assert.equal(audit.matchedOfficialMarkets,1);
+   assert.equal(audit.original.trades,1);
+   assert.equal(audit.sufficientMatchedMarkets,false);
+   assert.equal(audit.automaticPromotionAllowed,false);
+  }
+ }
+ const identical={...original,engines:{...original.engines,original:{...original.engines.original}}};
+ const deduped=costAwarePairedAudit([original,identical],{minimum:1});
+ assert.equal(deduped.conflictingMarketCount,0);
+ assert.equal(deduped.matchedOfficialMarkets,1);
+});
