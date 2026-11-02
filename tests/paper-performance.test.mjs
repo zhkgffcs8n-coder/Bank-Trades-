@@ -214,3 +214,31 @@ test('identified, deduplicated trades alone determine paper gate cohorts and dra
  const gated=gatePaperEntry({action:'BUY UP',asset:'BTC',side:'up',ask:50,reason:'Shadow'},stats);
  assert.equal(gated.validation,'PAPER COHORT PASSED');
 });
+
+test('simulated early-exit wins remain in diagnostics but never unlock an official-outcome paper entry gate',async()=>{
+ const {gatePaperEntry}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const exit={asset:'BTC',side:'up',qty:1,ask:50,cost:.5,status:'CLOSED',
+  paperExitOnly:true,exitBid:80,pnl:.3,settlement:'WIN',exitReason:'TAKE PROFIT'};
+ const exits=Array.from({length:30},(_,i)=>({...exit,id:'exit-'+i,closedAt:i+1}));
+ const signal={action:'BUY UP',asset:'BTC',side:'up',ask:50,reason:'Research only'};
+ const exitOnly=performance(exits);
+ assert.equal(exitOnly.overall.trades,30);
+ assert.equal(exitOnly.overall.wins,30);
+ assert.equal(exitOnly.gateEligibleTradeCount,0);
+ assert.equal(exitOnly.paperExitExcludedFromGateCount,30);
+ assert.equal(exitOnly.idlessResolvedExcludedFromGateCount,0);
+ assert.equal(exitOnly.gateByStrategy.BTC_up,undefined);
+ assert.equal(gatePaperEntry(signal,exitOnly).validation,'INSUFFICIENT COHORT DATA');
+ // Officially finalized, uniquely identified positions still qualify for
+ // cohort analysis, but simulated exit rows cannot change that cohort.
+ const settled={asset:'BTC',side:'up',qty:1,ask:50,cost:.5,status:'SETTLED',
+  settlement:'WIN',marketResult:'yes',pnl:.5,outcomeVerification:SETTLEMENT_VERIFICATION};
+ const official=Array.from({length:20},(_,i)=>({...settled,id:'official-'+i,settledAt:100+i}));
+ const mixed=performance([...exits,...official]);
+ assert.equal(mixed.overall.trades,50);
+ assert.equal(mixed.gateEligibleTradeCount,20);
+ assert.equal(mixed.paperExitExcludedFromGateCount,30);
+ assert.equal(mixed.gateByStrategy.BTC_up.trades,20);
+ assert.equal(mixed.gateByStrategy.BTC_up.netPnl,10);
+ assert.equal(gatePaperEntry(signal,mixed).validation,'PAPER COHORT PASSED');
+});
