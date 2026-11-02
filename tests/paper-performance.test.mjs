@@ -138,3 +138,17 @@ test('conflicting or unverified duplicate paper IDs quarantine all copies indepe
  const {id,...legacy}=good;
  assert.equal(performance([legacy,{...legacy}]).overall.trades,2);
 });
+
+test('repeated archived wins cannot manufacture an eligible paper-entry cohort',async()=>{
+ const {gatePaperEntry}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const win={id:'one-verified-paper-trade',ticker:'KXBTC15M-TEST',asset:'BTC',
+  side:'up',qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',
+  marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ const stats=performance(Array.from({length:30},()=>({...win})));
+ assert.equal(stats.overall.trades,1);
+ assert.equal(stats.duplicateIdExcludedCount,29);
+ const signal={action:'BUY UP',asset:'BTC',side:'up',ask:50,reason:'Research only'};
+ const gated=gatePaperEntry(signal,stats);
+ assert.equal(gated.validation,'INSUFFICIENT COHORT DATA');
+ assert.notEqual(gated.validation,'PAPER COHORT PASSED');
+});
