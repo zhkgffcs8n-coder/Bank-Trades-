@@ -43,11 +43,28 @@ export function engineBTrend(m,records,now){
  return {action:direction==='up'?'BUY UP':'BUY DOWN',side:direction,ask:Math.round(entry*10000)/100,score:Math.round(clamp(50+Math.abs(net)*500+agreement*15,0,95)),reason:'Independent short-window trend rule; experimental, uncalibrated'};
 }
 
+// Preserve the Original A momentum hypothesis for *paired shadow research*
+// after the live/paper signal was deliberately made fail-closed without a
+// validated model. Never return this adapter to a trading or paper-order path.
+// Reuse the exact current quote, freshness and momentum filters from paperSignal
+// instead of reimplementing those filters or inventing an executable fill.
+function originalMomentumShadow(m,records,now){
+ const observed=paperSignal(m,records,null,now,null);
+ if(observed.action!=='WAIT'||observed.validation!=='MODEL_NOT_VALIDATED')return observed;
+ const evidence=observed.entryResearch;
+ const direction=evidence?.side==='UP'?'up':evidence?.side==='DOWN'?'down':null;
+ if(!direction||!Number.isFinite(evidence?.askCents)||!Number.isFinite(evidence?.momentumCents)||!Number.isFinite(evidence?.agreement))return observed;
+ return {...observed,action:direction==='up'?'BUY UP':'BUY DOWN',side:direction,ask:evidence.askCents,
+  score:Math.round(Math.min(90,40+Math.abs(evidence.momentumCents)*3+evidence.agreement*20)),
+  reason:'Original momentum hypothesis reconstructed from gated signal evidence; SHADOW ONLY, not a validated entry',
+  shadowOnly:true,researchValidated:false};
+}
+
 export function pairedShadow(m,records,now=Date.now()){
  const ticker=m?.ticker||null;
  const quote={yesBid:num(m,'yes_bid'),yesAsk:num(m,'yes_ask'),noBid:num(m,'no_bid'),noAsk:num(m,'no_ask')};
  const quoteValid=Object.values(quote).every(Number.isFinite)&&quote.yesAsk>0&&quote.noAsk>0&&quote.yesAsk<1&&quote.noAsk<1&&quote.yesBid>=0&&quote.noBid>=0&&quote.yesBid<=quote.yesAsk&&quote.noBid<=quote.noAsk;
- const a=paperSignal(m,records,null,now,null),b=engineBTrend(m,records,now);
+ const a=originalMomentumShadow(m,records,now),b=engineBTrend(m,records,now);
  const reasons=[];
  if(!ticker)reasons.push('Missing contract ticker');
  if(!quoteValid)reasons.push('Invalid paired quote');
