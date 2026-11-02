@@ -13,26 +13,24 @@ export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum
  if(![feeCents,slippageCents].every(x=>Number.isFinite(x)&&x>=0&&x<=100)||!Number.isInteger(minimum)||minimum<1||typeof archiveComplete!=='boolean')throw Error('Invalid research cost assumptions');
  const byTicker=new Map(),conflicted=new Set();
  for(const r of Array.isArray(records)?records:[]){
-  if(!r||typeof r.ticker!=='string'||!r.ticker||
-   r.status!=='RESOLVED'||r.outcomeVerification!==SETTLEMENT_VERIFICATION||
-   !['yes','no'].includes(r.outcome)||!Number.isFinite(r.at)||!Number.isFinite(r.expiresAt)||
-   !Number.isFinite(r.resolvedAt)||r.at>=r.expiresAt||r.resolvedAt<r.expiresAt||
-   !validBuy(r.engines?.original))continue;
-  const candidate=r.engines?.upgraded;
-  if(!candidate||!(candidate.action==='WAIT'||validBuy(candidate)))continue;
-  // A WAIT is an explicit abstention on the same contract, not a missing record.
-  if(candidate.action==='WAIT'&&candidate.resolved===true)continue;
-  // Do not let archive order select whichever conflicting forecast or outcome
-  // appeared first. Identical duplicates are harmless; disagreements quarantine
-  // the entire contract until provenance is reconciled.
-  const decision=x=>[x.action,x.side??null,x.ask??null,x.resolved===true];
-  const fingerprint=JSON.stringify([r.at,r.expiresAt,r.outcome,
-   decision(r.engines.original),decision(candidate)]);
+  if(!r||typeof r.ticker!=='string'||!r.ticker)continue;
+  const original=r.engines?.original,candidate=r.engines?.upgraded;
+  const valid=r.status==='RESOLVED'&&r.outcomeVerification===SETTLEMENT_VERIFICATION&&
+   ['yes','no'].includes(r.outcome)&&Number.isFinite(r.at)&&r.at>0&&
+   Number.isFinite(r.expiresAt)&&Number.isFinite(r.resolvedAt)&&
+   r.at<r.expiresAt&&r.resolvedAt>=r.expiresAt&&validBuy(original)&&
+   !!candidate&&(candidate.action==='WAIT'&&candidate.resolved!==true||validBuy(candidate));
+  // Inspect every occurrence of a ticker, including malformed or unverified
+  // copies. Otherwise an archive could pair one valid record with a contradictory
+  // invalid duplicate and still report sufficient verified evidence.
+  const decision=x=>x?[x.action??null,x.side??null,x.ask??null,x.resolved===true]:null;
+  const fingerprint=JSON.stringify([r.status,r.outcomeVerification??null,
+   r.at??null,r.expiresAt??null,r.outcome??null,decision(original),decision(candidate)]);
   const prior=byTicker.get(r.ticker);
-  if(prior&&prior.fingerprint!==fingerprint)conflicted.add(r.ticker);
-  else if(!prior)byTicker.set(r.ticker,{row:r,fingerprint});
+  if(prior&&(prior.fingerprint!==fingerprint||prior.valid!==valid))conflicted.add(r.ticker);
+  else if(!prior)byTicker.set(r.ticker,{row:r,fingerprint,valid});
  }
- const paired=[...byTicker].filter(([ticker])=>!conflicted.has(ticker)).map(([,v])=>v.row);
+ const paired=[...byTicker].filter(([ticker,v])=>v.valid&&!conflicted.has(ticker)).map(([,v])=>v.row);
  paired.sort((a,b)=>a.at-b.at||a.ticker.localeCompare(b.ticker));
  const evaluate=name=>{
   let pnl=0,peak=0,maxDrawdown=0,spent=0,trades=0,wins=0,losses=0;
