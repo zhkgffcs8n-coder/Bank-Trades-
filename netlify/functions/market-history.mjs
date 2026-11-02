@@ -24,7 +24,7 @@ export default async req=>{
  // explicitly report incomplete four-hour coverage instead of implying it.
  const archiveRecords=await Promise.all(keys.slice(-300).map(key=>db.get(key,{type:'json'})));
  const rolling=await db.get('recent/'+asset,{type:'json'}).catch(()=>[]);
- const {records,recoveredFromRolling}=mergeRecentMarketHistory(archiveRecords,rolling,asset,cutoff,Date.now());
+ const {records,recoveredFromRolling,conflictingSampleCount}=mergeRecentMarketHistory(archiveRecords,rolling,asset,cutoff,Date.now());
  const tickers=[...new Set(records.map(x=>x.ticker).filter(Boolean))],outcomes={};
  let unverifiedOutcomeRecords=0;
  for(const ticker of tickers){
@@ -48,5 +48,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling,conflictingSampleCount,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
