@@ -75,7 +75,7 @@ exports.handler=async event=>{
               limit:'100'
             });
 
-            const d=await get(u);
+            const d=await get(u,11000);
             const now=Date.now();
 
             const arr=(d.markets||[])
@@ -140,7 +140,7 @@ exports.handler=async event=>{
       const results=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
         try{
           const url=base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'});
-          const d=await get(url);
+          const d=await get(url,11000);
           const now=Date.now();
           const markets=(d.markets||[]).map(m=>{
             const expiry=nearestExpiry(m,now);
