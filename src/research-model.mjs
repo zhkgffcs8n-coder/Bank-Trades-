@@ -35,6 +35,9 @@ export function learningReport(model,minCount=100){
   relativeBrierImprovement:improvement,minimumObservations:minCount,
   validated:modelValidated(model,minCount),
   status:count<minCount?'INSUFFICIENT VERIFIED OUTCOMES':improvement===null?'MISSING PERFORMANCE DATA':improvement>0?'OUTPERFORMED BASELINE IN RECORDED SAMPLE':'DID NOT BEAT BASELINE',
+  needsMoreOutcomes:Math.max(0,minCount-count),
+  improvementPercentagePoints:improvement===null?null:Number((improvement*100).toFixed(2)),
+  reasonNotValidated:count<minCount?'Only '+count+' of '+minCount+' required verified settlement outcomes':improvement===null?'Missing valid baseline and model errors':improvement<=0?'Trained model has not beaten the frozen market-price baseline on recorded outcomes':'Recorded improvement exists, but independent future validation is still required',
   caveat:'Retrospective aggregate only. Not independent forward validation or proof of profitable trades.'};
 }
 
