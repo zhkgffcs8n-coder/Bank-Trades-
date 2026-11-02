@@ -8,3 +8,28 @@ test('never emits executable action',()=>{const x=analyzeBrain(market,records,no
 test('rejects stale history',()=>{const x=analyzeBrain(market,records,now+120000);assert.equal(x.eligible,false)});
 test('rejects crossed quotes',()=>{const x=analyzeBrain({...market,yes_bid:60},records,now);assert.equal(x.eligible,false)});
 test('rejects no samples',()=>{const x=analyzeBrain(market,[],now);assert.equal(x.eligible,false)});
+
+test('conflicting same-minute shadow quotes are quarantined regardless of archive order',()=>{
+ const altered={...records[2],yesMid:.01};
+ for(const input of [[...records,altered],[altered,...records]]){
+  const result=analyzeBrain(market,input,now);
+  assert.equal(result.action,'WAIT');
+  assert.equal(result.eligible,false);
+  assert.equal(result.candidateDirection,undefined);
+  assert.match(result.reason,/Conflicting duplicate quote timestamps/);
+ }
+});
+test('identical duplicate timestamps do not change the shadow research result',()=>{
+ const baseline=analyzeBrain(market,records,now);
+ const duplicated=analyzeBrain(market,[records[2],...records,records[2]],now);
+ assert.equal(duplicated.eligible,baseline.eligible);
+ assert.equal(duplicated.candidateDirection,baseline.candidateDirection);
+ assert.deepEqual(duplicated.metrics,baseline.metrics);
+});
+test('out-of-range midpoint records cannot manufacture shadow momentum',()=>{
+ const invalid=records.map((r,i)=>({...r,yesMid:1.1+i*.025}));
+ const result=analyzeBrain(market,invalid,now);
+ assert.equal(result.eligible,false);
+ assert.equal(result.action,'WAIT');
+ assert.match(result.reason,/Insufficient fresh independent samples/);
+});
