@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pairedShadow,engineBTrend,resolvePairedShadow} from '../src/paired-shadow.mjs';
+import {pairedShadow,engineBTrend,resolvePairedShadow,originalMomentumShadow} from '../src/paired-shadow.mjs';
 import {paperSignal} from '../netlify/functions/lib/shared-paper-signals.mjs';
 import {SETTLEMENT_VERIFICATION} from '../src/official-settlement.mjs';
 
@@ -21,6 +21,18 @@ test('Original A remains a non-actionable shadow hypothesis when unvalidated pap
  assert.equal(pair.mode,'SHADOW_ONLY');
  assert.equal(pair.hybrid.action,'WAIT');
  assert.equal(pair.hybrid.authorized,false);
+});
+
+test('Original A comparison helper is shadow-only and refuses stale or invalid quotes',()=>{
+ const rows=samples([.40,.44,.48,.52]);
+ const original=originalMomentumShadow(market,rows,now);
+ assert.equal(original.action,'BUY UP');
+ assert.equal(original.shadowOnly,true);
+ assert.equal(original.researchValidated,false);
+ assert.equal(paperSignal(market,rows,null,now,null).action,'WAIT');
+ const stale=rows.map(x=>({...x,t:x.t-180000}));
+ assert.equal(originalMomentumShadow(market,stale,now).action,'WAIT');
+ assert.equal(originalMomentumShadow({...market,yes_ask_dollars:'NaN'},rows,now).action,'WAIT');
 });
 
 test('paired shadow freezes independent A and B on same quote and timestamp, never authorizes a trade',()=>{
