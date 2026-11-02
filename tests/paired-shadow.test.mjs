@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {pairedShadow,engineBTrend,resolvePairedShadow} from '../src/paired-shadow.mjs';
+import {paperSignal} from '../netlify/functions/lib/shared-paper-signals.mjs';
 import {SETTLEMENT_VERIFICATION} from '../src/official-settlement.mjs';
 
 const now=Date.parse('2026-10-31T11:30:00Z');
@@ -8,6 +9,19 @@ const ticker='KXBTC15M-TEST';
 const market={ticker,yes_bid_dollars:'0.50',yes_ask_dollars:'0.52',no_bid_dollars:'0.46',no_ask_dollars:'0.48',expected_expiration_time:new Date(now+300000).toISOString()};
 const samples=values=>values.map((yesMid,i)=>({ticker,t:now-30000-(values.length-i-1)*60000,yesMid}));
 const verified={ticker,result:'yes',verification:SETTLEMENT_VERIFICATION};
+
+test('Original A remains a non-actionable shadow hypothesis when unvalidated paper entry is paused',()=>{
+ const rows=samples([.40,.44,.48,.52]);
+ const livePaper=paperSignal(market,rows,null,now,null);
+ assert.equal(livePaper.action,'WAIT');
+ assert.equal(livePaper.validation,'MODEL_NOT_VALIDATED');
+ const pair=pairedShadow(market,rows,now);
+ assert.equal(pair.engines.A.action,'BUY UP');
+ assert.match(pair.engines.A.reason,/SHADOW ONLY/);
+ assert.equal(pair.mode,'SHADOW_ONLY');
+ assert.equal(pair.hybrid.action,'WAIT');
+ assert.equal(pair.hybrid.authorized,false);
+});
 
 test('paired shadow freezes independent A and B on same quote and timestamp, never authorizes a trade',()=>{
  const rows=samples([.40,.44,.48,.52]);
