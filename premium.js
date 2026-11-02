@@ -38,63 +38,54 @@ document.head.appendChild(signalFxStyle);
 const roundSeen=new Map();
 let latestPositionQuotes=[],latestPositionQuoteAt=0;
 const manualPeaks=new Map();
-const simulatedCalls=new Map();
+const callKey='banktrades:signal-positions:v2';
+let savedCalls={};try{savedCalls=JSON.parse(localStorage.getItem(callKey)||'{}')}catch{}
+const simulatedCalls=new Map(Object.entries(savedCalls));
+function saveCalls(){try{localStorage.setItem(callKey,JSON.stringify(Object.fromEntries(simulatedCalls)))}catch{}}
+function positionAdvice(p,m,quoteAt,sig){
+ const side=String(p.side).toLowerCase(),entry=Number(p.entry),qty=Number(p.qty)||1,fees=Number(p.fees)||0;
+ if(!['up','down'].includes(side)||!Number.isFinite(entry)||entry<=0||entry>=100)return {action:'INVALID POSITION',reason:'Verify entry details.'};
+ if(m?.ticker!==p.ticker||Date.now()>=expiry(m))return {action:side.toUpperCase()+' · CONTRACT ENDED / CHANGED',reason:'Verify settlement on Kalshi. No current exit valuation.'};
+ const bid=price(m,side==='up'?'yes_bid':'no_bid'),ask=price(m,side==='up'?'yes_ask':'no_ask');
+ if(!Number.isFinite(quoteAt)||Date.now()-quoteAt<0||Date.now()-quoteAt>15000||![bid,ask].every(Number.isFinite)||bid<0||ask>100||ask<bid)return {action:side.toUpperCase()+' · QUOTE UNAVAILABLE',reason:'Fresh matching bid required; no exit estimate.'};
+ p.peak=Math.max(Number(p.peak)||entry,bid);
+ const pnl=(bid-entry)*qty/100-fees,roi=(bid-entry)/entry,peakGain=(p.peak-entry)/entry;
+ const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
+ const reversal=sig?.ticker===p.ticker&&sig.action===(side==='up'?'BUY DOWN':'BUY UP');
+ const trailing=trail!==null&&(p.peak-bid)/p.peak>=trail;
+ const ending=expiry(m)-Date.now()<=30000;
+ const exit=roi<=-.12||trailing||reversal||ending;
+ const action=exit?(pnl>0?'CASH OUT':'SELL FAST'):'HOLD';
+ const reason=roi<=-.12?'Loss threshold reached':trailing?'Profit pulled back from peak':reversal?'Opposite entry signal':ending?'Contract nearing expiry':'Monitoring profit and reversal';
+ return {action:side.toUpperCase()+' · '+action,reason:reason+' · Entry '+entry.toFixed(1)+'% · Sell bid '+bid.toFixed(1)+'% · P/L '+(pnl>=0?'+':'−')+'$'+Math.abs(pnl).toFixed(2)+' · Gross return '+(roi*100).toFixed(1)+'% · '+qty+' contract(s) · fees included $'+fees.toFixed(2)+'. Estimated at bid; no order executed.',pnl,roi,bid,exit};
+}
+window.bankPositionAdvice=positionAdvice;
 function rememberEntryCalls(signals){
  for(const sig of signals){
   if(!['BUY UP','BUY DOWN'].includes(sig?.action))continue;
-  const asset=sig.asset,ticker=roundSeen.get(asset)?.ticker;
-  const market=latestPositionQuotes.find(x=>x.asset===asset)?.market;
-  if(!ticker||market?.ticker!==ticker||Date.now()-latestPositionQuoteAt>10000)continue;
-  const side=sig.action==='BUY UP'?'up':'down',entry=price(market,side==='up'?'yes_ask':'no_ask');
+  const m=latestPositionQuotes.find(x=>x.asset===sig.asset)?.market;
+  if(!m?.ticker||sig.ticker!==m.ticker||Date.now()-latestPositionQuoteAt>10000||expiry(m)<=Date.now())continue;
+  const side=sig.action==='BUY UP'?'up':'down',key=sig.asset+':'+side,prior=simulatedCalls.get(key);
+  if(prior?.ticker===m.ticker)continue;
+  const entry=price(m,side==='up'?'yes_ask':'no_ask');
   if(!Number.isFinite(entry)||entry<=0||entry>=100)continue;
-  const prior=simulatedCalls.get(asset);
-  if(prior?.ticker===ticker&&prior.status==='OPEN')continue;
-  if(prior?.ticker===ticker&&prior.status==='EXIT')continue;
-  simulatedCalls.set(asset,{ticker,side,entry,peak:entry,status:'OPEN',at:Date.now()});
+  simulatedCalls.set(key,{ticker:m.ticker,side,entry,peak:entry,qty:1,fees:0,at:Date.now()});
  }
+ saveCalls();
 }
 function hypotheticalAdvice(asset,sig){
- const p=simulatedCalls.get(asset);if(!p)return null;
  const m=latestPositionQuotes.find(x=>x.asset===asset)?.market;
- if(m?.ticker!==p.ticker||Date.now()-latestPositionQuoteAt>10000)return {action:'⚠️ TRACKED CALL · QUOTE UNAVAILABLE',reason:'Simulated signal only; no verified current exit bid'};
- if(p.status==='EXIT')return {action:'📋 EXIT ALERT ISSUED · AWAIT NEXT ROUND',reason:'Hypothetical exit signal; no Kalshi order was placed'};
- const bid=price(m,p.side==='up'?'yes_bid':'no_bid'),ask=price(m,p.side==='up'?'yes_ask':'no_ask');
- if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||ask<bid)return {action:'⚠️ HOLD · BID UNAVAILABLE',reason:'Cannot evaluate a reliable sell price'};
- p.peak=Math.max(p.peak,bid);
- const roi=(bid-p.entry)/p.entry,peakGain=(p.peak-p.entry)/p.entry,drawdown=(bid-p.peak)/p.peak;
- const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
- const profitRunning=bid>=65&&bid<=100&&roi>=.05; const stop=roi<=-.12,exit=stop||(trail!==null&&drawdown<=-trail);
- const remaining=(expiry(m)-Date.now())/1000;
- const opposite=sig?.action===(p.side==='up'?'BUY DOWN':'BUY UP');
- const oppositeAsk=price(m,p.side==='up'?'no_ask':'yes_ask');
- if(exit){
-  p.status='EXIT';
-  return {action:roi>0?'💰 TAKE PROFITS · EXIT ALERT':'🚨 SELL FAST · EXIT ALERT',reason:'Hypothetical '+p.side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees. No order executed.'};
- }
- if(profitRunning)return {action:'🟢 HOLD · PROFIT RUNNING',reason:'Hypothetical '+p.side.toUpperCase()+' · sell bid '+bid.toFixed(1)+'¢ · peak '+p.peak.toFixed(1)+'¢ · gross ROI '+(roi*100).toFixed(1)+'% · trailing exit monitoring; no order executed.'};
- if(opposite&&Number.isFinite(oppositeAsk)&&oppositeAsk>0&&oppositeAsk<100)return {action:'🔄 POSSIBLE FLIP · REVIEW',reason:'Opposite BUY signal appeared; compare fees, spread and executable prices. No automatic reversal.'};
- if(remaining>0&&remaining<=90&&bid>=90&&roi>=.10)return {action:'🟢 HOLD TILL END · REVIEW',reason:'Strong current bid but settlement can still reverse; simulated position only.'};
- return {action:'🟢 HOLD · MONITOR',reason:'Hypothetical '+p.side.toUpperCase()+' · entry '+p.entry.toFixed(1)+'¢ · sell bid '+bid.toFixed(1)+'¢ · ROI '+(roi*100).toFixed(1)+'% before fees'};
+ const advice=['up','down'].map(side=>simulatedCalls.get(asset+':'+side)).filter(p=>p?.ticker===m?.ticker).map(p=>positionAdvice(p,m,latestPositionQuoteAt,sig));
+ saveCalls();
+ if(!advice.length)return null;
+ return {action:advice.map(x=>x.action).join(' | '),reason:advice.map(x=>x.action+' · '+x.reason).join(' | ')};
 }
 function manualPositionAdvice(asset){
- let p;try{p=JSON.parse(localStorage.getItem('banktrades:manual-positions:v1')||'{}')?.[asset]}catch{return null}
+ let p;try{p=JSON.parse(localStorage.getItem('banktrades:manual-positions:v1')||'{}')[asset]}catch{}
  if(!p)return null;
- const m=latestPositionQuotes.find(x=>x.asset===asset)?.market;
- // A previous-round manual record is not evidence of a live position. Never erase it automatically.
- if(Number.isFinite(Number(p.expiresAt))&&Number(p.expiresAt)>0&&Date.now()>=Number(p.expiresAt))return {action:'📋 PREVIOUS ROUND · REVIEW RESULT',reason:'Saved manual position is past contract expiry; verify settlement on Kalshi and clear the record when ready.'};
- if(m?.ticker&&m.ticker!==p.ticker)return {action:'📋 PREVIOUS CONTRACT · VERIFY',reason:'Saved manual position belongs to '+p.ticker+', not the current '+m.ticker+'. Check Kalshi settlement; this is not a live sell alert.'};
- if(!m||Date.now()-latestPositionQuoteAt>10000)return {action:'⚠️ POSITION · QUOTE STALE',reason:'Manual position exists, but no fresh verified sell quote. Check Kalshi directly.'};
- const side=String(p.side).toLowerCase(),bid=price(m,side==='up'?'yes_bid':'no_bid'),ask=price(m,side==='up'?'yes_ask':'no_ask'),entry=Number(p.entry);
- if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5||!Number.isFinite(entry)||entry<=0)return {action:'⚠️ POSITION · NO SELL BID',reason:'Cannot estimate a reliable exit from this quote.'};
- const key=asset+':'+p.ticker+':'+p.at,previous=manualPeaks.get(key)||entry,peak=Math.max(previous,bid);manualPeaks.set(key,peak);
- const roi=(bid-entry)/entry,peakGain=(peak-entry)/entry,drawdown=(bid-peak)/peak;
- const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
- const expires=expiry(m),secondsLeft=(expires-Date.now())/1000;
- const fees=Number(p.fees)||0,qty=Number(p.qty)||1,net=(bid-entry)*qty/100-fees;
- const sell=roi<=-.12||trail!==null&&drawdown<=-trail;
- const holdTillEnd=!sell&&secondsLeft>0&&secondsLeft<=45&&bid>=95&&ask-bid<=2&&net>0&&roi>=.10;
- const action=sell?(net>0?'💰 TAKE PROFITS / SELL':'🚨 SELL FAST / LOSS REVIEW'):holdTillEnd?'🟢 HOLD TILL END · REVIEW':secondsLeft>0&&secondsLeft<=90?'🟡 HOLD / END REVIEW':'🟢 HOLD · MONITOR';
- return {action,reason:holdTillEnd?'High-priced contract near expiry with fresh tight bid/ask and positive estimated net exit; NOT a guaranteed lock. Settlement can still reverse.':'Tracked position; see current bid and position details.'};
+ const key=asset+':'+p.ticker+':'+p.at;p.peak=manualPeaks.get(key)||p.entry;
+ const advice=positionAdvice(p,latestPositionQuotes.find(x=>x.asset===asset)?.market,latestPositionQuoteAt,engineSignals.find(x=>x.asset===asset));
+ manualPeaks.set(key,p.peak);return advice;
 }
 // Large in-page visual alerts. Only works while the dashboard page is active.
 let screenAlertsEnabled=false;
@@ -130,7 +121,7 @@ function evaluateLiveVoiceAlerts(){
   const label=tr.children[3]?.textContent||'';
   if(!ticker)continue;
   let action=null;
-  if(/SELL FAST|TAKE PROFITS|EXIT ALERT/.test(label))action=label.includes('TAKE PROFITS')?'TAKE PROFITS':'SELL FAST';
+  if(/SELL FAST|CASH OUT|TAKE PROFITS|EXIT ALERT/.test(label))action=/CASH OUT|TAKE PROFITS/.test(label)?'CASH OUT':'SELL FAST';
   else if(/POSSIBLE FLIP/.test(label))action='POSSIBLE FLIP';
   else if(/BUY UP/.test(label))action='BUY UP';
   else if(/BUY DOWN/.test(label))action='BUY DOWN';
@@ -155,7 +146,7 @@ function evaluateScreenAlerts(){
   const hypothetical=hypotheticalAdvice(asset,signal);
   const trackedExit=manual||hypothetical;
   const exitText=trackedExit?.action||'';
-  const isExit=/SELL FAST|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
+  const isExit=/SELL FAST|CASH OUT|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
   const isHoldReview=/HOLD TILL END · REVIEW/.test(exitText);
   const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
   if(kind){
@@ -252,8 +243,13 @@ function syncSignals(){
   const sampleIssue=/collecting scheduled samples/i.test(why);
   const quoteIssue=/missing, stale, illiquid or invalid quotes/i.test(why);
   cell.textContent=action==='BUY UP'?'🟢 BUY UP · SIGNAL':action==='BUY DOWN'?'🔴 BUY DOWN · SIGNAL':action==='SELL FAST'?'🚨 SELL FAST · SIGNAL':action==='HOLD'?'🟡 HOLD · SIGNAL':unavailable?'⚠️ SIGNAL DATA ERROR':sampleIssue?'⏳ WAIT · COLLECTING DATA':quoteIssue?'⚠️ NO VALID ENTRY QUOTE':'⏳ WAIT · NO QUALIFIED ENTRY';
-  if(advice){cell.textContent=advice.action;cell.title=advice.reason;cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';cell.className='premium-action'+(/SELL|PROFITS/.test(advice.action)?' sell':' hold');return;}
-  if(!advice&&hypothetical){cell.textContent=hypothetical.action;cell.title=hypothetical.reason;cell.style.whiteSpace='normal';cell.className='premium-action hold';return;}
+  for(const [label,tracked] of [['MY POSITION',advice],['AUTO CALL · SIMULATED',hypothetical]]){
+   if(!tracked)continue;
+   const box=document.createElement('div');box.className='bt-position-alert';
+   box.style.cssText='display:block;padding:8px;margin:6px 0;border:1px solid #64748b;border-radius:8px;white-space:normal;font-size:12px';
+   const heading=document.createElement('b');heading.textContent=label+' · '+tracked.action;
+   const detail=document.createElement('div');detail.textContent=tracked.reason;box.append(heading,detail);cell.append(box);
+  }
   if(unavailable){cell.textContent='⚠️ '+why.slice(0,95);cell.style.whiteSpace='normal';cell.style.overflowWrap='anywhere';}else{cell.style.whiteSpace='';cell.style.overflowWrap='';}
   // Independent BTC spot evidence is research context, never a trade authorization.
   if(tr.dataset.asset==='BTC'){
@@ -490,7 +486,7 @@ async function update(){
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
- latestPositionQuotes=d.results;latestPositionQuoteAt=Date.now();
+ latestPositionQuotes=d.results;latestPositionQuoteAt=Date.parse(d.fetched_at);
  monitorPaperExits(d.results,age);
  $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
  let open=0;
@@ -499,7 +495,7 @@ async function update(){
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
   const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
   const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
-  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});simulatedCalls.delete(asset);}}
+  if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});}}
   const tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
   const state=cell(tr,valid&&active?(ya<=na?'↑ UP WATCH':'↓ DOWN WATCH'):valid?'CHECK ROUND':'NO QUOTE');state.className='premium-action';state.title='Directional quote watch, not a filled order or guaranteed profit';
   cell(tr,m?remaining:'—');$('premiumRows').append(tr);
@@ -515,7 +511,7 @@ async function update(){
  }
  $('premiumHealth').textContent='● '+open+' VERIFIED FEEDS';$('premiumHealth').className='pill green';
  if(!engineSignals.length)$('premiumAI').textContent='Quotes refreshed '+new Date().toLocaleTimeString()+' · Waiting for signal evaluation.';
- failures=0;syncSignals();chart();const header=document.getElementById('health');if(header){header.textContent='● '+open+' MARKET QUOTES LOADED';header.className='pill green';}
+ failures=0;rememberEntryCalls(engineSignals);syncSignals();chart();const header=document.getElementById('health');if(header){header.textContent='● '+open+' MARKET QUOTES LOADED';header.className='pill green';}
  }catch(e){failures++;$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message}
  finally{fetching=false}
 }
