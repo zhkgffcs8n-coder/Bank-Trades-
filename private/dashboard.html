@@ -437,7 +437,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=12"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/premium.js?v=26"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=1"></script><script defer src="/btc-lock-radar.js?v=1"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=primal-race-20261101-2"></script><script defer src="/coinbase-direct.js?v=1"></script><script>
+</script><script defer src="/kaibot.js?v=12"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/premium.js?v=20261102-463e011"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=1"></script><script defer src="/btc-lock-radar.js?v=1"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=primal-race-20261101-2"></script><script defer src="/coinbase-direct.js?v=1"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 let busy=false,previousFallback=false;
@@ -446,7 +446,7 @@ async function recover(){
 if(busy||document.hidden)return;
 const primaryActive=[...tbody.querySelectorAll('tr')].some(tr=>tr.dataset.asset&&tr.children.length===5);
 if(primaryActive){previousFallback=false;return}
-if(!previousFallback&&!tbody.textContent.includes('Loading verified markets')&&!tbody.textContent.includes('QUOTE LOADED')&&!tbody.textContent.includes('Market diagnostics'))return;
+if(!previousFallback&&!tbody.textContent.includes('Loading verified markets')&&!tbody.textContent.includes('Checking Kalshi and Primal feeds')&&!tbody.textContent.includes('QUOTE LOADED')&&!tbody.textContent.includes('Market diagnostics'))return;
 busy=true;const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),13500);
 try{
 const [quoteResponse,signalResponse]=await Promise.allSettled([
@@ -472,6 +472,10 @@ badge.textContent=signals.length?'● FALLBACK LIVE DATA':'● QUOTES ONLY · PR
 const panel=document.getElementById('premiumAI');if(panel&&!signals.length)panel.textContent='Kalshi quotes connected; Primal signal endpoint: '+signalError+'. No verified BUY signals.';
 }catch(e){previousFallback=true;tbody.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Market diagnostic: '+String(e.message||e);tr.append(td);tbody.append(tr);strip.textContent='Kalshi market request failed';badge.textContent='● MARKET API ERROR'}finally{clearTimeout(timer);busy=false}
 }
-setTimeout(recover,5000);setInterval(recover,12000);
+const version='2026-11-02 · startup-recovery-2';
+badge.title='Dashboard build '+version;
+const marker=document.createElement('small');marker.id='btBuildMarker';marker.style.cssText='display:block;color:#9ca3af;font-size:10px;margin-top:6px';marker.textContent='Live signals build: '+version;badge.insertAdjacentElement('afterend',marker);
+if(tbody.textContent.includes('Loading verified markets')){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Checking Kalshi and Primal feeds… · '+version;tr.append(td);tbody.replaceChildren(tr)}
+setTimeout(recover,100);setInterval(recover,12000);
 })();
 </script></body></html>
