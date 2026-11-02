@@ -78,3 +78,15 @@ test('collector writes training intent before either model and refuses ambiguous
  assert.match(collector,/priorIntent\?'INTERRUPTED_TRAINING_INTENT'/);
  assert.match(collector,/learnedMarker\?'CONFLICTING_LEARNED_MARKER'/);
 });
+
+test('prospective Original-vs-upgraded comparisons remain SHADOW ONLY while paper entries are paused',()=>{
+ const start=collector.indexOf("const comparisonKey='comparison/v1/'");
+ const finish=collector.indexOf("researchFailure('comparison-snapshot'",start);
+ assert.ok(start>0&&finish>start);
+ const block=collector.slice(start,finish);
+ assert.match(block,/const candidate=originalMomentumShadow\(m,records,now\)/);
+ assert.match(block,/candidate\.shadowOnly===true/);
+ assert.match(block,/mode:'SHADOW_ONLY',authorized:false/);
+ assert.doesNotMatch(block,/const candidate=paperSignal\(/);
+ assert.doesNotMatch(block,/\b(?:placeOrder|submitOrder|executeTrade)\s*\(/);
+});
