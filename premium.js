@@ -89,6 +89,7 @@ function manualPositionAdvice(asset){
 }
 // Large in-page visual alerts. Only works while the dashboard page is active.
 let screenAlertsEnabled=false;
+try{screenAlertsEnabled=localStorage.getItem('banktrades:screen-alerts-enabled')==='true';}catch{}
 const seenScreenAlerts=new Set();
 function showScreenAlert(asset,kind,label,ticker,isTest=false){
  if((!screenAlertsEnabled&&!isTest)||document.hidden)return;
@@ -186,6 +187,7 @@ document.addEventListener('DOMContentLoaded',()=>{
  };
  button.addEventListener('click',()=>{
   screenAlertsEnabled=!screenAlertsEnabled;
+  try{localStorage.setItem('banktrades:screen-alerts-enabled',String(screenAlertsEnabled));}catch{}
   if(!screenAlertsEnabled)document.getElementById('bankScreenAlert')?.remove();
   paint();
   if(screenAlertsEnabled)evaluateScreenAlerts();
