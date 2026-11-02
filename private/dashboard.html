@@ -465,8 +465,9 @@ const round=sig?.roundCall,hasRound=verified&&round?.direction&&round?.ticker===
 const prediction=hasRound?(round.direction==='UP'?'▲ UP FORECAST':'▼ DOWN FORECAST'):'NO ROUND CALL';
 const qualified=verified&&['BUY UP','BUY DOWN'].includes(sig.action);
 const reason=verified?String(sig.reason||'No qualified entry').slice(0,105):String(sig?.reason||signalError).slice(0,90);
-const expiryTime=Date.parse(m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
-const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.ceil((expiryTime-Date.now())/60000))+'m left':'Time unavailable';
+const expiryCandidates=['expires_at','close_time','expected_expiration_time','expiration_time'].map(k=>Date.parse(m?.[k]||'')).filter(t=>Number.isFinite(t)&&t>Date.now());
+const expiryTime=expiryCandidates.length?Math.min(...expiryCandidates):NaN;
+const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.floor((expiryTime-Date.now())/60000))+'m '+String(Math.floor(Math.max(0,expiryTime-Date.now())/1000)%60).padStart(2,'0')+'s':'Time unavailable';
 const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
 for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
 const statusCell=document.createElement('td');
@@ -488,7 +489,7 @@ if(position&&position.ticker===ticker){
 }
 if(tiles.children.length)statusCell.append(tiles);
 tr.append(statusCell);
-const timeCell=document.createElement('td');timeCell.textContent=remaining;timeCell.title=ticker||'';timeCell.style.whiteSpace='nowrap';tr.append(timeCell);
+const timeCell=document.createElement('td');timeCell.textContent=remaining;timeCell.dataset.expiry=Number.isFinite(expiryTime)?String(expiryTime):'';timeCell.title=ticker||'';timeCell.style.whiteSpace='nowrap';tr.append(timeCell);
 tbody.append(tr);if(m)open++;
 }
 previousFallback=true;
@@ -501,6 +502,7 @@ const version='2026-11-02 · startup-recovery-2';
 badge.title='Dashboard build '+version;
 const marker=document.createElement('small');marker.id='btBuildMarker';marker.style.cssText='display:block;color:#9ca3af;font-size:10px;margin-top:6px';marker.textContent='Live signals build: '+version;badge.insertAdjacentElement('afterend',marker);
 if(tbody.textContent.includes('Loading verified markets')){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Checking Kalshi and Primal feeds… · '+version;tr.append(td);tbody.replaceChildren(tr)}
-setTimeout(recover,100);setInterval(recover,12000);
+setTimeout(recover,100);setInterval(recover,3000);
+setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data-fallback-asset] td[data-expiry]')){const t=Number(td.dataset.expiry);if(!Number.isFinite(t)||!t)continue;const s=Math.max(0,Math.floor((t-Date.now())/1000));td.textContent=Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';}},1000);
 })();
 </script></body></html>
