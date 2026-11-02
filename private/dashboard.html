@@ -471,10 +471,10 @@ const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.floor((expiryTime-Da
 const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
 for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
 const statusCell=document.createElement('td');
-const implied=hasRound&&Number.isFinite(Number(round.marketImpliedDirectionPercent))?Number(round.marketImpliedDirectionPercent).toFixed(1)+'%':'—';
-const call=document.createElement('div');call.textContent=prediction+' · '+implied;call.style.cssText='font-size:18px;font-weight:950;line-height:1.3;color:'+(hasRound?(round.direction==='UP'?'#4ade80':'#ff718a'):'#facc15');
+const confidence=hasRound&&round.confidencePercent!=null&&Number.isFinite(Number(round.confidencePercent))?Number(round.confidencePercent).toFixed(1)+'%':'—';
+const call=document.createElement('div');call.textContent=prediction+' · '+confidence;call.style.cssText='font-size:18px;font-weight:950;line-height:1.3;color:'+(hasRound?(round.direction==='UP'?'#4ade80':'#ff718a'):'#facc15');
 const entry=document.createElement('div');entry.textContent=qualified?'⚡ QUALIFIED ENTRY · '+sig.action:verified?'🟡 ENTRY: WAIT':'⚠️ SIGNAL UNAVAILABLE';entry.style.cssText='font-size:12px;font-weight:850;margin-top:4px;color:'+(qualified?'#50e6b4':'#ffd477');
-const details=document.createElement('small');details.textContent=(hasRound?'Market-implied %, not verified forecast accuracy · ':'')+reason;details.style.cssText='display:block;opacity:.75;font-size:11px;margin-top:4px;line-height:1.3';
+const details=document.createElement('small');details.textContent=(hasRound?(confidence==='—'?'Confidence unavailable · ':'Momentum agreement strength, not calibrated win probability · '):'')+reason;details.style.cssText='display:block;opacity:.75;font-size:11px;margin-top:4px;line-height:1.3';
 statusCell.append(call,entry,details);
 const tiles=document.createElement('div');tiles.className='bt-arcade-actions';
 function arcadeTile(label,type,info){const tile=document.createElement('div');tile.className='bt-arcade-tile bt-arcade-'+type;const title=document.createElement('strong');title.textContent=label;const sub=document.createElement('small');sub.textContent=info;tile.append(title,sub);tiles.append(tile);}
@@ -503,7 +503,7 @@ const version='2026-11-02 · startup-recovery-2';
 badge.title='Dashboard build '+version;
 const marker=document.createElement('small');marker.id='btBuildMarker';marker.style.cssText='display:block;color:#9ca3af;font-size:10px;margin-top:6px';marker.textContent='Live signals build: '+version;badge.insertAdjacentElement('afterend',marker);
 if(tbody.textContent.includes('Loading verified markets')){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Checking Kalshi and Primal feeds… · '+version;tr.append(td);tbody.replaceChildren(tr)}
-setTimeout(recover,100);setInterval(recover,3000);
+setTimeout(recover,100);setInterval(recover,2000);
 setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data-fallback-asset] td[data-expiry]')){const t=Number(td.dataset.expiry);if(!Number.isFinite(t)||!t)continue;const s=Math.max(0,Math.floor((t-Date.now())/1000));td.textContent=Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';}},1000);
 })();
 </script></body></html>
