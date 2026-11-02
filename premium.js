@@ -406,6 +406,25 @@ function syncSignals(){
    icon.title=(flip.recentFlip?'Observed momentum reversed this round. ':'Current directional watch; not necessarily a reversal. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
    badge.after(icon);
   }
+  // Arcade action tiles are visual labels only; they never place orders.
+  const arcade=document.createElement('div');
+  arcade.className='bt-arcade-actions';
+  const makeTile=(label,type,description)=>{
+   const tile=document.createElement('div');tile.className='bt-arcade-tile bt-arcade-'+type;
+   const heading=document.createElement('strong');heading.textContent=label;
+   const subtitle=document.createElement('small');subtitle.textContent=description;
+   tile.append(heading,subtitle);arcade.append(tile);
+   return tile;
+  };
+  const tracked=advice||hypothetical;
+  const exitAction=String(tracked?.action||'').toUpperCase();
+  if(flip)makeTile(flip.recentFlip?'⚡ FLIP '+flip.direction:'👀 FLIP WATCH '+flip.direction,'flip',flip.recentFlip?'Momentum reversal observed':'Direction watch · not an entry');
+  if(tracked){
+   if(/SELL FAST|SELL|EXIT/.test(exitAction))makeTile('🚨 SELL FAST','sell','Position exit guidance');
+   else if(/CASH OUT|TAKE PROFITS/.test(exitAction))makeTile('💰 CASH OUT','profit','Position profit guidance');
+   else if(/HOLD/.test(exitAction))makeTile('🛡️ HOLD','hold','Tracked position guidance');
+  }
+  if(arcade.children.length)cell.append(arcade);
   // Small research-direction chip stays visible beside WAIT in compact mode.
   // This is observed momentum research, NOT an approved buy signal.
   const researchChip=sig?.researchDirection;
