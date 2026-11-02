@@ -62,3 +62,26 @@ test('unverified and malformed duplicate tickers quarantine gross lessons and re
  assert.equal(invalidOnly.conflictingMarketCount,0);
  assert.equal(invalidOnly.rejected,1);
 });
+
+test('conflicting frozen scores and asset labels cannot select a paper gate by archive order',()=>{
+ const original=market('score-conflict');
+ original.engines.original.score=80;
+ const independent=market('independent-score');
+ const conflicting=[
+  {...original,engines:{...original.engines,original:{...original.engines.original,score:90}}},
+  {...original,engines:{...original.engines,upgraded:{...original.engines.upgraded,score:75}}},
+  {...original,asset:'ETH'}
+ ];
+ for(const duplicate of conflicting){
+  for(const records of [[original,duplicate,independent],[duplicate,independent,original]]){
+   const audit=verifiedComparisonEvidence(records);
+   assert.deepEqual(audit.rows.map(x=>x.ticker),['independent-score']);
+   assert.equal(audit.conflictingMarketCount,1);
+   assert.equal(audit.rejected,0);
+  }
+ }
+ // Exact repeated frozen evidence remains a single observation.
+ const same=verifiedComparisonEvidence([original,{...original,engines:{...original.engines,original:{...original.engines.original}}}]);
+ assert.equal(same.rows.length,1);
+ assert.equal(same.conflictingMarketCount,0);
+});
