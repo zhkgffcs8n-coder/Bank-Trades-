@@ -61,3 +61,19 @@ test('B is a separate trend rule rather than copying A or committee vote',()=>{
  const x=engineBTrend(market,samples([.40,.44,.48,.52]),now);
  assert.equal(x.action,'BUY UP');assert.match(x.reason,/short-window trend/);
 });
+
+test('B quarantines conflicting same-time quotes independent of archive order',()=>{
+ const clean=samples([.40,.44,.48,.52]);
+ const conflict={...clean[2],yesMid:.01};
+ for(const rows of [[...clean,conflict],[conflict,...clean].reverse()]){
+  const b=engineBTrend(market,rows,now);
+  assert.equal(b.action,'WAIT');
+  assert.match(b.reason,/conflicting duplicate quote timestamps/);
+  const pair=pairedShadow(market,rows,now);
+  assert.equal(pair.engines.B.action,'WAIT');
+  assert.equal(pair.hybrid.researchConsensus,null);
+ }
+ // An identical repeated archived observation is not new independent evidence.
+ const benign=engineBTrend(market,[...clean,{...clean[2]}],now);
+ assert.equal(benign.action,'BUY UP');
+});
