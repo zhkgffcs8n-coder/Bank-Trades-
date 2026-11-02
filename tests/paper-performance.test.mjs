@@ -103,3 +103,38 @@ test('disputed settled outcome is quarantined even with a verified provenance ma
  assert.equal(reconciledPaperTrade(exited),true);
  assert.equal(performance([exited]).overall.trades,1);
 });
+
+test('identical duplicate paper IDs count only once in performance and cohorts',()=>{
+ const t={id:'paper-123',ticker:'KXBTC15M-TEST',asset:'BTC',side:'up',qty:2,ask:50,cost:1,
+  status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1,
+  outcomeVerification:SETTLEMENT_VERIFICATION};
+ const stats=performance([t,{...t}]);
+ assert.equal(stats.overall.trades,1);
+ assert.equal(stats.overall.wins,1);
+ assert.equal(stats.overall.netPnl,1);
+ assert.equal(stats.byStrategy.BTC_up.trades,1);
+ assert.equal(stats.excluded,1);
+ assert.equal(stats.duplicateIdExcludedCount,1);
+ assert.equal(stats.conflictingDuplicateIdCount,0);
+});
+
+test('conflicting or unverified duplicate paper IDs quarantine all copies independent of ordering',()=>{
+ const good={id:'paper-123',ticker:'KXBTC15M-TEST',asset:'BTC',side:'up',qty:2,ask:50,cost:1,
+  status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1,
+  outcomeVerification:SETTLEMENT_VERIFICATION};
+ for(const bad of [{...good,pnl:2},{...good,outcomeVerification:null},
+  {...good,marketResult:'no'},{...good,status:'CLOSED',paperExitOnly:true,exitBid:75,pnl:.5}]){
+  for(const rows of [[good,bad],[bad,good]]){
+   const stats=performance(rows);
+   assert.equal(stats.overall.trades,0);
+   assert.equal(stats.overall.netPnl,0);
+   assert.equal(stats.excluded,2);
+   assert.equal(stats.duplicateIdExcludedCount,2);
+   assert.equal(stats.conflictingDuplicateIdCount,1);
+  }
+ }
+ // Legacy rows without IDs still require individual reconciliation; this
+ // change must not silently erase their historical accounting.
+ const {id,...legacy}=good;
+ assert.equal(performance([legacy,{...legacy}]).overall.trades,2);
+});
