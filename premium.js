@@ -391,8 +391,8 @@ function syncSignals(){
      Number.isFinite(roundCall.asOf)&&Date.now()-roundCall.asOf<90000&&
      ['UP','DOWN'].includes(roundCall.direction)){
    const chip=document.createElement('span');
-   chip.style.cssText='display:inline-block;margin-left:7px;padding:4px 8px;border-radius:8px;border:1px solid #38bdf8;color:#7dd3fc;font-size:12px;font-weight:900;white-space:nowrap';
-   chip.textContent='ROUND CALL: '+roundCall.direction;
+   chip.style.cssText='display:inline-block;margin-left:7px;padding:4px 8px;border-radius:8px;border:1px solid #38bdf8;color:#7dd3fc;font-size:15px;font-weight:900;white-space:normal;box-shadow:0 0 12px #38bdf855';
+   chip.textContent=(roundCall.direction==='UP'?'▲ BUY UP · ROUND PREDICTION':'▼ BUY DOWN · ROUND PREDICTION');
    chip.title='Direction call only, not a qualified BUY signal or order. '+roundCall.basis;
    badge.after(chip);
   }
