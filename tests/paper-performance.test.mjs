@@ -152,3 +152,34 @@ test('repeated archived wins cannot manufacture an eligible paper-entry cohort',
  assert.equal(gated.validation,'INSUFFICIENT COHORT DATA');
  assert.notEqual(gated.validation,'PAPER COHORT PASSED');
 });
+
+test('whitespace aliases of a paper trade ID cannot inflate verified wins or a cohort',()=>{
+ const trade={id:'paper-123',ticker:'KXBTC15M-TEST',asset:'BTC',side:'up',
+  qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',
+  marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ for(const rows of [[trade,{...trade,id:' paper-123 '}],
+                    [{...trade,id:' paper-123 '},trade]]){
+  const stats=performance(rows);
+  assert.equal(stats.overall.trades,1);
+  assert.equal(stats.overall.wins,1);
+  assert.equal(stats.overall.netPnl,1);
+  assert.equal(stats.byStrategy.BTC_up.trades,1);
+  assert.equal(stats.duplicateIdExcludedCount,1);
+  assert.equal(stats.conflictingDuplicateIdCount,0);
+ }
+});
+
+test('contradictory whitespace-alias paper IDs quarantine every copy in either order',()=>{
+ const good={id:'paper-123',ticker:'KXBTC15M-TEST',asset:'BTC',
+  side:'up',qty:2,ask:50,cost:1,status:'SETTLED',settlement:'WIN',
+  marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ const bad={...good,id:' paper-123 ',pnl:2};
+ for(const rows of [[good,bad],[bad,good]]){
+  const stats=performance(rows);
+  assert.equal(stats.overall.trades,0);
+  assert.equal(stats.overall.netPnl,0);
+  assert.equal(stats.excluded,2);
+  assert.equal(stats.duplicateIdExcludedCount,2);
+  assert.equal(stats.conflictingDuplicateIdCount,1);
+ }
+});
