@@ -42,8 +42,27 @@ export function reconciledPaperTrade(t){
  return Math.abs(expected-pnl)<=.021;
 }
 export function performance(trades=[]){
- const eligible=trades.filter(t=>t.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
- const explorationExcluded=trades.length-eligible.length;
+ // Duplicate archived paper IDs must not inflate wins, cash returns or the
+ // cohort gate. Keep one identical copy, but quarantine ALL copies when an ID
+ // has contradictory evidence (including an invalid/unverified copy).
+ // Legacy ID-less records retain their existing independent validation path.
+ const source=Array.isArray(trades)?trades:[];
+ const firstById=new Map(),conflictingIds=new Set();
+ for(const t of source){
+  if(typeof t?.id!=='string'||!t.id.trim())continue;
+  const fingerprint=JSON.stringify(t);
+  const first=firstById.get(t.id);
+  if(first&&first.fingerprint!==fingerprint)conflictingIds.add(t.id);
+  else if(!first)firstById.set(t.id,{row:t,fingerprint});
+ }
+ const seenIds=new Set();
+ const unique=source.filter(t=>{
+  if(typeof t?.id!=='string'||!t.id.trim())return true;
+  if(conflictingIds.has(t.id)||seenIds.has(t.id))return false;
+  seenIds.add(t.id);return true;
+ });
+ const eligible=unique.filter(t=>t?.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
+ const explorationExcluded=source.filter(t=>t?.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST').length;
  const valid=eligible.filter(reconciledPaperTrade);
  const summarize=rows=>{
   const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=rows.filter(t=>Number(t.pnl)<0).length,ties=n-wins-losses;
@@ -93,7 +112,7 @@ export function performance(trades=[]){
   insufficientEvidence:Object.entries(byAsset).filter(([,rows])=>rows.length<30).map(([asset])=>asset),
   cautions:['These are retrospective associations, not proven causes of losses.','Do not promote a rule based only on the same trades used to discover it.','Net returns may omit fees and slippage.']
  };
- return {overall:summarize(valid),lossReview,byStrategy,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:trades.length-valid.length,explorationExcluded,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
+ return {overall:summarize(valid),lossReview,byStrategy,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdCount:firstById.size-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
 }
 export function gatePaperEntry(signal,stats){
  if(!['BUY UP','BUY DOWN'].includes(signal.action))return signal;
