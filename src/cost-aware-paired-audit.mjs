@@ -23,9 +23,12 @@ export function costAwarePairedAudit(records,{feeCents=2,slippageCents=1,minimum
   // Inspect every occurrence of a ticker, including malformed or unverified
   // copies. Otherwise an archive could pair one valid record with a contradictory
   // invalid duplicate and still report sufficient verified evidence.
-  const decision=x=>x?[x.action??null,x.side??null,x.ask??null,x.resolved===true]:null;
+  // The frozen strategy score and asset identify which rule was actually
+  // evaluated. A duplicate with a different score/asset must not borrow the
+  // same official outcome and silently alter gate-selection research.
+  const decision=x=>x?[x.action??null,x.side??null,x.ask??null,x.resolved===true,x.score??null]:null;
   const fingerprint=JSON.stringify([r.status,r.outcomeVerification??null,
-   r.at??null,r.expiresAt??null,r.outcome??null,decision(original),decision(candidate)]);
+   r.asset??null,r.at??null,r.expiresAt??null,r.outcome??null,decision(original),decision(candidate)]);
   const prior=byTicker.get(r.ticker);
   if(prior&&(prior.fingerprint!==fingerprint||prior.valid!==valid))conflicted.add(r.ticker);
   else if(!prior)byTicker.set(r.ticker,{row:r,fingerprint,valid});
