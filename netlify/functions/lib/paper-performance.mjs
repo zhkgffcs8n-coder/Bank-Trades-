@@ -10,6 +10,9 @@ export function reconciledPaperTrade(t){
  if(!Number.isInteger(qty)||qty<1||cost<=0||ask<=0||ask>=100||Math.abs(cost-qty*ask/100)>.03)return false;
  let expected;
  if(t.status==='SETTLED'){
+  // A disputed official outcome must never qualify as a verified paper win/loss,
+  // even if a legacy record still carries a previously verified marker.
+  if(t.outcomeConflict===true)return false;
   // Legacy settlement labels are not proof of an official finalized market.
   // Do not count their apparent wins or losses until independently reverified.
   if(t.outcomeVerification!==SETTLEMENT_VERIFICATION)return false;

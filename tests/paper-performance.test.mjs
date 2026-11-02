@@ -85,3 +85,21 @@ test('unverified legacy paper settlements never count as proven wins or losses',
  assert.equal(reconciledPaperTrade(exit),true);
  assert.equal(performance([exit]).overall.trades,1);
 });
+
+test('disputed settled outcome is quarantined even with a verified provenance marker',async()=>{
+ const {reconciledPaperTrade}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const settled={id:'disputed',asset:'BTC',side:'up',qty:2,ask:50,cost:1,
+  status:'SETTLED',settlement:'WIN',marketResult:'yes',pnl:1,
+  outcomeVerification:SETTLEMENT_VERIFICATION,outcomeConflict:true};
+ assert.equal(reconciledPaperTrade(settled),false);
+ const stats=performance([settled]);
+ assert.equal(stats.overall.trades,0);
+ assert.equal(stats.overall.wins,0);
+ assert.equal(stats.excluded,1);
+ // A separately recorded paper exit is valued at its exit bid, not the
+ // later disputed binary outcome. Its accounting remains independent.
+ const exited={...settled,id:'early-exit',status:'CLOSED',paperExitOnly:true,
+  exitBid:40,pnl:-.2,settlement:'LOSS'};
+ assert.equal(reconciledPaperTrade(exited),true);
+ assert.equal(performance([exited]).overall.trades,1);
+});
