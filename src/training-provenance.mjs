@@ -41,7 +41,7 @@ export function validCommittedTrainingMarker(marker,rec,result,intent){
   marker.globalUpdated===targets.global&&marker.assetUpdated===targets.asset&&
   intent.globalUpdated===targets.global&&intent.assetUpdated===targets.asset&&
   marker.observationDigest===digest&&intent.observationDigest===digest&&
-  Number.isFinite(intent.startedAt)&&intent.startedAt>0&&
+  Number.isFinite(intent.startedAt)&&intent.startedAt>=rec.expiresAt&&
   marker.intentStartedAt===intent.startedAt&&
   Number.isFinite(marker.learnedAt)&&marker.learnedAt>=intent.startedAt&&
   Number.isSafeInteger(intent.globalCountBefore)&&intent.globalCountBefore>=0&&
@@ -58,7 +58,7 @@ export function validCommittedTrainingMarker(marker,rec,result,intent){
 // Netlify Blob writes are not a cross-key transaction or compare-and-swap lock.
 export function trainingWriteIntent(rec,result,targets,globalModel,assetModel,now=Date.now()){
  const expected=frozenTrainingTargets(rec);
- if(!['yes','no'].includes(result)||!Number.isFinite(now)||now<=0||
+ if(!['yes','no'].includes(result)||!Number.isFinite(now)||now<rec?.expiresAt||
   !targets||targets.global!==expected.global||targets.asset!==expected.asset||
   !(expected.global||expected.asset)||
   !Number.isSafeInteger(globalModel?.count)||globalModel.count<0||
