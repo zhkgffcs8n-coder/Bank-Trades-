@@ -56,3 +56,40 @@ test('invalid saved cursor safely restarts the scan',async()=>{
  await scanBlobPage(store,opts,async blob=>{seen.push(blob.key)});
  assert.deepEqual(seen,['pending/a']);
 });
+
+test('transient Blob listing failure preserves cursor and propagates error',async()=>{
+ const store=fakeStore(['pending/a','pending/b','pending/c']);
+ const opts={prefix:'pending/',cursorKey:'scan-cursors/pending',limit:1};
+ store.state.set(opts.cursorKey,{cursor:'pending/b'});
+ const original=store.list;
+ let calls=0;
+ store.list=async args=>{calls++;if(calls===1)throw Error('HTTP 503 upstream unavailable');return original(args)};
+ await assert.rejects(scanBlobPage(store,opts,async()=>{}),/503/);
+ assert.equal(calls,1,'must not silently restart from the first page');
+ assert.equal(store.state.get(opts.cursorKey).cursor,'pending/b');
+ const seen=[];
+ await scanBlobPage(store,opts,async blob=>seen.push(blob.key));
+ assert.deepEqual(seen,['pending/c']);
+});
+
+test('explicit expired-cursor error code restarts safely',async()=>{
+ const store=fakeStore(['pending/a','pending/b']);
+ const opts={prefix:'pending/',cursorKey:'scan-cursors/pending',limit:1};
+ store.state.set(opts.cursorKey,{cursor:'pending/a'});
+ const original=store.list;
+ store.list=async args=>{if(args.cursor){const e=Error('Opaque storage rejection');e.code='CURSOR_EXPIRED';throw e}return original(args)};
+ const seen=[];
+ await scanBlobPage(store,opts,async blob=>seen.push(blob.key));
+ assert.deepEqual(seen,['pending/a']);
+});
+
+test('unrelated invalid request error does not reset the cursor',async()=>{
+ const store=fakeStore(['pending/a']);
+ const opts={prefix:'pending/',cursorKey:'scan-cursors/pending',limit:1};
+ store.state.set(opts.cursorKey,{cursor:'pending/a'});
+ let calls=0;
+ store.list=async()=>{calls++;throw Error('Invalid Blob store configuration')};
+ await assert.rejects(scanBlobPage(store,opts,async()=>{}),/Invalid Blob store/);
+ assert.equal(calls,1);
+ assert.equal(store.state.get(opts.cursorKey).cursor,'pending/a');
+});
