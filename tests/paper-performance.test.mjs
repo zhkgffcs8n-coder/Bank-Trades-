@@ -183,3 +183,34 @@ test('contradictory whitespace-alias paper IDs quarantine every copy in either o
   assert.equal(stats.conflictingDuplicateIdCount,1);
  }
 });
+
+test('ID-less legacy wins remain visible historically but cannot qualify the paper-entry gate',async()=>{
+ const {gatePaperEntry}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const settled={asset:'BTC',side:'up',qty:2,ask:50,cost:1,status:'SETTLED',
+  settlement:'WIN',marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ const legacy=Array.from({length:30},()=>({...settled}));
+ const stats=performance(legacy);
+ assert.equal(stats.overall.trades,30,'historical totals are not silently rewritten');
+ assert.equal(stats.gateEligibleTradeCount,0);
+ assert.equal(stats.idlessResolvedExcludedFromGateCount,30);
+ assert.equal(stats.gateByStrategy.BTC_up,undefined);
+ const gated=gatePaperEntry({action:'BUY UP',asset:'BTC',side:'up',ask:50,reason:'Shadow'},stats);
+ assert.equal(gated.validation,'INSUFFICIENT COHORT DATA');
+ assert.notEqual(gated.validation,'PAPER COHORT PASSED');
+});
+
+test('identified, deduplicated trades alone determine paper gate cohorts and drawdown',async()=>{
+ const {gatePaperEntry}=await import('../netlify/functions/lib/paper-performance.mjs');
+ const settled={asset:'BTC',side:'up',qty:2,ask:50,cost:1,status:'SETTLED',
+  settlement:'WIN',marketResult:'yes',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ const legacy=Array.from({length:30},()=>({...settled}));
+ const identified=Array.from({length:25},(_,i)=>({...settled,id:'unique-'+i,at:i+1}));
+ const stats=performance([...legacy,...identified,{...identified[0]}]);
+ assert.equal(stats.overall.trades,55);
+ assert.equal(stats.gateEligibleTradeCount,25);
+ assert.equal(stats.idlessResolvedExcludedFromGateCount,30);
+ assert.equal(stats.gateByStrategy.BTC_up.trades,25);
+ assert.equal(stats.gateRecent50.trades,25);
+ const gated=gatePaperEntry({action:'BUY UP',asset:'BTC',side:'up',ask:50,reason:'Shadow'},stats);
+ assert.equal(gated.validation,'PAPER COHORT PASSED');
+});
