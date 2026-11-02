@@ -99,6 +99,9 @@ export default async req=>{
    const roundCall=valid&&Number.isFinite(fairUp)
     ?{direction:researchDirection.direction||(fairUp>=.5?'UP':'DOWN'),
       basis:researchDirection.direction?'observed same-round momentum':'market-implied quote direction',
+      marketImpliedUpPercent:Math.round(fairUp*1000)/10,
+      marketImpliedDirectionPercent:Math.round((researchDirection.direction==='DOWN'||(!researchDirection.direction&&fairUp<.5)?1-fairUp:fairUp)*1000)/10,
+      probabilityType:'Kalshi quote-implied percentage, not calibrated forecast accuracy',
       qualified:['BUY UP','BUY DOWN'].includes(signal.action),
       ticker:market.ticker,asOf:now}
     :null;
