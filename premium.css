@@ -103,3 +103,11 @@ body {
   .premium-panel { padding: 14px; }
   .premium-chart { height: 270px; }
 }
+
+/* Readable live signal rows: action first, explanation second. */
+#premiumRows td{vertical-align:middle;line-height:1.35}
+#premiumRows td:nth-child(4){min-width:180px;overflow-wrap:break-word}
+#premiumRows td:nth-child(4)>div:first-child{font-size:15px!important;font-weight:900!important;line-height:1.35!important}
+#premiumRows td:nth-child(4) small{font-size:11px;opacity:.8}
+#premiumRows td:nth-child(5){min-width:68px;max-width:110px;overflow-wrap:anywhere;font-size:12px}
+@media(max-width:700px){#premiumRows td{padding:10px 4px}#premiumRows td:nth-child(4){min-width:145px}#premiumRows td:nth-child(4)>div:first-child{font-size:13px!important}#premiumRows td:nth-child(5){min-width:60px;font-size:11px}}
