@@ -507,6 +507,7 @@ async function update(){
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
+ const unavailable=d.results.filter(x=>x.available===false);if(unavailable.length===d.results.length)throw Error('All Kalshi upstream requests failed: '+unavailable.slice(0,2).map(x=>x.error||'unknown').join('; '));
  latestPositionQuotes=d.results;latestPositionQuoteAt=Date.parse(d.fetched_at);
  monitorPaperExits(d.results,age);
  $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
