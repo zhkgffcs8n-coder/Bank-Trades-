@@ -18,7 +18,8 @@ export function duplicatePaperTradeIds(trades){
 }
  // A corrupt OPEN record must not generate a fabricated official settlement or cash payout.
 export function validOpenPaperPosition(t){
- if(!t||t.status!=='OPEN'||typeof t.ticker!=='string'||!t.ticker.trim()||
+ if(!t||t.status!=='OPEN'||typeof t.id!=='string'||!t.id.trim()||
+  typeof t.ticker!=='string'||!t.ticker.trim()||
   !['up','down'].includes(t.side)||!hasRecordedNumber(t.qty)||
   !hasRecordedNumber(t.ask)||!hasRecordedNumber(t.cost))return false;
  const qty=Number(t.qty),ask=Number(t.ask),cost=Number(t.cost);
