@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../src/training-provenance.mjs';
+import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent,trainingObservationDigest} from '../src/training-provenance.mjs';
 
 test('preserves finalized pending prediction provenance without claiming it was untrained',()=>{
  const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[1,0,0,0],prediction:.6};
@@ -39,23 +39,47 @@ test('rejects missing or post-expiration forecast provenance even with valid pro
  assert.deepEqual(frozenTrainingTargets(rec),{global:true,asset:true});
 });
 
-test('committed marker must match frozen observation, both targets and official outcome',()=>{
+test('committed marker requires matching frozen snapshot, intent, outcome and exact model increments',()=>{
  const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
- const marker={ticker:rec.ticker,asset:rec.asset,result:'yes',globalUpdated:true,assetUpdated:true,globalCount:10,assetCount:8,learnedAt:300};
- assert.equal(validCommittedTrainingMarker(marker,rec,'yes'),true);
- for(const change of [{result:'no'},{ticker:'OTHER'},{asset:'ETH'},{globalUpdated:false},{assetUpdated:false},{globalCount:0},{assetCount:-1},{learnedAt:0},{assetCount:NaN}]){
-  assert.equal(validCommittedTrainingMarker({...marker,...change},rec,'yes'),false,JSON.stringify(change));
+ const intent=trainingWriteIntent(rec,'yes',frozenTrainingTargets(rec),{count:9},{count:7},250);
+ const marker={version:2,ticker:rec.ticker,asset:rec.asset,result:'yes',globalUpdated:true,assetUpdated:true,
+  globalCount:10,assetCount:8,learnedAt:300,observationDigest:intent.observationDigest,intentStartedAt:intent.startedAt};
+ assert.equal(validCommittedTrainingMarker(marker,rec,'yes',intent),true);
+ for(const change of [{result:'no'},{ticker:'OTHER'},{asset:'ETH'},{globalUpdated:false},{assetUpdated:false},
+  {globalCount:9},{globalCount:11},{assetCount:7},{assetCount:9},{learnedAt:0},{learnedAt:249},
+  {assetCount:NaN},{observationDigest:'wrong'},{intentStartedAt:251},{version:1}]){
+  assert.equal(validCommittedTrainingMarker({...marker,...change},rec,'yes',intent),false,JSON.stringify(change));
  }
- assert.equal(validCommittedTrainingMarker(marker,{...rec,globalPrediction:null},'yes'),false);
- assert.equal(validCommittedTrainingMarker(marker,{...rec,at:201},'yes'),false);
- assert.equal(validCommittedTrainingMarker(null,rec,'yes'),false);
+ for(const change of [{status:'COMMITTED'},{verifiedOutcome:'no'},{predictionAt:101},{expiresAt:201},
+  {globalCountBefore:8},{assetCountBefore:8},{observationDigest:'wrong'},{startedAt:251},{version:1}]){
+  assert.equal(validCommittedTrainingMarker(marker,rec,'yes',{...intent,...change}),false,JSON.stringify(change));
+ }
+ for(const change of [{features:[.1,.2,-.3,.5]},{baseline:.56},{globalPrediction:.54},
+  {assetPrediction:.54},{at:101},{expiresAt:201}]){
+  assert.equal(validCommittedTrainingMarker(marker,{...rec,...change},'yes',intent),false,JSON.stringify(change));
+ }
+ assert.equal(validCommittedTrainingMarker(marker,rec,'no',intent),false);
+ assert.equal(validCommittedTrainingMarker(marker,rec,'yes'),false);
+ assert.equal(validCommittedTrainingMarker({...marker,version:undefined},rec,'yes',intent),false);
+ assert.equal(validCommittedTrainingMarker(null,rec,'yes',intent),false);
+ assert.equal(validCommittedTrainingMarker(marker,{...rec,globalPrediction:null},'yes',intent),false);
+ assert.equal(validCommittedTrainingMarker(marker,{...rec,at:201},'yes',intent),false);
+});
+
+test('same contract with changed frozen input cannot borrow another training marker',()=>{
+ const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
+ assert.equal(trainingObservationDigest(rec),trainingObservationDigest({...rec,features:[.1,.2,-.3,.4]}));
+ assert.notEqual(trainingObservationDigest(rec),trainingObservationDigest({...rec,features:[.1,.2,-.3,.41]}));
+ assert.notEqual(trainingObservationDigest(rec),trainingObservationDigest({...rec,assetPrediction:.54}));
+ assert.equal(trainingObservationDigest({...rec,at:200}),null);
 });
 
 test('write-ahead intent is not a learned marker and freezes both model counts',()=>{
  const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
  const targets=frozenTrainingTargets(rec);
  const intent=trainingWriteIntent(rec,'no',targets,{count:7},{count:3},250);
- assert.deepEqual({status:intent.status,globalCountBefore:intent.globalCountBefore,assetCountBefore:intent.assetCountBefore,verifiedOutcome:intent.verifiedOutcome},{status:'STARTED',globalCountBefore:7,assetCountBefore:3,verifiedOutcome:'no'});
+ assert.deepEqual({version:intent.version,status:intent.status,globalCountBefore:intent.globalCountBefore,assetCountBefore:intent.assetCountBefore,verifiedOutcome:intent.verifiedOutcome},{version:2,status:'STARTED',globalCountBefore:7,assetCountBefore:3,verifiedOutcome:'no'});
+ assert.equal(intent.observationDigest,trainingObservationDigest(rec));
  assert.equal(validCommittedTrainingMarker(intent,rec,'no'),false);
  assert.throws(()=>trainingWriteIntent(rec,'yes',{global:true,asset:false},{count:7},{count:3},250));
  assert.throws(()=>trainingWriteIntent(rec,'yes',targets,{count:-1},{count:3},250));
