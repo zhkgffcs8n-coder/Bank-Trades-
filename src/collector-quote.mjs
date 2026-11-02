@@ -14,7 +14,7 @@ export function parseCollectorPrice(m,key){
  const dollars=m?.[key+'_dollars'];
  const raw=dollars!=null?dollars:m?.[key];
  if(typeof raw!=='number'&&
-  !(typeof raw==='string'&&/^(?:\\d+(?:\\.\\d*)?|\\.\\d+)$/.test(raw.trim())))return NaN;
+  !(typeof raw==='string'&&/^(?:[0-9]+(?:[.][0-9]*)?|[.][0-9]+)$/.test(raw.trim())))return NaN;
  const value=Number(raw);
  return Number.isFinite(value)?(dollars!=null?value:value/100):NaN;
 }
