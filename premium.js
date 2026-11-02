@@ -97,7 +97,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  let overlay=document.getElementById('bankScreenAlert');
  if(!overlay){
   const style=document.createElement('style');
-  style.textContent='@keyframes bankAlertPulse{0%,100%{opacity:.10}50%{opacity:.28}}@media(prefers-reduced-motion:reduce){#bankScreenAlert .bank-flash{animation:none!important}}#bankScreenAlert{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:white;font-family:system-ui,sans-serif}#bankScreenAlert .bank-flash{position:absolute;inset:0;pointer-events:none;animation:bankAlertPulse 1.1s ease-in-out 2}#bankScreenAlert .bank-box{position:relative;max-width:680px;width:100%;border:4px solid white;border-radius:24px;padding:28px 20px;background:#111b27;box-shadow:0 0 0 9999px rgba(0,0,0,.55)}#bankScreenAlert .bank-head{font-size:clamp(28px,7vw,64px);font-weight:900}#bankScreenAlert button{margin-top:24px;font-size:22px;font-weight:800;padding:14px 35px;border:0;border-radius:12px;cursor:pointer}';
+  style.textContent='@keyframes bankAlertPulse{0%,100%{opacity:.10}50%{opacity:.28}}@media(prefers-reduced-motion:reduce){#bankScreenAlert .bank-flash{animation:none!important}}#bankScreenAlert{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:white;font-family:system-ui,sans-serif}#bankScreenAlert .bank-flash{position:absolute;inset:0;pointer-events:none;animation:bankAlertPulse 1.1s ease-in-out 2}#bankScreenAlert .bank-box{position:relative;max-width:680px;width:100%;border:4px solid white;border-radius:28px;padding:28px 20px;background:#111b27;box-shadow:0 0 36px currentColor,0 0 0 9999px rgba(0,0,0,.55)}#bankScreenAlert .bank-head{font-size:clamp(28px,7vw,64px);font-weight:900}#bankScreenAlert button{margin-top:24px;font-size:22px;font-weight:800;padding:14px 35px;border:0;border-radius:12px;cursor:pointer}';
   document.head.append(style);
   overlay=document.createElement('div');overlay.id='bankScreenAlert';overlay.setAttribute('role','alertdialog');overlay.setAttribute('aria-modal','true');
   overlay.innerHTML='<div class="bank-flash"></div><div class="bank-box"><div class="bank-head"></div><p class="bank-detail" style="font-size:clamp(18px,3vw,27px)"></p><p style="font-size:14px">Signal guidance only · no order placed · verify live Kalshi price</p><button type="button">DISMISS</button></div>';
@@ -110,7 +110,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD TILL END · REVIEW':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  clearTimeout(overlay._autoDismissTimer);
- overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},4500);
+ overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},2000);
  overlay.querySelector('button').focus();
 }
 const voicedMarketStatuses=new Set();
