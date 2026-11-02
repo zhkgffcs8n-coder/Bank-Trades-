@@ -126,3 +126,15 @@ body {
 #premiumRows .bt-position-alert b{font-size:13px;letter-spacing:.2px}
 
 #premiumRows td:nth-child(4){border-radius:14px;font-weight:900;text-shadow:0 0 8px currentColor}#premiumRows tr.bt-buy-up td:nth-child(4){border:2px solid #48eaa0;background:#103c2e}#premiumRows tr.bt-buy-down td:nth-child(4){border:2px solid #ff6786;background:#481b2b}#premiumRows .bt-position-alert{border:2px solid #b998ff!important;background:#282044!important}#premiumRows tr.bt-signal-new{animation:btArcadeFlash 2s ease-out 1}
+
+/* Primal Arcade: distinct cartoon-style live action tiles */
+#premiumRows .bt-arcade-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+#premiumRows .bt-arcade-tile{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:2px solid;border-radius:12px;box-shadow:0 3px 0 #0008,0 0 13px #ffffff15;max-width:100%;white-space:normal}
+#premiumRows .bt-arcade-tile strong{font-size:14px;font-weight:950;letter-spacing:.4px}
+#premiumRows .bt-arcade-tile small{font-size:10px;opacity:.9}
+#premiumRows .bt-arcade-flip{background:#3d3010;border-color:#ffd447;color:#ffe789}
+#premiumRows .bt-arcade-hold{background:#32204b;border-color:#c4a0ff;color:#e2c8ff}
+#premiumRows .bt-arcade-profit{background:#0d4130;border-color:#55ffb1;color:#a7ffd5}
+#premiumRows .bt-arcade-sell{background:#521b29;border-color:#ff5e7c;color:#ffc2d0}
+#premiumRows .bt-arcade-flip strong{animation:btArcadeFlash 2s ease-out 1}
+@media(prefers-reduced-motion:reduce){#premiumRows .bt-arcade-flip strong{animation:none}}
