@@ -471,9 +471,10 @@ const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.floor((expiryTime-Da
 const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
 for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
 const statusCell=document.createElement('td');
-const call=document.createElement('div');call.textContent=prediction;call.style.cssText='font-size:18px;font-weight:950;line-height:1.3;color:'+(hasRound?(round.direction==='UP'?'#4ade80':'#ff718a'):'#facc15');
+const implied=hasRound&&Number.isFinite(Number(round.marketImpliedDirectionPercent))?Number(round.marketImpliedDirectionPercent).toFixed(1)+'%':'—';
+const call=document.createElement('div');call.textContent=prediction+' · '+implied;call.style.cssText='font-size:18px;font-weight:950;line-height:1.3;color:'+(hasRound?(round.direction==='UP'?'#4ade80':'#ff718a'):'#facc15');
 const entry=document.createElement('div');entry.textContent=qualified?'⚡ QUALIFIED ENTRY · '+sig.action:verified?'🟡 ENTRY: WAIT':'⚠️ SIGNAL UNAVAILABLE';entry.style.cssText='font-size:12px;font-weight:850;margin-top:4px;color:'+(qualified?'#50e6b4':'#ffd477');
-const details=document.createElement('small');details.textContent=reason;details.style.cssText='display:block;opacity:.75;font-size:11px;margin-top:4px;line-height:1.3';
+const details=document.createElement('small');details.textContent=(hasRound?'Market-implied %, not verified forecast accuracy · ':'')+reason;details.style.cssText='display:block;opacity:.75;font-size:11px;margin-top:4px;line-height:1.3';
 statusCell.append(call,entry,details);
 const tiles=document.createElement('div');tiles.className='bt-arcade-actions';
 function arcadeTile(label,type,info){const tile=document.createElement('div');tile.className='bt-arcade-tile bt-arcade-'+type;const title=document.createElement('strong');title.textContent=label;const sub=document.createElement('small');sub.textContent=info;tile.append(title,sub);tiles.append(tile);}
