@@ -17,7 +17,7 @@ export async function owner(){const u=await authenticated();if(!isOwner(u))fail(
 export async function freeEntitlement(db,user,now=Date.now()){
  const grant=await db.get('grant/'+user.id,{type:'json'});if(!grant?.codeHash)return null;
  const code=await db.get('code/'+grant.codeHash,{type:'json'});
- if(code&&!code.revoked&&code.redeemedBy===user.id&&code.email===user.email.toLowerCase()&&Number(code.accessUntil)>now)return {active:true,source:'free-code',expiresAt:code.accessUntil};
+ if(code&&!code.revoked&&Number(code.accessUntil)>now&&((code.universal===true&&grant.email===user.email.toLowerCase())||(code.universal!==true&&code.redeemedBy===user.id&&code.email===user.email.toLowerCase())))return {active:true,source:'free-code',expiresAt:code.accessUntil};
  return null;
 }
 export async function paidEntitlement(db,user){
