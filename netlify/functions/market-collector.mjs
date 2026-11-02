@@ -215,11 +215,12 @@ export default async()=>{
       }else{
        assetModels[assetKey]=assetModel;
       }
-      trainedThisRun++;
-      trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
       if(targets.asset)await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
       // Persist idempotency evidence after both models have been updated.
       await db.setJSON('training/learned/v1/'+rec.ticker,{version:2,ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),observationDigest:intent.observationDigest,intentStartedAt:intent.startedAt,globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
+      // Count only fully committed training markers, not interrupted partial writes.
+      trainedThisRun++;
+      trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
 
      }else{
       await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,learnedMarker?'CONFLICTING_LEARNED_MARKER':priorIntent?'INTERRUPTED_TRAINING_INTENT':cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
