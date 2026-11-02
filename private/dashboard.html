@@ -271,7 +271,7 @@ async function refresh(){
  $('diagnostics').textContent='Source: '+d.source+'\nLast fetch: '+d.fetched_at+'\n'+rows.map(r=>r.asset+': '+(r.market?'OPEN':r.error||'NO OPEN MARKET')).join('\n');
  for(const r of rows){const m=r.market;if(!m)continue;const a=val(m,'yes_ask'),b=val(m,'yes_bid');if(a!=null&&b!=null){const h=history[r.asset]||(history[r.asset]=[]);if(h.length&&h[h.length-1].ticker!==m.ticker)h.length=0;h.push({t:Date.now(),v:(a+b)/2,ticker:m.ticker});if(h.length>100)h.shift()}}
  render();
- }catch(e){fetched=0;$('health').textContent='● FEED ERROR';$('health').className='pill red';$('diagnostics').textContent='Feed error: '+e.message+'\nCheck Netlify Functions deployment and /api/data endpoint.';show()}
+ }catch(e){fetched=0;$('health').textContent='● FEED ERROR';$('health').className='pill red';$('diagnostics').textContent='Feed error: '+e.message+'\nCheck Netlify Functions deployment and /api/data endpoint.';const tbody=document.getElementById('premiumRows');if(tbody&&tbody.textContent.includes('Loading verified markets')){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Kalshi data unavailable: '+e.message+' · Automatic retry enabled';tr.append(td);tbody.replaceChildren(tr)}const strip=document.getElementById('premiumStrip');if(strip&&strip.textContent.includes('Connecting to Kalshi'))strip.textContent='Kalshi connection error: '+e.message;show()}
  finally{busy=false}
 }
 $('refresh').onclick=refresh;
