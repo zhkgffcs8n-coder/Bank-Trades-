@@ -8,17 +8,22 @@ export function pairedScoreAudit(records,{minimum=100,margin=.005,archiveComplet
  const valid=p=>typeof p==='number'&&Number.isFinite(p)&&p>0&&p<1;
  const seen=new Map(),conflicted=new Set();
  for(const r of Array.isArray(records)?records:[]){
-  if(!r||typeof r.id!=='string'||!r.id||
-   !Number.isFinite(r.recordedAt)||r.recordedAt<=0||!Number.isFinite(r.expiresAt)||
-   !Number.isFinite(r.settledAt)||r.recordedAt>=r.expiresAt||r.settledAt<r.expiresAt||
-   r.outcomeVerification!==SETTLEMENT_VERIFICATION||
-   (r.outcome!==0&&r.outcome!==1)||!valid(r.candidate)||!valid(r.baseline))continue;
-  const fingerprint=JSON.stringify([r.recordedAt,r.expiresAt,r.settledAt,r.outcome,r.candidate,r.baseline]);
+  if(!r||typeof r.id!=='string'||!r.id)continue;
+  const verified=Number.isFinite(r.recordedAt)&&r.recordedAt>0&&
+   Number.isFinite(r.expiresAt)&&Number.isFinite(r.settledAt)&&
+   r.recordedAt<r.expiresAt&&r.settledAt>=r.expiresAt&&
+   r.outcomeVerification===SETTLEMENT_VERIFICATION&&
+   (r.outcome===0||r.outcome===1)&&valid(r.candidate)&&valid(r.baseline);
+  // Inspect every copy of a market, including unverified and malformed rows.
+  // Otherwise a valid record can silently override contradictory archive evidence.
+  const fingerprint=JSON.stringify([r.recordedAt??null,r.expiresAt??null,
+   r.settledAt??null,r.outcome??null,r.outcomeVerification??null,
+   r.candidate??null,r.baseline??null]);
   const previous=seen.get(r.id);
-  if(previous&&previous.fingerprint!==fingerprint)conflicted.add(r.id);
-  else if(!previous)seen.set(r.id,{row:r,fingerprint});
+  if(previous&&(previous.fingerprint!==fingerprint||previous.verified!==verified))conflicted.add(r.id);
+  else if(!previous)seen.set(r.id,{row:r,fingerprint,verified});
  }
- const paired=[...seen].filter(([id])=>!conflicted.has(id)).map(([,v])=>v.row);
+ const paired=[...seen].filter(([id,v])=>v.verified&&!conflicted.has(id)).map(([,v])=>v.row);
  const count=paired.length;
  const candidateBrier=count?paired.reduce((a,r)=>a+(r.candidate-r.outcome)**2,0)/count:null;
  const baselineBrier=count?paired.reduce((a,r)=>a+(r.baseline-r.outcome)**2,0)/count:null;
