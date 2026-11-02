@@ -124,3 +124,5 @@ body {
 #premiumRows td:nth-child(4){font-size:15px;letter-spacing:.1px}
 #premiumRows .bt-position-alert{background:#14233d;border-radius:13px!important;box-shadow:inset 0 1px 0 #ffffff12}
 #premiumRows .bt-position-alert b{font-size:13px;letter-spacing:.2px}
+
+#premiumRows td:nth-child(4){border-radius:14px;font-weight:900;text-shadow:0 0 8px currentColor}#premiumRows tr.bt-buy-up td:nth-child(4){border:2px solid #48eaa0;background:#103c2e}#premiumRows tr.bt-buy-down td:nth-child(4){border:2px solid #ff6786;background:#481b2b}#premiumRows .bt-position-alert{border:2px solid #b998ff!important;background:#282044!important}#premiumRows tr.bt-signal-new{animation:btArcadeFlash 2s ease-out 1}
