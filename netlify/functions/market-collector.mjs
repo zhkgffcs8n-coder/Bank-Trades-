@@ -169,10 +169,11 @@ export default async()=>{
     // The historical ledger does not prove whether its gradient was already applied.
     // Quarantine for reconciliation rather than replaying an unsafe duplicate update.
     const learnedMarker=await db.get('training/learned/v1/'+rec.ticker,{type:'json'});
-    if(validCommittedTrainingMarker(learnedMarker,rec,trustedCached)){
+    const priorIntent=await db.get('training/intent/v1/'+rec.ticker,{type:'json'});
+    if(validCommittedTrainingMarker(learnedMarker,rec,trustedCached,priorIntent)){
      await db.delete('pending/'+rec.ticker);return;
     }
-    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,learnedMarker?'CONFLICTING_LEARNED_MARKER':'CACHED_FINALIZED_OUTCOME',now));
+    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,learnedMarker?'CONFLICTING_LEARNED_MARKER':priorIntent?'INTERRUPTED_TRAINING_INTENT':'CACHED_FINALIZED_OUTCOME',now));
     collection.trainingReviewCount++;
     await db.delete('pending/'+rec.ticker);return;
    }
@@ -187,7 +188,7 @@ export default async()=>{
      const priorIntent=await db.get('training/intent/v1/'+rec.ticker,{type:'json'});
      // A missing cached label is not proof this observation was never learned.
      // Preserve valid committed evidence; quarantine contradictory or partial state.
-     if(validCommittedTrainingMarker(learnedMarker,rec,result)){
+     if(validCommittedTrainingMarker(learnedMarker,rec,result,priorIntent)){
       await db.delete('pending/'+rec.ticker);return;
      }
      if(!cached&&!learnedMarker&&!priorIntent&&(targets.global||targets.asset)){
@@ -195,7 +196,8 @@ export default async()=>{
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       // Persist intent BEFORE any gradient write. This is an audit trail, not
       // an atomic lock: overlapping schedules still require reconciliation.
-      await db.setJSON('training/intent/v1/'+rec.ticker,trainingWriteIntent(rec,result,targets,model,assetModel,now));
+      const intent=trainingWriteIntent(rec,result,targets,model,assetModel,now);
+      await db.setJSON('training/intent/v1/'+rec.ticker,intent);
       // The global model must be scored against its OWN prediction frozen
       // before settlement, not the separate asset model's prediction.
       if(targets.global){
@@ -213,7 +215,7 @@ export default async()=>{
       trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
       if(targets.asset)await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
       // Persist idempotency evidence after both models have been updated.
-      await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
+      await db.setJSON('training/learned/v1/'+rec.ticker,{version:2,ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),observationDigest:intent.observationDigest,intentStartedAt:intent.startedAt,globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
 
      }else{
       await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,learnedMarker?'CONFLICTING_LEARNED_MARKER':priorIntent?'INTERRUPTED_TRAINING_INTENT':cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
