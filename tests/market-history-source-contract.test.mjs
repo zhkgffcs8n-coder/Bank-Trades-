@@ -22,4 +22,5 @@ test('bounded archive history uses fresh rolling samples and discloses incomplet
  assert.match(source,/db\.get\('recent\/'\+asset,\{type:'json'\}\)/);
  assert.match(source,/mergeRecentMarketHistory\(archiveRecords,rolling,asset,cutoff,Date\.now\(\)\)/);
  assert.match(source,/historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling/);
+ assert.match(source,/recentCacheRecovered:recoveredFromRolling,conflictingSampleCount/);
 });
