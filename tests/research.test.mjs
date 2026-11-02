@@ -43,12 +43,14 @@ test('moving legacy handler preserves live markets and candle routing',async()=>
  }finally{globalThis.fetch=oldFetch;}
 });
 
-test('paper momentum requires recent scheduled observations before any BUY',()=>{
+test('fresh momentum remains paper WAIT without a validated model, and stale observations are blocked',()=>{
  const now=Date.parse('2026-10-31T09:45:00Z');
  const market={ticker:'KXBTC15M-TEST',yes_bid_dollars:'0.48',yes_ask_dollars:'0.50',no_bid_dollars:'0.50',no_ask_dollars:'0.52',expected_expiration_time:new Date(now+5*60000).toISOString()};
  const fresh=[{ticker:market.ticker,t:now-90000,yesMid:.40},{ticker:market.ticker,t:now-30000,yesMid:.48}];
  const valid=paperSignal(market,fresh,null,now);
- assert.equal(valid.action,'BUY UP');
+ assert.equal(valid.action,'WAIT');
+ assert.equal(valid.validation,'MODEL_NOT_VALIDATED');
+ assert.equal(valid.entryResearch?.side,'UP');
  const stale=fresh.map(x=>({...x,t:x.t-180000}));
  const blocked=paperSignal(market,stale,null,now);
  assert.equal(blocked.action,'WAIT');
