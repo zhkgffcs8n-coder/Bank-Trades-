@@ -2,6 +2,16 @@ import {SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
 export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
+ // A corrupt OPEN record must not generate a fabricated official settlement or cash payout.
+export function validOpenPaperPosition(t){
+ if(!t||t.status!=='OPEN'||typeof t.ticker!=='string'||!t.ticker.trim()||
+  !['up','down'].includes(t.side)||!hasRecordedNumber(t.qty)||
+  !hasRecordedNumber(t.ask)||!hasRecordedNumber(t.cost))return false;
+ const qty=Number(t.qty),ask=Number(t.ask),cost=Number(t.cost);
+ return Number.isSafeInteger(qty)&&qty>0&&ask>0&&ask<100&&cost>0&&
+  Math.abs(cost-Math.round(qty*ask)/100)<=.031;
+}
+
 // Require paper P/L to reconcile to the recorded entry and outcome. A label or
 // a numeric P/L alone is not proof that a simulated trade was accounted for.
 export function reconciledPaperTrade(t){

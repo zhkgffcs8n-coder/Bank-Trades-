@@ -1,5 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
-import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade} from './lib/paper-performance.mjs';
+import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
 import {getStore} from '@netlify/blobs';
@@ -18,6 +18,8 @@ export default async()=>{
  }
  // Settle prior server paper positions only from official finalized labels.
  for(const t of ledger.trades.filter(x=>x.status==='OPEN'||(x.status==='CLOSED'&&!['WIN','LOSS'].includes(x.settlement)))){
+  // Preserve malformed OPEN records for manual reconciliation, never pay them.
+  if(t.status==='OPEN'&&!validOpenPaperPosition(t))continue;
   let o=await hdb.get('outcomes/'+t.ticker,{type:'json'});
   // Legacy cached labels were not all checked for finality and payout. Reverify.
   let result=trustedStoredFinalizedOutcome(o,t.ticker);
@@ -125,7 +127,7 @@ export default async()=>{
  const unreconciledRecords=resolvedRecords.filter(t=>!reconciledPaperTrade(t));
  const pnlSum=rows=>Number(rows.filter(t=>hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2));
  const excludedFromEligible=resolvedRecords.filter(t=>t.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST');
- await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,settlementConflictCount:ledger.trades.filter(t=>t.outcomeConflict===true).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
+ await s.setJSON('risk-audit',{at:now,entryPaused,reason:'Paper strategy drawdown review; entries disabled pending independent validation',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,invalidOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&!validOpenPaperPosition(t)).length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,settlementConflictCount:ledger.trades.filter(t=>t.outcomeConflict===true).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
  // Keep quote-based signal observations flowing during the paper-entry safety pause.
  // No simulated positions may open while the circuit breaker is active.
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
