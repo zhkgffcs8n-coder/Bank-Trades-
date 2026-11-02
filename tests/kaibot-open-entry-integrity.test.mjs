@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {validOpenPaperPosition} from '../netlify/functions/lib/paper-performance.mjs';
+import {validOpenPaperPosition,duplicatePaperTradeIds} from '../netlify/functions/lib/paper-performance.mjs';
 
 test('OPEN paper positions must reconcile before a simulated settlement',()=>{
  const t={status:'OPEN',ticker:'KXBTC15M-TEST',side:'up',qty:10,ask:55,cost:5.50};
@@ -17,10 +17,34 @@ test('OPEN paper positions must reconcile before a simulated settlement',()=>{
 
 test('scheduled KaiBot quarantines invalid OPEN positions before paying and audits their count',()=>{
  const source=readFileSync(new URL('../netlify/functions/kaibot-runner.mjs',import.meta.url),'utf8');
- const guard=source.indexOf("if(t.status==='OPEN'&&!validOpenPaperPosition(t))continue;");
+ const guard=source.indexOf("if(t.status==='OPEN'&&(!validOpenPaperPosition(t)||hasDuplicateId(t)))continue;");
  const lookup=source.indexOf("let o=await hdb.get('outcomes/'+t.ticker",guard);
  const payout=source.indexOf('ledger.cash=Math.round((ledger.cash+payout)*100)/100;',guard);
  assert.ok(guard>0&&lookup>guard&&payout>lookup);
  assert.match(source,/invalidOpenPaperPositionCount:ledger\.trades\.filter\(t=>t\.status==='OPEN'&&!validOpenPaperPosition\(t\)\)\.length/);
+ assert.match(source,/const entryPaused=true/);
+});
+
+test('duplicate paper trade IDs quarantine every copy, including identical open rows',()=>{
+ const first={id:'paper-1',status:'OPEN',ticker:'KXBTC15M-TEST',qty:10,ask:55,cost:5.5};
+ const records=[first,{...first},{...first,id:'paper-2',status:'SETTLED'},
+  {...first,id:'paper-2',status:'OPEN'},{...first,id:'paper-3'},
+  {...first,id:''},{...first,id:null}];
+ assert.deepEqual([...duplicatePaperTradeIds(records)].sort(),['paper-1','paper-2']);
+ assert.deepEqual([...duplicatePaperTradeIds([first,{...first,id:'paper-4'}])],[]);
+ assert.deepEqual([...duplicatePaperTradeIds([{id:' paper-1 '},{id:'paper-1'}])],['paper-1']);
+ assert.deepEqual([...duplicatePaperTradeIds(null)],[]);
+});
+
+test('KaiBot blocks duplicate open IDs from both official payouts and early-exit cash',()=>{
+ const source=readFileSync(new URL('../netlify/functions/kaibot-runner.mjs',import.meta.url),'utf8');
+ const dup=source.indexOf('const duplicateIds=duplicatePaperTradeIds(ledger.trades);');
+ const guard=source.indexOf("if(t.status==='OPEN'&&(!validOpenPaperPosition(t)||hasDuplicateId(t)))continue;");
+ const payout=source.indexOf('ledger.cash=Math.round((ledger.cash+payout)*100)/100;');
+ const exits=source.indexOf("const openForExit=ledger.trades.filter(x=>x.status==='OPEN'&&!hasDuplicateId(x));");
+ const proceeds=source.indexOf('ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;');
+ assert.ok(dup>0&&guard>dup&&payout>guard&&exits>payout&&proceeds>exits);
+ assert.match(source,/duplicatePaperTradeIdCount:duplicateIds\.size/);
+ assert.match(source,/duplicateOpenPaperPositionCount:ledger\.trades\.filter\(t=>t\.status==='OPEN'&&hasDuplicateId\(t\)\)\.length/);
  assert.match(source,/const entryPaused=true/);
 });
