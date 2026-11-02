@@ -81,7 +81,7 @@ export default async()=>{
  ledger.settlementReviewOffset=reviewStart+reviewCount;
  // Paper-only exit simulation: use the executable bid, never the mid/ask.
  // This does not imply a real Kalshi order could fill at that price or quantity.
- const openForExit=ledger.trades.filter(x=>x.status==='OPEN'&&!hasDuplicateId(x));
+ const openForExit=ledger.trades.filter(x=>validOpenPaperPosition(x)&&!hasDuplicateId(x));
  // Fetch independent exit quotes concurrently so one slow market does not delay every other market.
  const exitQuotes=await Promise.all(openForExit.map(async t=>{
   try{return {market:(await get(base+'/markets/'+encodeURIComponent(t.ticker)))?.market};}
