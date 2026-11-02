@@ -7,8 +7,8 @@ const source=readFileSync(new URL('../coinbase-direct.js',import.meta.url),'utf8
 test('Coinbase panel is shipped and its exact public endpoints are allowed by CSP',()=>{
  const build=readFileSync(new URL('../scripts/build.mjs',import.meta.url),'utf8');
  const policy=readFileSync(new URL('../netlify.toml',import.meta.url),'utf8');
- assert.match(build,/['"]coinbase-direct\\.js['"]/);
- assert.match(policy,/connect-src 'self' https:\/\/api\\.exchange\\.coinbase\\.com wss:\/\/advanced-trade-ws\\.coinbase\\.com;/);
+ assert.ok(build.includes("'coinbase-direct.js'"));
+ assert.ok(policy.includes("connect-src 'self' https://api.exchange.coinbase.com wss://advanced-trade-ws.coinbase.com;"));
 });
 test('hourly candles cannot masquerade as minute history; rolling levels use completed candles',async()=>{
  const nodes=new Map();
@@ -29,14 +29,14 @@ test('hourly candles cannot masquerade as minute history; rolling levels use com
  await new Promise(resolve=>setImmediate(resolve));
  const frame=get('cbFrame'),stats=get('cbStats');
  assert.equal(frame.value,'1');
- assert.match(stats.innerHTML,/Support \\(20\\).*?Collecting/);
- assert.match(stats.innerHTML,/Spot.*?Collecting/);
+ assert.ok(stats.innerHTML.includes('Support (20)</small><b>Collecting…</b>'));
+ assert.ok(stats.innerHTML.includes('Spot</small><b>Collecting…</b>'));
  frame.value='60';frame.listeners.change();
- assert.match(stats.innerHTML,/Support \\(20\\).*?<b>108<\\/b>/);
- assert.match(stats.innerHTML,/Resistance \\(20\\).*?<b>131<\\/b>/);
+ assert.ok(stats.innerHTML.includes('Support (20)</small><b>108</b>'));
+ assert.ok(stats.innerHTML.includes('Resistance (20)</small><b>131</b>'));
  assert.equal(sockets.length,1);
  frame.value='1';frame.listeners.change();
  sockets[0].onmessage({data:JSON.stringify({events:[{tickers:[{product_id:'BTC-USD',price:'200',last_size:'1'}]}]})});
- assert.match(stats.innerHTML,/Spot.*?<b>200<\\/b>/);
- assert.match(stats.innerHTML,/Support \\(20\\).*?Collecting/);
+ assert.ok(stats.innerHTML.includes('Spot</small><b>200</b>'));
+ assert.ok(stats.innerHTML.includes('Support (20)</small><b>Collecting…</b>'));
 });
