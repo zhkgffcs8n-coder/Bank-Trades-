@@ -301,7 +301,7 @@ $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://
 window.addEventListener('resize',draw);
 window.addEventListener('banktrades:select',event=>{if(!assets.includes(event.detail))return;selected=event.detail;render();if(voice)$('voice').textContent='🔊 VOICE ON · '+selected});
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
-refresh();preloadHistory().catch(()=>{});
+refresh();loadSharedSignals().then(()=>{updateSidebarConfidence();render()});preloadHistory().catch(()=>{});setInterval(()=>{if(!document.hidden)loadSharedSignals().then(()=>{updateSidebarConfidence();render()})},12000);
 })();
 </script><script>
 (()=>{'use strict';
