@@ -38,6 +38,20 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
   note:'Directional momentum observation; agreement and reversal rules are not proven edges'};
 
  if(agreement<.55||reversals>3||ask<10||ask>90){const failed=[agreement<.55?'Momentum agreement '+Math.round(agreement*100)+'% below 55%':null,reversals>3?'Reversals '+reversals+' above 3':null,ask<10||ask>90?'Entry ask '+ask.toFixed(1)+'¢ outside 10–90¢':null].filter(Boolean);return {...base,reason:'Paper entry blocked: '+failed.join('; '),researchForecast,entryResearch,entryDiagnostics:{direction:side.toUpperCase(),agreement,reversals,askCents:ask,secondsRemaining:Math.ceil(left),filters:{agreement:agreement>=.55,reversals:reversals<=3,price:ask>=10&&ask<=90}}};}
+ // Do not issue a paper BUY on momentum alone: it has deteriorated in the
+ // finalized ledger and momentum agreement is not calibrated win probability.
+ // The learned probability must be validated on recorded settlements and
+ // exceed executable ask by a conservative research margin. Real execution
+ // remains disabled; this is not evidence of a profitable strategy.
+ if(researchForecast===null)return {...base,side,ask,entryResearch,
+  validation:'MODEL_NOT_VALIDATED',researchValidated:false,
+  reason:'Momentum-only entry paused: no validated asset model; collecting verified settlement outcomes'};
+ const sideProbability=side==='up'?researchForecast:1-researchForecast;
+ const requiredProbability=ask/100+.05;
+ if(sideProbability<requiredProbability)return {...base,side,ask,entryResearch,researchForecast,
+  researchValidated:true,modelSideProbability:sideProbability,requiredProbability,
+  validation:'MODEL_EDGE_TOO_SMALL',
+  reason:'Validated model probability does not exceed executable ask by 5 percentage points (before fees)'};
  // A learned model can veto an experimental PAPER entry, never invent one.
  // This is not live-order authorization. Require a margin above executable ask
  // for the proposed side, and do not apply unvalidated models.
@@ -49,5 +63,5 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
    reason:'Validated research forecast does not exceed executable entry cost by 5 percentage points',
    modelSideProbability:sideProbability,requiredProbability,entryResearch};
  }
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),reason:'Experimental quote momentum; not validated for profitability',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:researchForecast===null?'unvalidated model; no decision influence':'validated model vetoes insufficient-edge paper entries only'};
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),modelSideProbability:sideProbability,requiredProbability,reason:'Validated research model passes preliminary quote-cost screen; fees, slippage and forward profitability unverified',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:researchForecast===null?'unvalidated model; no decision influence':'validated model vetoes insufficient-edge paper entries only'};
 }
