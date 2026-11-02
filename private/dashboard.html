@@ -457,6 +457,12 @@ if(quoteResponse.status!=='fulfilled')throw quoteResponse.reason;
 const res=quoteResponse.value,d=await res.json();if(!res.ok)throw Error('Kalshi HTTP '+res.status+' '+(d.error||''));if(!Array.isArray(d.results))throw Error('Invalid market payload');
 let signals=[],signalError='signal service unavailable',trainingInfo=null;
 if(signalResponse.status==='fulfilled'){const sr=signalResponse.value;if(sr.ok){const payload=await sr.json();trainingInfo=payload;const age=Date.now()-Date.parse(payload.fetched_at);if(Array.isArray(payload.results)&&Number.isFinite(age)&&age>=-15000&&age<45000)signals=payload.results;else signalError='stale signal service'}else signalError='signal HTTP '+sr.status}else signalError=String(signalResponse.reason?.message||signalResponse.reason);
+// Track observed changes, not retroactively invented BUY calls.
+const feedKey='banktrades:verified-alert-feed-v1';
+let feed=[];try{feed=JSON.parse(localStorage.getItem(feedKey)||'[]');if(!Array.isArray(feed))feed=[]}catch{feed=[]}
+let previous={};try{previous=JSON.parse(sessionStorage.getItem('banktrades:previous-round-calls-v1')||'{}')}catch{}
+const nextPrevious={};
+const addFeed=(asset,type,detail)=>{feed.unshift({at:Date.now(),asset,type,detail});feed=feed.slice(0,60)};
 tbody.replaceChildren();let open=0;
 for(const item of d.results){
 const m=item.market,up=cents(m,'yes_ask'),down=cents(m,'no_ask'),sig=signals.find(s=>s.asset===item.asset),ticker=m?.ticker;
@@ -465,6 +471,15 @@ const round=sig?.roundCall,hasRound=verified&&round?.direction&&round?.ticker===
 const prediction=hasRound?(round.direction==='UP'?'▲ UP FORECAST':'▼ DOWN FORECAST'):'NO ROUND CALL';
 const qualified=verified&&['BUY UP','BUY DOWN'].includes(sig.action);
 const reason=verified?String(sig.reason||'No qualified entry').slice(0,105):String(sig?.reason||signalError).slice(0,90);
+if(verified&&ticker){
+ const old=previous[item.asset],current={ticker,direction:hasRound?round.direction:null,action:sig.action};
+ nextPrevious[item.asset]=current;
+ if(old?.ticker===ticker){
+  if(hasRound&&old.direction&&old.direction!==round.direction)addFeed(item.asset,'FLIP WATCH',old.direction+' → '+round.direction+' · forecast changed; not a confirmed trade');
+  if(qualified&&old.action!==sig.action)addFeed(item.asset,sig.action,'Qualified entry · '+(sig.reason||'').slice(0,70));
+  if(old.action?.startsWith('BUY')&&sig.action==='WAIT')addFeed(item.asset,'ENTRY PAUSED','Previous entry no longer qualified · review position independently');
+ }else if(qualified)addFeed(item.asset,sig.action,'Qualified entry observed for '+ticker);
+}
 const expiryCandidates=['expires_at','close_time','expected_expiration_time','expiration_time'].map(k=>Date.parse(m?.[k]||'')).filter(t=>Number.isFinite(t)&&t>Date.now());
 const expiryTime=expiryCandidates.length?Math.min(...expiryCandidates):NaN;
 const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.floor((expiryTime-Date.now())/60000))+'m '+String(Math.floor(Math.max(0,expiryTime-Date.now())/1000)%60).padStart(2,'0')+'s':'Time unavailable';
@@ -494,6 +509,13 @@ const timeCell=document.createElement('td');timeCell.textContent=remaining;timeC
 tbody.append(tr);if(m)open++;
 }
 previousFallback=true;
+try{sessionStorage.setItem('banktrades:previous-round-calls-v1',JSON.stringify(nextPrevious));localStorage.setItem(feedKey,JSON.stringify(feed))}catch{}
+let feedPanel=document.getElementById('btVerifiedAlertFeed');
+if(!feedPanel){feedPanel=document.createElement('section');feedPanel.id='btVerifiedAlertFeed';feedPanel.style.cssText='margin:12px 0;padding:12px;border:1px solid #334155;border-radius:12px;background:#101e30;color:#e2e8f0';strip.insertAdjacentElement('afterend',feedPanel);}
+feedPanel.replaceChildren();
+const feedTitle=document.createElement('strong');feedTitle.textContent='⚡ LIVE CALL & FLIP HISTORY · '+feed.length+' events';feedPanel.append(feedTitle);
+const note=document.createElement('div');note.style.cssText='font-size:11px;opacity:.75;margin:5px 0';note.textContent='Only observed signal changes are recorded. EARLY forecasts are not qualified BUY entries. Alerts are visible while this page is open.';feedPanel.append(note);
+for(const event of feed.slice(0,12)){const line=document.createElement('div');line.style.cssText='padding:7px 0;border-top:1px solid #334155;font-size:12px';line.textContent=new Date(event.at).toLocaleTimeString()+' · '+event.asset+' · '+event.type+' · '+event.detail;feedPanel.append(line)}
 strip.textContent=open+' Kalshi contracts received · '+(signals.length?'Primal response received':'Primal '+signalError);
 badge.textContent=signals.length?'● FALLBACK LIVE DATA':'● QUOTES ONLY · PRIMAL UNAVAILABLE';
 let trainingLine=document.getElementById('btTrainingHealth');
