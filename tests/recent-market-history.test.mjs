@@ -45,3 +45,28 @@ test('recovery count excludes rolling rows discarded by output limit',()=>{
   assert.deepEqual(result.records,[newest]);
   assert.equal(result.recoveredFromRolling,0);
 });
+
+test('conflicting archive quotes for one minute are quarantined regardless of order',()=>{
+  const a=row(now-60_000,'KXBTC15M-A',{yesBid:.48,yesAsk:.52});
+  const conflict={...a,yesBid:.46}; // Same midpoint, different executable quote.
+  const good=row(now-30_000,'KXBTC15M-B');
+  for (const copies of [[a,conflict],[conflict,a]]) {
+    const result=mergeRecentMarketHistory([...copies,good],[a],asset,cutoff,now);
+    assert.deepEqual(result.records,[good]);
+    assert.equal(result.conflictingSampleCount,1);
+    assert.equal(result.recoveredFromRolling,0);
+  }
+});
+
+test('conflicting rolling-cache copies are quarantined, identical copies are deduplicated',()=>{
+  const a=row(now-60_000,'KXBTC15M-A',{yesBid:.48});
+  const conflict={...a,yesBid:.47};
+  const bad=mergeRecentMarketHistory([],[a,conflict],asset,cutoff,now);
+  assert.deepEqual(bad.records,[]);
+  assert.equal(bad.conflictingSampleCount,1);
+  assert.equal(bad.recoveredFromRolling,0);
+  const clean=mergeRecentMarketHistory([],[a,{...a}],asset,cutoff,now);
+  assert.deepEqual(clean.records,[a]);
+  assert.equal(clean.conflictingSampleCount,0);
+  assert.equal(clean.recoveredFromRolling,1);
+});
