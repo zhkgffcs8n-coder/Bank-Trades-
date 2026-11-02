@@ -95,3 +95,26 @@ test('quarantines different frozen entry prices but accepts exact duplicate reco
  assert.equal(duplicate.matchedOfficialMarkets,1);
  assert.equal(duplicate.sufficientMatchedMarkets,true);
 });
+
+test('unverified or malformed duplicate cannot hide behind a verified market',()=>{
+ const clean=Array.from({length:100},(_,i)=>row(i));
+ assert.equal(costAwarePairedAudit(clean,{minimum:100}).sufficientMatchedMarkets,true);
+ const verified=row(100);
+ for(const duplicate of [
+  {...verified,outcomeVerification:null},
+  {...verified,outcome:'no',outcomeVerification:null},
+  {...verified,engines:{...verified.engines,original:{...verified.engines.original,ask:NaN}}},
+  {...verified,status:'PENDING'}
+ ]){
+  for(const records of [[...clean,verified,duplicate],[duplicate,verified,...clean]]){
+   const report=costAwarePairedAudit(records,{minimum:100});
+   assert.equal(report.matchedOfficialMarkets,100);
+   assert.equal(report.conflictingMarketCount,1);
+   assert.equal(report.sufficientMatchedMarkets,false);
+   assert.equal(report.automaticPromotionAllowed,false);
+  }
+ }
+ const singleInvalid=costAwarePairedAudit([{...row(999),outcomeVerification:null}],{minimum:1});
+ assert.equal(singleInvalid.matchedOfficialMarkets,0);
+ assert.equal(singleInvalid.conflictingMarketCount,0);
+});
