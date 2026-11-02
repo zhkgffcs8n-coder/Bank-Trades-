@@ -1,6 +1,7 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
+import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2',db=()=>getStore({name:'bank-trades-server-kaibot',consistency:'strong'}),hist=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
@@ -85,16 +86,13 @@ export default async()=>{
   try{
    if(exitQuotes[index].error)throw exitQuotes[index].error;
    const m=exitQuotes[index].market;
-   if(!m||!['open','active'].includes(String(m.status||'').toLowerCase()))continue;
-   const bid=q(m,t.side==='up'?'yes_bid':'no_bid'),ask=q(m,t.side==='up'?'yes_ask':'no_ask');
-   if(!Number.isFinite(bid)||!Number.isFinite(ask)||bid<=0||bid>ask||ask-bid>5)continue;
-   const roi=(bid-Number(t.ask))/Number(t.ask);
+   const exitQuote=assessPaperExitQuote(t,m,now);
+   if(!exitQuote.eligible)continue;
+   const {bid,secondsLeft,roi}=exitQuote;
    // Track the best observed sellable bid for a conservative paper trailing exit.
    // Observations are only as frequent as the scheduled runner, not tick-by-tick.
    t.peakObservedBid=Math.max(Number.isFinite(Number(t.peakObservedBid))?Number(t.peakObservedBid):0,bid);
    const trailingDrawdown=t.peakObservedBid>0?(bid-t.peakObservedBid)/t.peakObservedBid:0;
-   const expiry=Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'');
-   const secondsLeft=(expiry-now)/1000;
    // Paper-only adaptive trailing: protect modest observed gains, allow stronger moves more room.
    const peakGain=(t.peakObservedBid-Number(t.ask))/Number(t.ask);
    const trail=peakGain>=.30?.10:peakGain>=.15?.07:peakGain>=.05?.035:null;
