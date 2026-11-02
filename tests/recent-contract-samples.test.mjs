@@ -11,11 +11,30 @@ test('shadow comparison selects only current same-contract snapshots',()=>{
   const got=recentContractSamples(rows,'NEW',now);
   assert.deepEqual(got.map(r=>r.t),[now-180000,now-120000,now-60000]);
 });
-test('rejects invalid quotes and duplicate minute buckets',()=>{
+test('contradictory duplicate minute prices quarantine the entire shadow history',()=>{
   const rows=[rec('NEW',now-60000,.6,now-55000),rec('NEW',now-60000,.65,now-54000),
-    rec('NEW',now-120000,NaN),rec('NEW',now-180000,1.2),rec('NEW',now-240000,-.1)];
+    rec('NEW',now-120000,.5),rec('NEW',now-180000,.4),rec('NEW',now-240000,.3)];
+  assert.deepEqual(recentContractSamples(rows,'NEW',now),[]);
+  assert.deepEqual(recentContractSamples([...rows].reverse(),'NEW',now),[]);
+});
+test('identical duplicate minute evidence is deduplicated without replacing first observation',()=>{
+  const first=rec('NEW',now-60000,.6,now-55000);
+  const repeated={...first,observedAt:now-54000};
+  const got=recentContractSamples([first,repeated,rec('NEW',now-120000,.5)],'NEW',now);
+  assert.equal(got.length,2);
+  assert.equal(got.at(-1),first);
+});
+test('same midpoint but conflicting executable quotes must not silently enter exit research',()=>{
+  const first={...rec('NEW',now-60000,.6),yesBid:.58,yesAsk:.62,noBid:.38,noAsk:.42};
+  const conflicting={...first,yesBid:.57};
+  assert.deepEqual(recentContractSamples([first,conflicting],'NEW',now),[]);
+  assert.deepEqual(recentContractSamples([conflicting,first],'NEW',now),[]);
+});
+test('invalid, stale, and other-contract quotes are excluded',()=>{
+  const rows=[rec('NEW',now-60000,.6),rec('NEW',now-120000,NaN),
+    rec('NEW',now-180000,1.2),rec('NEW',now-240000,-.1),
+    rec('OLD',now-60000,.8),rec('NEW',now-600000,.9)];
   assert.equal(recentContractSamples(rows,'NEW',now).length,1);
-  assert.equal(recentContractSamples(rows,'NEW',now)[0].yesMid,.65);
   assert.deepEqual(recentContractSamples(null,'NEW',now),[]);
 });
 test('bounded sorted history avoids selecting stale first blob-list page',()=>{
