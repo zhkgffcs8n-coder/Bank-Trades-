@@ -57,3 +57,25 @@ test('conflicting market provenance blocks eligibility even with 100 other good 
  assert.equal(reversed.eligible,false);
  assert.equal(reversed.conflictingMarketCount,1);
 });
+
+test('unverified or malformed duplicate provenance blocks a strong paired Brier result in either archive order',()=>{
+ const records=Array.from({length:100},(_,i)=>row(i));
+ const invalidCopies=[
+  {...row(99),outcomeVerification:null},
+  {...row(99),recordedAt:150},
+  {...row(99),settledAt:149},
+  {...row(99),candidate:NaN},
+  {...row(99),outcome:2},
+ ];
+ for(const invalid of invalidCopies){
+  for(const rows of [[...records,invalid],[invalid,...records]]){
+   const result=pairedScoreAudit(rows,complete);
+   assert.equal(result.count,99);
+   assert.equal(result.conflictingMarketCount,1);
+   assert.equal(result.eligible,false);
+   assert.match(result.reason,/Conflicting duplicate contracts/);
+  }
+ }
+ // Invalid records alone are never paired evidence, even when repeated.
+ assert.equal(pairedScoreAudit([invalidCopies[0],invalidCopies[0]],complete).count,0);
+});
