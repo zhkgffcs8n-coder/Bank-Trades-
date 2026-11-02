@@ -2,6 +2,20 @@ import {SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
 export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
+
+// A repeated paper trade ID is ambiguous cash evidence even when its copies
+// are identical. Quarantine ALL open copies before simulated payouts/exits;
+// reporting deduplication alone does not prevent the ledger paying twice.
+export function duplicatePaperTradeIds(trades){
+ const seen=new Set(),duplicates=new Set();
+ for(const t of Array.isArray(trades)?trades:[]){
+  if(typeof t?.id!=='string'||!t.id.trim())continue;
+  const id=t.id.trim();
+  if(seen.has(id))duplicates.add(id);
+  else seen.add(id);
+ }
+ return duplicates;
+}
  // A corrupt OPEN record must not generate a fabricated official settlement or cash payout.
 export function validOpenPaperPosition(t){
  if(!t||t.status!=='OPEN'||typeof t.ticker!=='string'||!t.ticker.trim()||
