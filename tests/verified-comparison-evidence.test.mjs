@@ -41,3 +41,24 @@ test('accepts verified candidate fills and excludes conflicting duplicate ticker
  }
  assert.equal(verifiedComparisonEvidence([base,{...base,resolvedAt:300}]).rows.length,1);
 });
+
+test('unverified and malformed duplicate tickers quarantine gross lessons and reports',()=>{
+ const good=market('duplicate'),other=market('independent');
+ for(const duplicate of [
+  {...good,outcomeVerification:null},
+  {...good,outcome:'no',outcomeVerification:null},
+  {...good,engines:{...good.engines,original:{...good.engines.original,pnl:2}}},
+  {...good,status:'PENDING'}
+ ]){
+  for(const records of [[good,duplicate,other],[duplicate,other,good]]){
+   const result=verifiedComparisonEvidence(records);
+   assert.deepEqual(result.rows.map(r=>r.ticker),['independent']);
+   assert.equal(result.conflictingMarketCount,1);
+   assert.equal(result.rejected,1);
+  }
+ }
+ const invalidOnly=verifiedComparisonEvidence([{...market('bad'),outcomeVerification:null}]);
+ assert.equal(invalidOnly.rows.length,0);
+ assert.equal(invalidOnly.conflictingMarketCount,0);
+ assert.equal(invalidOnly.rejected,1);
+});
