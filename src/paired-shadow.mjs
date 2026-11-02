@@ -48,7 +48,7 @@ export function engineBTrend(m,records,now){
 // validated model. Never return this adapter to a trading or paper-order path.
 // Reuse the exact current quote, freshness and momentum filters from paperSignal
 // instead of reimplementing those filters or inventing an executable fill.
-function originalMomentumShadow(m,records,now){
+export function originalMomentumShadow(m,records,now){
  const observed=paperSignal(m,records,null,now,null);
  if(observed.action!=='WAIT'||observed.validation!=='MODEL_NOT_VALIDATED')return observed;
  const evidence=observed.entryResearch;
