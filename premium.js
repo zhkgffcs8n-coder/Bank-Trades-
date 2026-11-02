@@ -534,7 +534,7 @@ async function update(){
  $('premiumHealth').textContent='● '+open+' VERIFIED FEEDS';$('premiumHealth').className='pill green';
  if(!engineSignals.length)$('premiumAI').textContent='Quotes refreshed '+new Date().toLocaleTimeString()+' · Waiting for signal evaluation.';
  failures=0;rememberEntryCalls(engineSignals);syncSignals();chart();const header=document.getElementById('health');if(header){header.textContent='● '+open+' MARKET QUOTES LOADED';header.className='pill green';}
- }catch(e){failures++;$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message}
+ }catch(e){failures++;$('premiumHealth').textContent='● FEED UNAVAILABLE';$('premiumHealth').className='pill red';$('premiumAI').textContent='No signal: '+e.message;const tbody=$('premiumRows');if(tbody){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Kalshi market request failed: '+String(e.message||e)+' · retrying';tr.append(td);tbody.replaceChildren(tr)}const strip=$('premiumStrip');if(strip)strip.textContent='Kalshi feed unavailable: '+String(e.message||e)}
  finally{fetching=false}
 }
 let signalFetchBusy=false,signalLastFetch=0;
