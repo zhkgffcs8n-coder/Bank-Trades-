@@ -263,7 +263,7 @@ function render(){
 }
 async function refresh(){
  if(busy)return;busy=true;$('health').textContent='● UPDATING';
- try{const [d]=await Promise.all([api('/api/data?mode=markets'),loadSharedSignals()]);if(!Array.isArray(d.results))throw Error('Invalid feed response');
+ try{const d=await api('/api/data?mode=markets');if(!Array.isArray(d.results))throw Error('Invalid feed response');
  const sourceTime=Date.parse(d.fetched_at);if(!Number.isFinite(sourceTime)||sourceTime>Date.now()+10000||Date.now()-sourceTime>60000)throw Error('Stale or invalid source timestamp');
  rows=d.results;fetched=sourceTime;window.dispatchEvent(new CustomEvent('banktrades:quotes',{detail:{rows,fetched}}));
  $('count').textContent=rows.filter(x=>x.market).length+'/8';$('updated').textContent=new Date(fetched).toLocaleTimeString();
@@ -301,7 +301,7 @@ $('kalshiBtn').onclick=()=>{const m=current()?.market;if(m)window.open('https://
 window.addEventListener('resize',draw);
 window.addEventListener('banktrades:select',event=>{if(!assets.includes(event.detail))return;selected=event.detail;render();if(voice)$('voice').textContent='🔊 VOICE ON · '+selected});
 setInterval(()=>{show();if(auto&&!document.hidden&&Date.now()-fetched>=12000)refresh()},1000);
-preloadHistory().finally(refresh);
+refresh();preloadHistory().catch(()=>{});
 })();
 </script><script>
 (()=>{'use strict';
