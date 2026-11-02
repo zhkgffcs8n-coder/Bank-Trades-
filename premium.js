@@ -509,7 +509,7 @@ async function update(){
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
  const unavailable=d.results.filter(x=>x.available===false);if(unavailable.length===d.results.length)throw Error('All Kalshi upstream requests failed: '+unavailable.slice(0,2).map(x=>x.error||'unknown').join('; '));
  latestPositionQuotes=d.results;latestPositionQuoteAt=Date.parse(d.fetched_at);
- monitorPaperExits(d.results,age);
+ try { monitorPaperExits(d.results,age); } catch (error) { console.warn('Paper monitoring error',error); }
  $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
  let open=0;
  for(const asset of assets){
