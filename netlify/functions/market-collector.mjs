@@ -3,7 +3,7 @@ import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
-import {pendingTrainingReview,frozenTrainingTargets} from '../../src/training-provenance.mjs';
+import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
 import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
@@ -169,10 +169,10 @@ export default async()=>{
     // The historical ledger does not prove whether its gradient was already applied.
     // Quarantine for reconciliation rather than replaying an unsafe duplicate update.
     const learnedMarker=await db.get('training/learned/v1/'+rec.ticker,{type:'json'});
-    if(learnedMarker?.result===trustedCached){
+    if(validCommittedTrainingMarker(learnedMarker,rec,trustedCached)){
      await db.delete('pending/'+rec.ticker);return;
     }
-    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,'CACHED_FINALIZED_OUTCOME',now));
+    await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,trustedCached,learnedMarker?'CONFLICTING_LEARNED_MARKER':'CACHED_FINALIZED_OUTCOME',now));
     collection.trainingReviewCount++;
     await db.delete('pending/'+rec.ticker);return;
    }
@@ -183,15 +183,25 @@ export default async()=>{
      await db.setJSON(labelKey,{ticker:rec.ticker,asset:rec.asset,result,settledAt:m.settlement_ts||null,labeledAt:now,source:'Kalshi finalized market record',verification:SETTLEMENT_VERIFICATION});
      // Existing legacy labels may already have trained weights. Never count them twice.
      const targets=frozenTrainingTargets(rec);
-     if(!cached&&(targets.global||targets.asset)){
+     const learnedMarker=await db.get('training/learned/v1/'+rec.ticker,{type:'json'});
+     const priorIntent=await db.get('training/intent/v1/'+rec.ticker,{type:'json'});
+     // A missing cached label is not proof this observation was never learned.
+     // Preserve valid committed evidence; quarantine contradictory or partial state.
+     if(validCommittedTrainingMarker(learnedMarker,rec,result)){
+      await db.delete('pending/'+rec.ticker);return;
+     }
+     if(!cached&&!learnedMarker&&!priorIntent&&(targets.global||targets.asset)){
+      const assetKey=String(rec.asset||'UNKNOWN');
+      const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
+      // Persist intent BEFORE any gradient write. This is an audit trail, not
+      // an atomic lock: overlapping schedules still require reconciliation.
+      await db.setJSON('training/intent/v1/'+rec.ticker,trainingWriteIntent(rec,result,targets,model,assetModel,now));
       // The global model must be scored against its OWN prediction frozen
       // before settlement, not the separate asset model's prediction.
       if(targets.global){
        model=learn(model,{...rec,prediction:rec.globalPrediction},result==='yes'?1:0);
        await db.setJSON('training/model',model);
       }
-      const assetKey=String(rec.asset||'UNKNOWN');
-      const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
       // Do not score an asset model using a global fallback forecast.
       // Only an asset-specific prediction frozen before settlement is valid.
       if(targets.asset){
@@ -206,7 +216,7 @@ export default async()=>{
       await db.setJSON('training/learned/v1/'+rec.ticker,{ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
 
      }else{
-      await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
+      await db.setJSON('training-review/v1/'+rec.ticker,pendingTrainingReview(rec,result,learnedMarker?'CONFLICTING_LEARNED_MARKER':priorIntent?'INTERRUPTED_TRAINING_INTENT':cached?'PREEXISTING_UNTRUSTED_LABEL':'INVALID_PREDICTION',now));
       collection.trainingReviewCount++;
      }
      await db.delete('pending/'+rec.ticker);
