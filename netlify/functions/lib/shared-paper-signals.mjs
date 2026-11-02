@@ -10,7 +10,7 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
   const side=String(position.side).toLowerCase(),bid=side==='up'?yb:side==='down'?nb:NaN,entry=Number(position.ask);
   if(!Number.isFinite(bid)||!Number.isFinite(entry)||entry<=0)return {...base,reason:'Position entry or exit bid unavailable'};
   const roi=(bid-entry)/entry;
-  return {...base,action:roi<=-.12?'SELL FAST':'HOLD',roi,reason:roi<=-.12?'Paper position crossed 12% stop threshold':'Paper position open; monitor bid and settlement'};
+  return {...base,action:roi<=-.12?'SELL FAST':roi>=.20?'CASH OUT':'HOLD',roi,exitBidCents:bid,entryAskCents:entry,reason:roi<=-.12?'Paper position executable bid is at least 12% below entry (fees and fill not included)':roi>=.20?'Paper position executable bid is at least 20% above entry; consider taking profit (fees and fill not included)':'Paper position open; monitor executable bid and settlement'};
  }
  if(left<180)return {...base,reason:'Late entry blocked: '+Math.max(0,Math.ceil(left))+'s remain; price movement on the chart is not evidence of an earlier executable entry',secondsRemaining:Math.max(0,Math.ceil(left))};
  const a=records.filter(r=>r?.ticker===m.ticker&&Number.isFinite(r.yesMid)&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000).sort((x,y)=>x.t-y.t).slice(-8);
