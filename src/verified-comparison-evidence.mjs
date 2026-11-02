@@ -36,10 +36,13 @@ export function verifiedComparisonEvidence(records) {
     if (typeof r?.ticker !== 'string' || !r.ticker) continue;
     // An invalid copy of a ticker can contradict an otherwise verified copy.
     // Keep it as conflict evidence, never as a usable resolved observation.
+    // The original score is used later to select and validate prospective
+    // paper gates. Conflicting scores for the same frozen contract must not
+    // let archive ordering determine which gate appears to perform better.
     const decision = x => x ? [x.action ?? null, x.side ?? null,
-      x.ask ?? null, x.resolved === true] : null;
+      x.ask ?? null, x.resolved === true, x.score ?? null] : null;
     const fingerprint = JSON.stringify([r.status, r.outcomeVerification ?? null,
-      r.at ?? null, r.expiresAt ?? null, r.outcome ?? null,
+      r.asset ?? null, r.at ?? null, r.expiresAt ?? null, r.outcome ?? null,
       decision(original), decision(upgraded)]);
     const previous = byTicker.get(r.ticker);
     if (previous && (previous.fingerprint !== fingerprint || previous.valid !== valid))
