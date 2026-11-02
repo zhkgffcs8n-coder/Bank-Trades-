@@ -1,6 +1,7 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
+import {validCollectorQuote} from '../../src/collector-quote.mjs';
 import {pairedShadow,resolvePairedShadow,originalMomentumShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../../src/training-provenance.mjs';
@@ -31,7 +32,7 @@ export default async()=>{
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
   const m=markets[0];if(!m){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:'No verified open contract'});return;}
   const yesBid=price(m,'yes_bid'),yesAsk=price(m,'yes_ask'),noBid=price(m,'no_bid'),noAsk=price(m,'no_ask');
-  if(![yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||yesAsk<yesBid||noAsk<noBid){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,ticker:m.ticker,valid:false,error:'Incomplete or crossed bid/ask quotes'});return;}
+  if(typeof m.ticker!=='string'||!m.ticker.trim()||!validCollectorQuote({yesBid,yesAsk,noBid,noAsk})){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,ticker:m.ticker||null,valid:false,error:'Missing contract ticker or invalid binary bid/ask quote'});return;}
   const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   // Include the contract ticker in the immutable sample key. Two contracts
   // observed in the same minute must not silently share one training sample.
