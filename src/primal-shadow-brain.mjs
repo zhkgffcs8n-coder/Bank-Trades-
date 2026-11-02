@@ -10,9 +10,9 @@ export function analyzeBrain(m,records=[],now=Date.now()){
  if(!Number.isFinite(secondsLeft)||secondsLeft<180||secondsLeft>930||spread>.04)return {...base,reason:'Outside time or spread limits',spread,secondsLeft};
  // Archive order must never decide which quote wins when two observations
  // disagree at the same contract timestamp. Quarantine the shadow decision.
- const eligible=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===m.ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1).sort((a,b)=>a.t-b.t);
+ const eligibleRecords=(Array.isArray(records)?records:[]).filter(r=>r?.ticker===m.ticker&&Number.isFinite(r.t)&&r.t<=now&&r.t>=now-480000&&Number.isFinite(r.yesMid)&&r.yesMid>=0&&r.yesMid<=1).sort((a,b)=>a.t-b.t);
  const byTimestamp=new Map();
- for(const r of eligible){
+ for(const r of eligibleRecords){
   const previous=byTimestamp.get(r.t);
   if(previous&&previous.yesMid!==r.yesMid)return {...base,reason:'Conflicting duplicate quote timestamps',samples:byTimestamp.size};
   byTimestamp.set(r.t,r);
