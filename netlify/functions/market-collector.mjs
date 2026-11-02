@@ -1,7 +1,7 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
-import {pairedShadow,resolvePairedShadow} from '../../src/paired-shadow.mjs';
+import {pairedShadow,resolvePairedShadow,originalMomentumShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
 import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
@@ -94,11 +94,14 @@ export default async()=>{
     // Use the same fresh contract snapshot as the live signal path. Blob list's
     // first 30 historical keys are not the latest 30 after the archive grows.
     const records=recentContractSamples(recent,m.ticker,now);
-    const candidate=paperSignal(m,records,null,now,null);
-    if(['BUY UP','BUY DOWN'].includes(candidate.action)){
+    // Research-only Original A remains measurable even while unvalidated
+    // live/paper BUY recommendations correctly stay paused. Do not route this
+    // shadow hypothesis to an order, position, or user-facing entry alert.
+    const candidate=originalMomentumShadow(m,records,now);
+    if(candidate.shadowOnly===true&&['BUY UP','BUY DOWN'].includes(candidate.action)){
      const a={action:candidate.action,side:candidate.side,ask:candidate.ask,score:candidate.score};
      const b=Number(candidate.score)>=75&&Number(candidate.ask)<=65?{...a}:{action:'WAIT',reason:'Upgraded conservative quality gate'};
-     await db.setJSON(comparisonKey,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,engines:{original:a,upgraded:b},status:'PENDING',version:1});
+     await db.setJSON(comparisonKey,{ticker:m.ticker,asset,at:now,expiresAt:m._expiry,engines:{original:a,upgraded:b},status:'PENDING',version:1,mode:'SHADOW_ONLY',authorized:false});
     }
    }
   }catch(e){researchFailure('comparison-snapshot',e,asset);console.warn('Shadow comparison collection failed',asset,String(e))}
