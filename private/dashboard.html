@@ -440,8 +440,38 @@ document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener
 </script><script defer src="/kaibot.js?v=12"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/premium.js?v=26"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=1"></script><script defer src="/btc-lock-radar.js?v=1"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=primal-race-20261101-2"></script><script defer src="/coinbase-direct.js?v=1"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
-let busy=false;async function recover(){if(busy||!tbody.textContent.includes('Loading verified markets'))return;busy=true;const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),14000);
-try{const res=await fetch('/api/data?mode=markets',{cache:'no-store',signal:ctl.signal});const d=await res.json();if(!res.ok)throw Error('HTTP '+res.status+' '+(d.error||''));if(!Array.isArray(d.results))throw Error('Invalid market payload');const open=d.results.filter(x=>x.market);if(!open.length)throw Error(d.results.map(x=>x.asset+': '+(x.error||'no active contract')).join(' | '));tbody.replaceChildren();for(const item of d.results){const tr=document.createElement('tr');for(const v of [item.asset,item.market?.yes_ask_dollars??'—',item.market?.no_ask_dollars??'—',item.market?'QUOTE LOADED · SIGNAL ENGINE UNAVAILABLE':'NO OPEN CONTRACT',item.market?.ticker||'—']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}tbody.append(tr)}strip.textContent=open.length+' Kalshi contract(s) returned · signal renderer needs attention';badge.textContent='● MARKET DATA FALLBACK';}catch(e){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Market diagnostics: '+String(e.message||e);tr.append(td);tbody.replaceChildren(tr);strip.textContent='Kalshi market connection failed';badge.textContent='● MARKET API ERROR';}finally{clearTimeout(timer);busy=false}}
-setTimeout(recover,6000);setInterval(recover,18000);
+let busy=false,previousFallback=false;
+const cents=(m,side)=>{const dollars=m?.[side+'_dollars'];if(dollars!=null&&Number.isFinite(Number(dollars)))return Number(dollars)*100;const raw=m?.[side];return raw!=null&&Number.isFinite(Number(raw))?Number(raw):null};
+async function recover(){
+if(busy||document.hidden)return;
+const primaryActive=[...tbody.querySelectorAll('tr')].some(tr=>tr.dataset.asset&&tr.children.length===5);
+if(primaryActive){previousFallback=false;return}
+if(!previousFallback&&!tbody.textContent.includes('Loading verified markets')&&!tbody.textContent.includes('QUOTE LOADED')&&!tbody.textContent.includes('Market diagnostics'))return;
+busy=true;const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),13500);
+try{
+const [quoteResponse,signalResponse]=await Promise.allSettled([
+fetch('/api/data?mode=markets',{cache:'no-store',signal:ctl.signal}),
+fetch('/.netlify/functions/shared-signals',{cache:'no-store',signal:ctl.signal})
+]);
+if(quoteResponse.status!=='fulfilled')throw quoteResponse.reason;
+const res=quoteResponse.value,d=await res.json();if(!res.ok)throw Error('Kalshi HTTP '+res.status+' '+(d.error||''));if(!Array.isArray(d.results))throw Error('Invalid market payload');
+let signals=[],signalError='signal service unavailable';
+if(signalResponse.status==='fulfilled'){const sr=signalResponse.value;if(sr.ok){const payload=await sr.json();const age=Date.now()-Date.parse(payload.fetched_at);if(Array.isArray(payload.results)&&Number.isFinite(age)&&age>=-15000&&age<45000)signals=payload.results;else signalError='stale signal service'}else signalError='signal HTTP '+sr.status}else signalError=String(signalResponse.reason?.message||signalResponse.reason);
+tbody.replaceChildren();let open=0;
+for(const item of d.results){
+const m=item.market,up=cents(m,'yes_ask'),down=cents(m,'no_ask'),sig=signals.find(s=>s.asset===item.asset),ticker=m?.ticker;
+const verified=!!(sig&&ticker&&sig.ticker===ticker&&['BUY UP','BUY DOWN','WAIT'].includes(sig.action));
+const status=verified?sig.action:m?'SIGNAL UNAVAILABLE':'NO ACTIVE CONTRACT';
+const tr=document.createElement('tr');tr.dataset.fallbackAsset=item.asset;
+for(const v of [item.asset,up==null?'—':up.toFixed(1)+'¢',down==null?'—':down.toFixed(1)+'¢',status,ticker||'—']){const td=document.createElement('td');td.textContent=String(v);tr.append(td)}
+tbody.append(tr);if(m)open++;
+}
+previousFallback=true;
+strip.textContent=open+' Kalshi contracts received · '+(signals.length?'Primal response received':'Primal '+signalError);
+badge.textContent=signals.length?'● FALLBACK LIVE DATA':'● QUOTES ONLY · PRIMAL UNAVAILABLE';
+const panel=document.getElementById('premiumAI');if(panel&&!signals.length)panel.textContent='Kalshi quotes connected; Primal signal endpoint: '+signalError+'. No verified BUY signals.';
+}catch(e){previousFallback=true;tbody.replaceChildren();const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=5;td.textContent='Market diagnostic: '+String(e.message||e);tr.append(td);tbody.append(tr);strip.textContent='Kalshi market request failed';badge.textContent='● MARKET API ERROR'}finally{clearTimeout(timer);busy=false}
+}
+setTimeout(recover,5000);setInterval(recover,12000);
 })();
 </script></body></html>
