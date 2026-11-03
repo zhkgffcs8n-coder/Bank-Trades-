@@ -62,3 +62,13 @@ test('paper exits reject coercible malformed quote representations',()=>{
  assert.equal(assessPaperExitQuote(position,{...market,yes_bid_dollars:0.60},now).eligible,true);
  assert.equal(assessPaperExitQuote(position,{...market,yes_bid_dollars:null,yes_bid:'60'},now).eligible,true);
 });
+
+test('paper exit rejects malformed entry ledger numeric fields',()=>{
+ for(const bad of ['', ' ', '0xA', '1e1', true, false, [], {}, null]){
+  for(const key of ['qty','ask','cost']){
+   assert.equal(assessPaperExitQuote({...position,[key]:bad},market,now).eligible,false,
+    'invalid '+key+': '+String(bad));
+  }
+ }
+ assert.equal(assessPaperExitQuote({...position,qty:'10',ask:'55',cost:'5.50'},market,now).eligible,true);
+});
