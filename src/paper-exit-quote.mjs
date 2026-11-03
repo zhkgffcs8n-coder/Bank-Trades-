@@ -1,7 +1,12 @@
 // Conservative eligibility check for scheduled PAPER-only early exits.
 // A market snapshot is not a guaranteed executable fill. Never simulate an
 // exit using a different contract, an expired market, or corrupt ledger data.
-const quoteCents=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
+// Reject coercible malformed quote fields (empty strings, booleans, hex, etc.).
+// A paper exit must not pay simulated cash from an untrustworthy market quote.
+const decimal=v=>typeof v==='number'&&Number.isFinite(v)?v:
+ typeof v==='string'&&/^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(v)?Number(v):NaN;
+const quoteCents=(m,k)=>m?.[k+'_dollars']!=null?decimal(m[k+'_dollars'])*100:
+ m?.[k]!=null?decimal(m[k]):NaN;
 const rejected=reason=>({eligible:false,reason});
 export function assessPaperExitQuote(position,market,now=Date.now()){
  if(!position||position.status!=='OPEN'||typeof position.ticker!=='string'||!position.ticker||
