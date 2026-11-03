@@ -7,7 +7,12 @@ export function verifiedFinalizedBinaryOutcome(market, ticker) {
       market.is_provisional === true) return null;
   const result = market.result;
   const raw = market.settlement_value_dollars;
-  if (!['yes', 'no'].includes(result) || raw == null || raw === '') return null;
+  // Number('  '), Number(false), and Number('0x0') all equal zero, but none
+  // is a trustworthy official binary payout. Accept only literal 0/1 amounts
+  // in Kalshi's ordinary decimal-dollar representation (or finite numbers).
+  if (!['yes', 'no'].includes(result) ||
+      !(typeof raw === 'number' ||
+        (typeof raw === 'string' && /^(?:0|1)(?:\\.0+)?$/.test(raw)))) return null;
   const payout = Number(raw);
   if (!Number.isFinite(payout) || payout !== (result === 'yes' ? 1 : 0)) return null;
   return result;
