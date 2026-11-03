@@ -51,3 +51,14 @@ test('scheduled KaiBot paper exits are guarded by the conservative quote validat
  assert.match(source,/assessPaperExitQuote\(t,m,now\)/);
  assert.match(source,/if\(!exitQuote\.eligible\)continue/);
 });
+
+test('paper exits reject coercible malformed quote representations',()=>{
+ for(const bad of ['', ' ', '0x0', '0x3c', '6e-1', '0.60 ', true, false, [], {}]){
+  assert.equal(assessPaperExitQuote(position,{...market,yes_bid_dollars:bad},now).eligible,false,
+   'invalid bid: '+String(bad));
+  assert.equal(assessPaperExitQuote(position,{...market,yes_ask_dollars:bad},now).eligible,false,
+   'invalid ask: '+String(bad));
+ }
+ assert.equal(assessPaperExitQuote(position,{...market,yes_bid_dollars:0.60},now).eligible,true);
+ assert.equal(assessPaperExitQuote(position,{...market,yes_bid_dollars:null,yes_bid:'60'},now).eligible,true);
+});
