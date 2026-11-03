@@ -1,7 +1,7 @@
 import {SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
-export const hasRecordedNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
+export const hasRecordedNumber=v=>typeof v==='number'?Number.isFinite(v):typeof v==='string'&&v.trim()!==''&&/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(v.trim())&&Number.isFinite(Number(v));
 
 // A repeated paper trade ID is ambiguous cash evidence even when its copies
 // are identical. Quarantine ALL open copies before simulated payouts/exits;
