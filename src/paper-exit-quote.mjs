@@ -4,7 +4,7 @@
 // Reject coercible malformed quote fields (empty strings, booleans, hex, etc.).
 // A paper exit must not pay simulated cash from an untrustworthy market quote.
 const decimal=v=>typeof v==='number'&&Number.isFinite(v)?v:
- typeof v==='string'&&/^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(v)?Number(v):NaN;
+ typeof v==='string'&&/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(v)?Number(v):NaN;
 const quoteCents=(m,k)=>m?.[k+'_dollars']!=null?decimal(m[k+'_dollars'])*100:
  m?.[k]!=null?decimal(m[k]):NaN;
 const rejected=reason=>({eligible:false,reason});
