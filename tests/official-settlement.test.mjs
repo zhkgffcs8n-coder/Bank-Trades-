@@ -15,7 +15,7 @@ test('rejects provisional, non-final, nonbinary, missing or inconsistent payouts
 });
 test('rejects coercible malformed payout fields instead of fabricating NO or YES settlements',()=>{
   // These all coerce to 0 or 1 in JavaScript but are not valid API payout data.
-  for (const payout of [' ', '\\t', ' 0.0000 ', '0x0', '0e0', '1e0', false, true, [], [0], {}, '0.0001']) {
+  for (const payout of [' ', '\t', ' 0.0000 ', '0x0', '0e0', '1e0', false, true, [], [0], {}, '0.0001']) {
     assert.equal(verifiedFinalizedBinaryOutcome({...market,settlement_value_dollars:payout},market.ticker),null,JSON.stringify(payout));
   }
   assert.equal(verifiedFinalizedBinaryOutcome({...market,settlement_value_dollars:0},market.ticker),'no');
