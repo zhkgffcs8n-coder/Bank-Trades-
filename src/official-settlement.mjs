@@ -12,7 +12,7 @@ export function verifiedFinalizedBinaryOutcome(market, ticker) {
   // in Kalshi's ordinary decimal-dollar representation (or finite numbers).
   if (!['yes', 'no'].includes(result) ||
       !(typeof raw === 'number' ||
-        (typeof raw === 'string' && /^(?:0|1)(?:\\.0+)?$/.test(raw)))) return null;
+        (typeof raw === 'string' && /^(?:0|1)(?:\.0+)?$/.test(raw)))) return null;
   const payout = Number(raw);
   if (!Number.isFinite(payout) || payout !== (result === 'yes' ? 1 : 0)) return null;
   return result;
