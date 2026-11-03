@@ -13,6 +13,16 @@ test('rejects provisional, non-final, nonbinary, missing or inconsistent payouts
     assert.equal(verifiedFinalizedBinaryOutcome({...market,...patch},market.ticker),null,JSON.stringify(patch));
   }
 });
+test('rejects coercible malformed payout fields instead of fabricating NO or YES settlements',()=>{
+  // These all coerce to 0 or 1 in JavaScript but are not valid API payout data.
+  for (const payout of [' ', '\\t', ' 0.0000 ', '0x0', '0e0', '1e0', false, true, [], [0], {}, '0.0001']) {
+    assert.equal(verifiedFinalizedBinaryOutcome({...market,settlement_value_dollars:payout},market.ticker),null,JSON.stringify(payout));
+  }
+  assert.equal(verifiedFinalizedBinaryOutcome({...market,settlement_value_dollars:0},market.ticker),'no');
+  assert.equal(verifiedFinalizedBinaryOutcome({...market,result:'yes',settlement_value_dollars:1},market.ticker),'yes');
+  assert.equal(verifiedFinalizedBinaryOutcome({...market,result:'yes',settlement_value_dollars:'1.0000'},market.ticker),'yes');
+});
+
 test('legacy unverified stored outcomes cannot authorize a paper settlement',()=>{
   assert.equal(trustedStoredFinalizedOutcome({ticker:market.ticker,result:'no',source:'Kalshi official finalized market'},market.ticker),null);
   assert.equal(trustedStoredFinalizedOutcome({ticker:market.ticker,result:'no',verification:SETTLEMENT_VERIFICATION},market.ticker),'no');
