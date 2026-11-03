@@ -12,7 +12,7 @@ export function assessPaperExitQuote(position,market,now=Date.now()){
  if(!position||position.status!=='OPEN'||typeof position.ticker!=='string'||!position.ticker||
     !market||market.ticker!==position.ticker)return rejected('Missing or mismatched open contract');
  if(!['up','down'].includes(position.side))return rejected('Invalid paper position side');
- const qty=Number(position.qty),entryAsk=Number(position.ask),cost=Number(position.cost);
+ const qty=decimal(position.qty),entryAsk=decimal(position.ask),cost=decimal(position.cost);
  if(!Number.isSafeInteger(qty)||qty<1||!Number.isFinite(entryAsk)||entryAsk<=0||entryAsk>=100||
     !Number.isFinite(cost)||cost<=0||Math.abs(cost-Math.round(qty*entryAsk)/100)>.031)
   return rejected('Unreconciled paper entry');
