@@ -242,3 +242,19 @@ test('simulated early-exit wins remain in diagnostics but never unlock an offici
  assert.equal(mixed.gateByStrategy.BTC_up.netPnl,10);
  assert.equal(gatePaperEntry(signal,mixed).validation,'PAPER COHORT PASSED');
 });
+
+test('paper accounting rejects boolean, hex, and nondecimal numeric coercions',async()=>{
+ const {hasRecordedNumber,validOpenPaperPosition,reconciledPaperTrade}=await import('../netlify/functions/lib/paper-performance.mjs');
+ for(const bad of [true,false,'0x10','0b10','0o10','1e2','Infinity','NaN',[],[1],{},'1_000']){
+  assert.equal(hasRecordedNumber(bad),false,JSON.stringify(bad));
+ }
+ for(const good of [0,-1,1.5,'0',' 1.50 ','+.5','-0.5'])assert.equal(hasRecordedNumber(good),true);
+ const open={id:'open-1',ticker:'KXBTC15M-TEST',side:'up',status:'OPEN',qty:2,ask:50,cost:1};
+ const settled={...open,status:'SETTLED',marketResult:'yes',settlement:'WIN',pnl:1,outcomeVerification:SETTLEMENT_VERIFICATION};
+ assert.equal(validOpenPaperPosition(open),true);
+ assert.equal(reconciledPaperTrade(settled),true);
+ for(const value of [true,'0x2','2e0']){
+  assert.equal(validOpenPaperPosition({...open,qty:value}),false);
+  assert.equal(reconciledPaperTrade({...settled,qty:value}),false);
+ }
+});
