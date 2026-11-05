@@ -21,6 +21,8 @@ export function paperExit({position,quote,feesDollars,slippageDollars=0,nowMs}={
  const reasons=[];
  if(position?.status!=='OPEN'||!Number.isSafeInteger(position?.quantity)||position.quantity<=0)reasons.push('No valid open paper position');
  if(quote?.ticker!==position?.ticker)reasons.push('Ticker mismatch');
+ if(!good(position?.entryCostDollars)||position.entryCostDollars<=0)reasons.push('Invalid entry cost');
+ if(!['UP','DOWN'].includes(position?.side))reasons.push('Invalid position side');
  const bid=position?.side==='UP'?quote?.yesBidDollars:position?.side==='DOWN'?quote?.noBidDollars:NaN;
  if(!good(bid)||bid<=0||bid>=1)reasons.push('No executable side-specific bid');
  if(!Number.isSafeInteger(nowMs)||!Number.isSafeInteger(quote?.asOfMs)||quote.asOfMs>nowMs||nowMs-quote.asOfMs>3000)reasons.push('Stale bid');
