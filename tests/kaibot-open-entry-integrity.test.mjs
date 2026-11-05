@@ -22,7 +22,9 @@ test('scheduled KaiBot quarantines invalid OPEN positions before paying and audi
  const payout=source.indexOf('ledger.cash=Math.round((ledger.cash+payout)*100)/100;',guard);
  assert.ok(guard>0&&lookup>guard&&payout>lookup);
  assert.match(source,/invalidOpenPaperPositionCount:ledger\.trades\.filter\(t=>t\.status==='OPEN'&&!validOpenPaperPosition\(t\)\)\.length/);
- assert.match(source,/const entryPaused=true/);
+ assert.match(source,/const entryPaused=stats\?\.gateRecent50/);
+ assert.match(source,/if\(entryPaused\)/);
+ assert.match(source,/gatePaperEntry\(/);
 });
 
 test('duplicate paper trade IDs quarantine every copy, including identical open rows',()=>{
@@ -46,7 +48,9 @@ test('KaiBot blocks duplicate open IDs from both official payouts and early-exit
  assert.ok(dup>0&&guard>dup&&payout>guard&&exits>payout&&proceeds>exits);
  assert.match(source,/duplicatePaperTradeIdCount:duplicateIds\.size/);
  assert.match(source,/duplicateOpenPaperPositionCount:ledger\.trades\.filter\(t=>t\.status==='OPEN'&&hasDuplicateId\(t\)\)\.length/);
- assert.match(source,/const entryPaused=true/);
+ assert.match(source,/const entryPaused=stats\?\.gateRecent50/);
+ assert.match(source,/if\(entryPaused\)/);
+ assert.match(source,/gatePaperEntry\(/);
 });
 
 
