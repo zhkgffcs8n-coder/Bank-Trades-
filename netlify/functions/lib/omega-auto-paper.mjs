@@ -1,6 +1,6 @@
 // Automatic paper-only position monitoring for OMEGA. Never sends Kalshi orders.
 // Requires fresh independently fetched side-specific Kalshi bid/ask quotes.
-import {advanceOmegaPaper} from '../../src/omega-paper-coordinator.mjs';
+import {advanceOmegaPaper} from '../../../src/omega-paper-coordinator.mjs';
 export function omegaPaperSignal(research){
  const edge=research?.fusion?.modelMinusMarket;
  const mean=research?.fusion?.modelMean;
