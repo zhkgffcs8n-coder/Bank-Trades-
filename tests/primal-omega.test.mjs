@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {omegaForecast,omegaPaperExit,OMEGA_PROFILES} from '../src/primal-omega.mjs';
+test('all profiles are capped at five dollars in shadow research',()=>{for(const p of Object.values(OMEGA_PROFILES))assert.equal(p.maxStakeDollars,5)});
+const snapshot={features:[2,1,0.3,0.5],ask:.55,spread:1,yesBid:.54,yesAsk:.55,noBid:.44,noAsk:.45,quoteTimestampMs:1000,nowMs:1200};
+test('valid candidate never authorizes live orders',()=>{const r=omegaForecast(snapshot,'bold');assert.equal(r.ordersAuthorized,false);assert.equal(r.status,'SHADOW_CANDIDATE')});
+test('stale quotes are blocked',()=>assert.match(omegaForecast({...snapshot,nowMs:9000},'bold').reasons.join(' '),/stale/));
+test('one-sided markets are blocked',()=>assert.match(omegaForecast({...snapshot,noBid:0},'bold').reasons.join(' '),/two-sided/));
+const pos={status:'OPEN',ticker:'BTC',quantity:10,entryCostDollars:5};
+const q={ticker:'BTC',bidDollars:.8,asOfMs:1000,nowMs:1200};
+test('profit exits use bid, fees and slippage',()=>{const r=omegaPaperExit(pos,q,{feesDollars:.2,slippageDollars:.1,takeProfitDollars:2});assert.equal(r.action,'PAPER_TAKE_PROFIT');assert.equal(r.estimatedNetDollars,2.7);assert.equal(r.ordersAuthorized,false)});
+test('loss exit is research only',()=>assert.equal(omegaPaperExit(pos,{...q,bidDollars:.2},{feesDollars:.1,slippageDollars:.1,stopLossDollars:2}).action,'PAPER_EXIT_LOSS'));
+test('missing fees prevent fake profits',()=>assert.equal(omegaPaperExit(pos,q,{takeProfitDollars:2}).status,'BLOCKED'));
