@@ -12,3 +12,5 @@ test('stale or incomplete collection cannot be called healthy',()=>{
  assert.equal(omegaLiveHealth({...heartbeat,sampledAssets:['BTC']},now).status,'NOT_VERIFIED');
  assert.equal(omegaLiveHealth(null,now).status,'NOT_VERIFIED');
 });
+
+test('collector numeric timestamp',()=>{assert.equal(omegaLiveHealth({...heartbeat,completedAt:now-60000},now).status,'COLLECTOR_FRESH');});
