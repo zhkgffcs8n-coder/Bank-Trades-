@@ -21,6 +21,23 @@ export function selectOmegaObservation({latest,nowMs,asset}){
 export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch}={}){
  const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
  const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider).slice(0,2);
+ // Monitor already-open paper positions independently of provider availability and asset rotation.
+ // Only active contracts with independently fetched executable quotes can be exited.
+ const paperMonitoring={open:0,exits:0,holds:0,unpriced:0};
+ for(const monitoredAsset of ASSETS){
+  const snapshot=await db.get('latest/'+monitoredAsset,{type:'json'});
+  const ticker=snapshot?.ticker;
+  if(typeof ticker!=='string'||!ticker)continue;
+  const stored=await db.get('omega/paper/v1/'+ticker,{type:'json'});
+  if(stored?.state?.positions?.[ticker]?.status!=='OPEN')continue;
+  paperMonitoring.open++;
+  const quote=await fetchOmegaLiveQuote({ticker,nowMs,fetchImpl});
+  if(!quote){paperMonitoring.unpriced++;continue;}
+  const action=await advanceOmegaPaperStored({db,ticker,roundId:ticker,signal:null,quote,nowMs});
+  if(action.status==='PAPER_EXIT')paperMonitoring.exits++;
+  else if(action.status==='PAPER_HOLD')paperMonitoring.holds++;
+  else paperMonitoring.unpriced++;
+ }
  const latest=await db.get('latest/'+asset,{type:'json'});
  const observation=selectOmegaObservation({latest,nowMs,asset});
  let report;
@@ -44,6 +61,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    if(!await db.get(key,{type:'json'}))await db.setJSON(key,report);
   }
  }
+ report.paperMonitoring=paperMonitoring;
  await db.setJSON('omega/heartbeat',{...report,checkedAt:new Date(nowMs).toISOString(),expectedIntervalSeconds:60,
   coverage:'One rotating asset per minute; not every market every second',realOrdersAuthorized:false});
  return report;
