@@ -6,7 +6,7 @@ const base={marketTicker:'BTC',roundId:'R1',upProbability:.55,observedAtMs:99000
 const f=(provider,p,overrides={})=>({provider,marketTicker:'BTC',roundId:'R1',upProbability:p,observedAtMs:99000,...overrides});
 const run=(forecasts,marketBaseline=base)=>evaluateOmegaFusion({marketTicker:'BTC',roundId:'R1',nowMs,forecasts,marketBaseline});
 test('all requested providers represented',()=>{for(const x of ['gemini','grok','gpt','claude','deepseek','qwen','mistral','kimi','llama','perplexity','primal','kalshi_baseline'])assert.ok(OMEGA_RESEARCH_PROVIDERS.includes(x))});
-test('valid consensus is shadow-only',()=>{const r=run([f('gemini',.7),f('grok',.6)]);assert.equal(r.status,'SHADOW_RESEARCH');assert.equal(r.ordersAuthorized,false);assert.equal(r.modelMean,.6499999999999999)});
+test('valid consensus is shadow-only',()=>{const r=run([f('gemini',.7),f('grok',.6)]);assert.equal(r.status,'SHADOW_RESEARCH');assert.equal(r.ordersAuthorized,false);assert.ok(Math.abs(r.modelMean-.65)<1e-12)});
 test('duplicate providers cannot stack votes',()=>{const r=run([f('grok',.8),f('grok',.9),f('primal',.5)]);assert.equal(r.accepted.length,2);assert.equal(r.rejected.length,1)});
 test('stale and future forecasts rejected',()=>{const r=run([f('gemini',.7,{observedAtMs:80000}),f('grok',.6,{observedAtMs:100001})]);assert.equal(r.status,'INSUFFICIENT_DATA')});
 test('wrong market and round rejected',()=>assert.equal(run([f('gemini',.7,{marketTicker:'ETH'}),f('grok',.6,{roundId:'R2'})]).accepted.length,0));
