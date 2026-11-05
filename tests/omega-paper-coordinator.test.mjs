@@ -22,3 +22,21 @@ test('position cannot silently roll into new round',()=>{
  const open=advanceOmegaPaper(base);
  assert.equal(advanceOmegaPaper({...base,state:open.state,roundId:'R2'}).status,'BLOCKED');
 });
+
+test('paper trailing profit exit protects a previously observed peak',()=>{
+ const opened=advanceOmegaPaper({...base,exitAtProfitDollars:2});
+ assert.equal(opened.status,'PAPER_ENTRY');
+ const rising=advanceOmegaPaper({...base,state:opened.state,nowMs:101001,quote:{...q,yesBidDollars:.58},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
+ assert.equal(rising.status,'PAPER_HOLD');
+ assert.ok(rising.peakNetDollars>=.5);
+ const falling=advanceOmegaPaper({...base,state:rising.state,nowMs:101002,quote:{...q,yesBidDollars:.54},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
+ assert.equal(falling.status,'PAPER_EXIT');
+ assert.equal(falling.state.positions['BTC-R1'].exitReason,'TRAILING_PROFIT');
+ assert.equal(falling.realOrdersAuthorized,false);
+});
+test('paper trailing peak is not updated on stale quotes',()=>{
+ const opened=advanceOmegaPaper(base);
+ const stale=advanceOmegaPaper({...base,state:opened.state,nowMs:105000,exitAtProfitDollars:2});
+ assert.equal(stale.status,'BLOCKED');
+ assert.deepEqual(stale.state,opened.state);
+});
