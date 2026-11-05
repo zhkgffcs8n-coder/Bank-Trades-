@@ -15,7 +15,11 @@ if(host){
   for(const x of spiderJournal)if(Object.hasOwn(counts,x.mode))counts[x.mode]++;
   const verified=spiderJournal.filter(x=>['yes','no'].includes(x.outcome)&&typeof x.correct==='boolean');
   const correct=verified.filter(x=>x.correct).length;
-  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL (mode labels only; no mode-specific strategy yet) · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · '+verified.length+' official paired settlements · '+correct+' correct · '+(verified.length?(100*correct/verified.length).toFixed(1)+'%':'N/A')+' directional accuracy (not trade profit) · paper research only';
+  const byMode=['lock','balanced','extreme'].map(mode=>{
+   const rows=verified.filter(x=>x.mode===mode),wins=rows.filter(x=>x.correct).length;
+   return mode.toUpperCase()+' '+wins+'/'+rows.length+' ('+(rows.length?(100*wins/rows.length).toFixed(1)+'%':'N/A')+')';
+  }).join(' · ');
+  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL · '+spiderJournal.length+' first-call contract predictions · '+verified.length+' officially paired outcomes · '+byMode+' · modes label the same shared signal, NOT separate strategies · directional accuracy only, not trade profit · paper research';
  }
  renderSpider();
  window.addEventListener('banktrades:shared-signals',event=>{
@@ -29,9 +33,10 @@ if(host){
    // three independent strategies and must never be counted three times.
    let mode='balanced';
    try{const settings=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if(['lock','balanced','extreme'].includes(settings?.mode))mode=settings.mode}catch{}
-   const id=mode+':'+ticker+':'+signal.action;
+   const id=ticker;
    // Switching a UI mode cannot create a second independent prediction.
-   if(spiderJournal.some(x=>x.ticker===ticker&&x.action===signal.action))continue;
+   // Freeze the first call per contract. Later flips must not rewrite its forecast.
+   if(spiderJournal.some(x=>x.ticker===ticker))continue;
    spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED',strategyEvaluated:false,source:'shared-signals'});
    changed=true;
   }
