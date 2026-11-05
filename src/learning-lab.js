@@ -13,7 +13,7 @@ if(host){
  function renderSpider(){
   const counts={lock:0,balanced:0,extreme:0};
   for(const x of spiderJournal)if(Object.hasOwn(counts,x.mode))counts[x.mode]++;
-  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · outcomes unverified; no accuracy claim; paper research only';
+  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL (mode labels only; no mode-specific strategy yet) · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · outcomes unverified; no accuracy claim; paper research only';
  }
  renderSpider();
  window.addEventListener('banktrades:shared-signals',event=>{
@@ -23,12 +23,14 @@ if(host){
    if(!signal||!['BUY UP','BUY DOWN'].includes(signal.action))continue;
    const ticker=String(signal.ticker||'');if(!ticker)continue;
    const asset=String(signal.asset||'unknown');
-   for(const mode of ['lock','balanced','extreme']){
-    const id=mode+':'+ticker+':'+signal.action;
-    if(spiderJournal.some(x=>x.id===id))continue;
-    spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED'});
-    changed=true;
-   }
+   // Record the actual selected preview mode only. A single prediction is not
+   // three independent strategies and must never be counted three times.
+   let mode='balanced';
+   try{const settings=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if(['lock','balanced','extreme'].includes(settings?.mode))mode=settings.mode}catch{}
+   const id=mode+':'+ticker+':'+signal.action;
+   if(spiderJournal.some(x=>x.id===id))continue;
+   spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED',strategyEvaluated:false});
+   changed=true;
   }
   if(changed){spiderJournal=spiderJournal.slice(-1000);try{localStorage.setItem(spiderKey,JSON.stringify(spiderJournal))}catch{}renderSpider()}
  });
