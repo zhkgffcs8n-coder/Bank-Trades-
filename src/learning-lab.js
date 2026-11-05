@@ -5,6 +5,33 @@ if(host){
  const key='banktrades.learning.v1.'+window.__BANK_TRADES_USER_ID__;
  let state={model:initialModel(),observations:[]};
  try{const saved=JSON.parse(localStorage.getItem(key));if(saved?.model?.weights?.length===4&&saved.model.weights.every(Number.isFinite)&&Array.isArray(saved.observations))state=saved;}catch{}
+ // Spider/Primal prospective mode journal: records predictions only, never fabricated outcomes.
+ const spiderPanel=document.createElement('div');spiderPanel.className='premium-foot';host.append(spiderPanel);
+ const spiderKey=key+'.spider-shadow-v1';
+ let spiderJournal=[];
+ try{const prior=JSON.parse(localStorage.getItem(spiderKey)||'[]');if(Array.isArray(prior))spiderJournal=prior.filter(x=>x&&typeof x==='object').slice(-1000)}catch{}
+ function renderSpider(){
+  const counts={lock:0,balanced:0,extreme:0};
+  for(const x of spiderJournal)if(Object.hasOwn(counts,x.mode))counts[x.mode]++;
+  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · outcomes unverified; no accuracy claim; paper research only';
+ }
+ renderSpider();
+ window.addEventListener('banktrades:shared-signals',event=>{
+  const signals=Array.isArray(event.detail)?event.detail:[];
+  let changed=false;
+  for(const signal of signals){
+   if(!signal||!['BUY UP','BUY DOWN'].includes(signal.action))continue;
+   const ticker=String(signal.ticker||'');if(!ticker)continue;
+   const asset=String(signal.asset||'unknown');
+   for(const mode of ['lock','balanced','extreme']){
+    const id=mode+':'+ticker+':'+signal.action;
+    if(spiderJournal.some(x=>x.id===id))continue;
+    spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED'});
+    changed=true;
+   }
+  }
+  if(changed){spiderJournal=spiderJournal.slice(-1000);try{localStorage.setItem(spiderKey,JSON.stringify(spiderJournal))}catch{}renderSpider()}
+ });
  const sharedStatus=document.createElement('p');sharedStatus.className='premium-foot';sharedStatus.textContent='Shared prediction feed: connecting. Research training remains separate until verified feature snapshots and finalized labels are available.';host.append(sharedStatus);
  window.addEventListener('banktrades:shared-signals',event=>{
   const signals=Array.isArray(event.detail)?event.detail:[];
