@@ -13,7 +13,9 @@ if(host){
  function renderSpider(){
   const counts={lock:0,balanced:0,extreme:0};
   for(const x of spiderJournal)if(Object.hasOwn(counts,x.mode))counts[x.mode]++;
-  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL (mode labels only; no mode-specific strategy yet) · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · outcomes unverified; no accuracy claim; paper research only';
+  const verified=spiderJournal.filter(x=>['yes','no'].includes(x.outcome)&&typeof x.correct==='boolean');
+  const correct=verified.filter(x=>x.correct).length;
+  spiderPanel.textContent='SPIDER + PRIMAL SHADOW JOURNAL (mode labels only; no mode-specific strategy yet) · '+spiderJournal.length+' unique prediction snapshots · LOCK '+counts.lock+' · BALANCED '+counts.balanced+' · EXTREME '+counts.extreme+' · '+verified.length+' official paired settlements · '+correct+' correct · '+(verified.length?(100*correct/verified.length).toFixed(1)+'%':'N/A')+' directional accuracy (not trade profit) · paper research only';
  }
  renderSpider();
  window.addEventListener('banktrades:shared-signals',event=>{
@@ -66,6 +68,22 @@ if(host){
    const cmp=data.comparison,adaptive=data.adaptiveResearch,mistakes=data.mistakeAnalysis,prospective=data.prospectiveEvaluation,lessons=data.lessonSummary,feed=data.feedTelemetry;
    const fmt=x=>Number.isFinite(x)?(100*x).toFixed(1)+'%':'N/A';
    comparisonPanel.replaceChildren();
+   // Only score a frozen shadow call when the server explicitly confirms
+   // the same contract's official finalized settlement. Never infer a label
+   // from price changes or a paper P/L.
+   const official=data.pairedShadow;
+   if(official?.settlement?.verified===true&&['yes','no'].includes(official.settlement.result)&&typeof official.ticker==='string'){
+    let updated=false;
+    for(const row of spiderJournal){
+     if(row.ticker!==official.ticker||row.outcome!=='UNVERIFIED')continue;
+     if(!['BUY UP','BUY DOWN'].includes(row.action))continue;
+     row.outcome=official.settlement.result;
+     row.correct=(row.action==='BUY UP')===(row.outcome==='yes');
+     row.verifiedBy='market-history pairedShadow.settlement';
+     updated=true;
+    }
+    if(updated){try{localStorage.setItem(spiderKey,JSON.stringify(spiderJournal))}catch{}renderSpider()}
+   }
    const paired=data.pairedShadow;
    const pairedHead=document.createElement('strong');pairedHead.textContent='OPTIMUS PRIMAL · A+B HYBRID · SAME CONTRACT / QUOTE · SHADOW ONLY';comparisonPanel.append(pairedHead);
    const pairedLine=document.createElement('p');
