@@ -30,3 +30,16 @@ test('DOWN entry and exit use NO quotes, not YES quotes',()=>{
 test('ambiguous side-less quote is blocked',()=>{
  assert.equal(paperEntry({signal,quote:{ticker:'BTC',askDollars:.5,asOfMs:99000},feesDollars:0,nowMs:100000}).status,'BLOCKED');
 });
+
+test('malformed entry costs and missing direction cannot produce paper PnL',()=>{
+ const base={status:'OPEN',ticker:'BTC-R1',side:'UP',quantity:2,entryCostDollars:1.2};
+ const exitQuote={ticker:'BTC-R1',yesBidDollars:.6,noBidDollars:.4,asOfMs:99000};
+ for(const invalid of [undefined,null,'1.2',NaN,Infinity,-1,0]){
+  const result=paperExit({position:{...base,entryCostDollars:invalid},quote:exitQuote,feesDollars:0,nowMs:100000});
+  assert.equal(result.status,'BLOCKED');assert.equal(result.realOrdersAuthorized,false);
+ }
+ for(const side of [undefined,'','BUY',null]){
+  assert.equal(paperExit({position:{...base,side},quote:exitQuote,feesDollars:0,nowMs:100000}).status,'BLOCKED');
+ }
+ assert.equal(paperExit({position:base,quote:exitQuote,feesDollars:0,nowMs:100000}).status,'PAPER_CLOSED');
+});
