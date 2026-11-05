@@ -28,8 +28,9 @@ if(host){
    let mode='balanced';
    try{const settings=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if(['lock','balanced','extreme'].includes(settings?.mode))mode=settings.mode}catch{}
    const id=mode+':'+ticker+':'+signal.action;
-   if(spiderJournal.some(x=>x.id===id))continue;
-   spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED',strategyEvaluated:false});
+   // Switching a UI mode cannot create a second independent prediction.
+   if(spiderJournal.some(x=>x.ticker===ticker&&x.action===signal.action))continue;
+   spiderJournal.push({id,mode,ticker,asset,action:signal.action,observedAt:new Date().toISOString(),outcome:'UNVERIFIED',strategyEvaluated:false,source:'shared-signals'});
    changed=true;
   }
   if(changed){spiderJournal=spiderJournal.slice(-1000);try{localStorage.setItem(spiderKey,JSON.stringify(spiderJournal))}catch{}renderSpider()}
