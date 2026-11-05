@@ -119,7 +119,7 @@ export default async()=>{
  await s.setJSON('performance',stats);
  // Temporary fail-closed research circuit breaker after observed severe paper losses.
  // Continue settlement and exit processing above; never erase or reset the ledger.
- const entryPaused=false; // Paper-only entries may resume; gatePaperEntry still blocks unqualified signals and losing cohorts.
+ const entryPaused=true;
  const initialCash=1000;
  const openCost=ledger.trades.filter(t=>t.status==='OPEN').reduce((sum,t)=>sum+(Number(t.cost)||0),0);
  const recordedPnl=ledger.trades.filter(t=>['SETTLED','CLOSED'].includes(t.status)&&hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0);
