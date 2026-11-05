@@ -7,7 +7,7 @@ const base={signal,quote:q,roundId:'R1',feesDollars:0,nowMs:101000};
 test('paper opens, holds, exits and never reenters same round',()=>{
  const open=advanceOmegaPaper(base);
  assert.equal(open.status,'PAPER_ENTRY');assert.equal(open.realOrdersAuthorized,false);
- const hold=advanceOmegaPaper({...base,state:open.state,nowMs:101001});
+ const hold=advanceOmegaPaper({...base,state:open.state,nowMs:101001,exitAtProfitDollars:.6});
  assert.equal(hold.status,'PAPER_HOLD');
  const exit=advanceOmegaPaper({...base,state:hold.state,nowMs:101002,exitAtProfitDollars:.4});
  assert.equal(exit.status,'PAPER_EXIT');
