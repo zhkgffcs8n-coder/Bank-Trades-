@@ -535,4 +535,10 @@ if(tbody.textContent.includes('Loading verified markets')){const tr=document.cre
 setTimeout(recover,100);setInterval(recover,2000);
 setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data-fallback-asset] td[data-expiry]')){const t=Number(td.dataset.expiry);if(!Number.isFinite(t)||!t)continue;const s=Math.max(0,Math.floor((t-Date.now())/1000));td.textContent=Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';}},1000);
 })();
-</script></body></html>
+</script><section id="omegaUltraStatus" aria-label="Primal Omega Ultra research status" style="margin:14px auto;max-width:1100px;padding:14px;border:1px solid #41506c;border-radius:12px;background:#101b30;color:#e5edf9;font:13px system-ui,sans-serif">
+<strong style="font-size:16px">🧠 PRIMAL OMEGA ULTRA · Research &amp; Paper Only</strong>
+<p style="margin:8px 0">Fusion and verified-outcome scoring are installed. External AI providers are not connected. No real-money order execution is authorized by OMEGA.</p>
+<div id="omegaUltraReadout" role="status">Checking research module…</div>
+</section>
+<script src="/omega-status.js" defer></script>
+</body></html>
