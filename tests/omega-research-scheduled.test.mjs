@@ -26,3 +26,20 @@ test('configured providers produce stored pre-settlement shadow research',async(
  assert.equal([...data.keys()].some(x=>x.startsWith('omega/predictions/')),true);
  assert.equal(r.ordersAuthorized,false);
 });
+
+test('open paper positions are monitored without configured AI providers',async()=>{
+ const ticker=sample.ticker;
+ const state={positions:{[ticker]:{status:'OPEN',roundId:ticker,side:'YES',entryCostDollars:2.25}},entered:{}};
+ const data=new Map([['latest/'+asset,sample],['omega/paper/v1/'+ticker,{state}]]);
+ const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>data.set(key,value)};
+ let quoteRequests=0;
+ const fetchImpl=async()=>{quoteRequests++;return {ok:false};};
+ const report=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl});
+ assert.equal(report.status,'PROVIDERS_UNCONFIGURED');
+ assert.equal(report.paperMonitoring.open,1);
+ assert.equal(report.paperMonitoring.unpriced,1);
+ assert.equal(quoteRequests,1);
+ assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+ assert.equal(data.get('omega/heartbeat').paperMonitoring.open,1);
+ assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+});
