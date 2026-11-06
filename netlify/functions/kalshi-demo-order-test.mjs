@@ -4,9 +4,9 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {makeOrder} from '../../src/live-execution.mjs';
 
 export async function runDemoOrderTest(store,client,now=Date.now()){
- const prior=await store.get('order-test/v3',{type:'json'});
- if(prior?.exchangeCode!=='insufficient_shard_balance')return;
- const key='order-test/v4';
+ const prior=await store.get('order-test/v4',{type:'json'});
+ if(prior?.exchangeCode!=='insufficient_balance')return;
+ const key='order-test/v5';
  let test=await store.get(key,{type:'json'});
  if(test?.finished)return;
  if(!test){
