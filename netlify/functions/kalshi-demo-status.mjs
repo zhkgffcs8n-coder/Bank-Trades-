@@ -10,7 +10,8 @@ export default async req=>{try{
   const result=uploaded||await store.get('connection',{type:'json'});
   const latest=await store.get('order-test/v8',{type:'json'});
   const test=latest||await store.get('order-test/v7',{type:'json'})||await store.get('order-test/v6',{type:'json'})||await store.get('order-test/v5',{type:'json'})||await store.get('order-test/v4',{type:'json'})||await store.get('order-test/v3',{type:'json'})||await store.get('order-test/v2',{type:'json'})||await store.get('order-test/v1',{type:'json'});
-  return json({status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?8:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
+  const hold=await store.get('hold-test/v1',{type:'json'});
+  return json({holdTest:hold?{status:hold.status,filled:hold.filled??null,entryCost:hold.entryCost??null,positionReconciled:hold.positionReconciled??null,markPnl:hold.markPnl??null,realizedPnl:hold.realizedPnl??null,checkedAt:hold.checkedAt??null,exchangeCode:hold.exchangeCode??null}:null,status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?8:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
  }
  if(req.method!=='POST')fail(405,'Method not allowed');
  const user=await owner();

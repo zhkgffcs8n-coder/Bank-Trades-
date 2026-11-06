@@ -1,3 +1,4 @@
+import {runDemoHold} from './lib/kalshi-demo-hold.mjs';
 import {getStore} from '@netlify/blobs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
@@ -61,7 +62,9 @@ export default async()=>{
  const saved=await store.get('uploaded-connection',{type:'json'});
  if(saved?.status!=='DEMO_AUTHENTICATED'||!process.env.KALSHI_LIVE_OWNER_ID)return new Response(null,{status:204});
  const credentials=openKalshiCredentials({userId:'demo-'+process.env.KALSHI_LIVE_OWNER_ID,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
- await runDemoOrderTest(store,kalshiClient(credentials,{environment:'demo',allowWrites:true}));
+ const client=kalshiClient(credentials,{environment:'demo',allowWrites:true});
+ await runDemoOrderTest(store,client);
+ await runDemoHold(store,client);
  return new Response(null,{status:204});
 };
 export const config={schedule:'* * * * *'};
