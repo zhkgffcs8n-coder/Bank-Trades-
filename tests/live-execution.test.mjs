@@ -49,3 +49,13 @@ test('live modes only adjust screening of already qualified entries',()=>{
  assert.equal(qualifiesLiveEntry({...signal,score:55},'extreme'),true);
  assert.equal(qualifiesLiveEntry({...signal,entryGate:{finalAction:'WAIT'}},'extreme'),false);
 });
+test('demo credentials are used only for a read to the demo host',async()=>{
+ const {checkDemoConnection}=await import('../netlify/functions/kalshi-demo-check.mjs');
+ const env={KALSHI_DEMO_KEY_ID:credentials.keyId,KALSHI_DEMO_PRIVATE_KEY:credentials.privateKeyPem};
+ assert.equal(await checkDemoConnection(env,async(url,options)=>{
+  assert.equal(url,'https://external-api.demo.kalshi.co/trade-api/v2/portfolio/balance');
+  assert.equal(options.method,'GET');
+  return {ok:true,json:async()=>({balance:0})};
+ }),'DEMO_AUTHENTICATED');
+ assert.equal(await checkDemoConnection({},()=>assert.fail('Unexpected request')),'DEMO_CREDENTIALS_MISSING');
+});
