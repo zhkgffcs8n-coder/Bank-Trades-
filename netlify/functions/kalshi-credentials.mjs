@@ -6,6 +6,13 @@ import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials,openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 const db=()=>getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'});
 const storageKey=user=>'credentials/'+user.id;
+async function verifyKalshi(keyId,privateKeyPem){
+ const path='/trade-api/v2/portfolio/balance',timestamp=String(Date.now());
+ const signature=sign('sha256',Buffer.from(timestamp+'GET'+path),{key:createPrivateKey(privateKeyPem),padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST}).toString('base64');
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),7000);
+ try{return await fetch('https://api.elections.kalshi.com'+path,{headers:{'KALSHI-ACCESS-KEY':keyId,'KALSHI-ACCESS-TIMESTAMP':timestamp,'KALSHI-ACCESS-SIGNATURE':signature,Accept:'application/json'},signal:controller.signal});}
+ finally{clearTimeout(timeout)}
+}
 export default async req=>{let liveSession;try{
  const user=await owner();
  if(req.method==='GET'){
@@ -14,10 +21,7 @@ export default async req=>{let liveSession;try{
   if(!/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''))return json({connected:false,credentialsStored:true,storageReady:false,liveOrdersEnabled:false,reason:'Server encryption secret unavailable or invalid'});
   try{
    const {keyId,privateKeyPem}=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
-   const path='/trade-api/v2/portfolio/balance',timestamp=String(Date.now());
-   const signature=sign('sha256',Buffer.from(timestamp+'GET'+path),{key:createPrivateKey(privateKeyPem),padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST}).toString('base64');
-   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),7000);
-   let response;try{response=await fetch('https://api.elections.kalshi.com'+path,{headers:{'KALSHI-ACCESS-KEY':keyId,'KALSHI-ACCESS-TIMESTAMP':timestamp,'KALSHI-ACCESS-SIGNATURE':signature,Accept:'application/json'},signal:controller.signal});}finally{clearTimeout(timeout)}
+   const response=await verifyKalshi(keyId,privateKeyPem);
    return json({connected:response.ok,credentialsStored:true,liveOrdersEnabled:false,checkedAt:Date.now(),reason:response.ok?'Authenticated read-only balance request succeeded':'Kalshi authentication returned HTTP '+response.status});
   }catch{return json({connected:false,credentialsStored:true,liveOrdersEnabled:false,reason:'Authentication test failed or timed out'});}
  }
@@ -41,6 +45,11 @@ export default async req=>{let liveSession;try{
  let envelope;
  try{envelope=sealKalshiCredentials({userId:user.id,keyId:body.keyId,privateKeyPem:body.privateKeyPem,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY})}
  catch{fail(400,'Invalid credentials or encryption configuration')}
+ // Never persist a key pair that Kalshi rejects. This is a read-only verification.
+ let verified;
+ try{verified=await verifyKalshi(body.keyId,body.privateKeyPem)}
+ catch{fail(503,'Kalshi connection test failed or timed out; credentials were not saved')}
+ if(!verified.ok)fail(422,'Kalshi rejected the credentials (HTTP '+verified.status+'); credentials were not saved');
  await db().setJSON(storageKey(user),{envelope,updatedAt:Date.now()});
- return json({ok:true,credentialsStored:true,connected:false,liveOrdersEnabled:false});
+ return json({ok:true,credentialsStored:true,connected:true,checkedAt:Date.now(),liveOrdersEnabled:false});
 }catch(e){return errorResponse(e)}finally{if(liveSession)await liveSession.release();}};
