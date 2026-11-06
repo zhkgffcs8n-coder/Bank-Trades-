@@ -72,6 +72,35 @@ $('primalSave')?.addEventListener('click',()=>{const stake=Number($('primalStake
 try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if(saved&&['lock','balanced','extreme'].includes(saved.mode)){const button=document.querySelector('.primal-mode[data-mode="'+saved.mode+'"]');button?.click();for(const [key,id] of [['stake','primalStake'],['profit','primalProfit'],['loss','primalLoss']]){if(Number.isFinite(Number(saved[key])))$(id).value=String(saved[key])}for(const [key,id] of [['autoExit','primalAutoExit'],['flip','primalFlip'],['dedupe','primalDedupe']])if(typeof saved[key]==='boolean')$(id).checked=saved[key];$('primalPreviewStatus').textContent='Saved preview settings restored. Trading engine unchanged.'}}catch{$('primalPreviewStatus').textContent='Saved settings unavailable; defaults loaded.'}
 })();
 </script>
+<div class="card" id="kalshiDemoUpload">
+<h2>Kalshi Demo · Simulated Funds</h2>
+<p>Enter the demo key ID and choose the original private key file from Files.</p>
+<div class="toolbar">
+<label>Demo API key ID <input id="demoKeyId" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+<label>Demo private key file <input id="demoKeyFile" type="file"></label>
+<button type="button" id="demoConnect">VERIFY &amp; SAVE DEMO KEY</button>
+</div><p id="demoUploadStatus" role="status"></p>
+</div>
+<script>
+(()=>{
+ const id=document.getElementById('demoKeyId'), file=document.getElementById('demoKeyFile');
+ const button=document.getElementById('demoConnect'), status=document.getElementById('demoUploadStatus');
+ button.addEventListener('click',async()=>{
+  const selected=file.files[0];
+  if(!id.value.trim()||!selected||selected.size>16000){status.textContent='Enter the demo key ID and choose the downloaded private key file.';return;}
+  button.disabled=true;
+  status.textContent='Checking Kalshi Demo…';
+  try{
+   const response=await fetch('/.netlify/functions/kalshi-demo-status',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({keyId:id.value.trim(),privateKeyPem:await selected.text()})});
+   const data=await response.json();
+   status.textContent=response.ok?'Kalshi Demo verified and key saved.':data.error||data.status||'Demo verification failed';
+   if(response.ok){id.value='';file.value='';}
+  }catch{status.textContent='Demo verification request failed.';}
+  finally{button.disabled=false;}
+ });
+})();
+</script>
 <div class="card" id="spiderPrimalPanel" style="margin:12px 0"><h2>PRIMAL OMEGA ULTRA · Shared Signal Review</h2><p>Read-only analysis panel. This does not override the existing Live Market Signals engine or execute trades.</p><div class="toolbar"><button type="button" id="spiderReview">REVIEW LIVE SIGNALS</button><span id="spiderReviewStatus" role="status">Waiting for shared signals</span></div><div id="spiderReviewResults"></div><small>Missing/stale data means no qualified signal. Agreement is not proof of predictive accuracy. Paper validation required before strategy promotion.</small></div>
 
 <div class="pro-panel" id="pro-kaibot"><h2>🤖 KAIBOT · Automated Paper Trader</h2><p>KaiBot scans supported 15-minute crypto markets for quote momentum, validates spreads, and simulates entries. No real-money execution or guaranteed signals.</p><div class="toolbar"><button id="kaiStart">START PAPER BOT</button><button id="kaiStop">STOP BOT</button><label>Max virtual spend/trade ($) <input id="kaiMax" type="number" value="50" min="1" max="1000" step="1"></label></div><div class="notice" style="border-color:#ffd477;color:#ffd477"><strong>SAFETY PAUSE:</strong> New server paper entries are disabled during the strategy drawdown audit. Existing paper positions can still be exited or settled by the scheduled runner. The ON status means monitoring is enabled, not that new trades are allowed. This is not real-money trading.</div><div id="kaiState" class="notice">Checking persistent server paper bot…</div><div id="kaiLog"></div><div id="kaiResults" class="notice">Permanent server results: syncing...</div><div id="kaiResultHistory"></div><small>Protective controls: fresh quotes, limited size, 6¢ max spread, at least 75 seconds remaining, no repeat contract buys, $1,000 total virtual starting balance; up to $1,000 per paper entry, subject to available funds. No real trading API credentials are used.</small></div><div class="pro-panel" id="pro-member"><h2>Your membership</h2><p>Manage your Stripe membership or redeem an owner-issued access code from your account.</p><a class="terminal-link" href="/">ACCOUNT &amp; MEMBERSHIP →</a></div>
