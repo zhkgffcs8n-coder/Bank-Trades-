@@ -49,6 +49,10 @@ export async function runDemoHold(store,client,now=Date.now()){
  const quantity=Number(order.fill_count_fp??order.fill_count);
  if(!Number.isFinite(quantity)||quantity<0||quantity>1)return;
  if(quantity===0){await store.setJSON(key,{...test,status:'DEMO_HOLD_UNFILLED',filled:0,finished:true});return;}
+ if(test.filled!==quantity){
+  test={...test,status:'DEMO_HOLD_FILL_AWAITING_LEDGER',filled:quantity,checkedAt:new Date(now).toISOString()};
+  await store.setJSON(key,test);
+ }
  const fills=await client.pages('/trade-api/v2/portfolio/fills','fills',{ticker:test.ticker,order_id:order.order_id});
  const own=fills.filter(f=>f.order_id===order.order_id);
  const qty=f=>Number(f.count_fp??f.count);
@@ -57,6 +61,10 @@ export async function runDemoHold(store,client,now=Date.now()){
  if(Math.abs(total-quantity)>1e-7||!Number.isFinite(cost)||cost<0)return;
  const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(test.ticker));
  const outcome=verifiedFinalizedBinaryOutcome(market,test.ticker);
+ if(test.entryCost!==cost){
+  test={...test,status:'DEMO_HOLD_AWAITING_POSITION',entryCost:cost};
+  await store.setJSON(key,test);
+ }
  const positions=await client.pages('/trade-api/v2/portfolio/positions','market_positions',{ticker:test.ticker});
  const position=Number(positions.find(p=>p.ticker===test.ticker)?.position_fp??0);
  const bid=Number(market?.yes_bid_dollars);
