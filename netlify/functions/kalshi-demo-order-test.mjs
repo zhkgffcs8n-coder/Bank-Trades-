@@ -1,3 +1,4 @@
+import sharedSignals from './shared-signals.mjs';
 import {runDemoHold} from './lib/kalshi-demo-hold.mjs';
 import {getStore} from '@netlify/blobs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
@@ -65,6 +66,12 @@ export default async()=>{
  const client=kalshiClient(credentials,{environment:'demo',allowWrites:true});
  await runDemoOrderTest(store,client);
  await runDemoHold(store,client);
+ await runDemoHold(store,client,Date.now(),async()=>{
+  const response=await sharedSignals(new Request('https://internal/shared-signals'));
+  if(!response.ok)return [];
+  const data=await response.json();
+  return Array.isArray(data.results)?data.results:[];
+ });
  return new Response(null,{status:204});
 };
 export const config={schedule:'* * * * *'};
