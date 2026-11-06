@@ -59,3 +59,19 @@ test('demo credentials are used only for a read to the demo host',async()=>{
  }),'DEMO_AUTHENTICATED');
  assert.equal(await checkDemoConnection({},()=>assert.fail('Unexpected request')),'DEMO_CREDENTIALS_MISSING');
 });
+test('emergency stop reconciles a partial fill from the post-cancel snapshot',async()=>{
+ const state=initialState(),ticker='BTC-ROUND';
+ state.intents=[{id:'ours',ticker,side:'up',action:'buy',qty:1,status:'UNKNOWN'}];
+ let canceled=false;
+ const client={
+  snapshot:async()=>({...snapshot(),
+   orders:[{order_id:'o',client_order_id:'ours',ticker,status:canceled?'canceled':'resting',fill_count_fp:'0.5'}],
+   fills:[{fill_id:'f',order_id:'o',count_fp:'0.5'}],positions:[{ticker,position_fp:'0.5'}]}),
+  cancel:async()=>{canceled=true}
+ };
+ const result=await emergencyStop({state,client,persist:async()=>{}});
+ assert.equal(result.cancelled,true);
+ assert.equal(result.positionsClosed,false);
+ assert.equal(state.intents[0].filled,.5);
+ assert.equal(state.intents[0].status,'RECONCILED');
+});

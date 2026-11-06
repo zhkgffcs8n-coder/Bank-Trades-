@@ -74,9 +74,10 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
 </script>
 <div class="card" id="kalshiDemoUpload">
 <h2>Kalshi Demo · Simulated Funds</h2>
-<p>Enter the demo key ID and choose the original private key file from Files.</p>
+<p>Enter the demo key ID and paste the private key from Notes, or choose the downloaded file.</p>
 <div class="toolbar">
 <label>Demo API key ID <input id="demoKeyId" autocomplete="off" autocapitalize="none" spellcheck="false"></label>
+<label>Paste demo private key <textarea id="demoKeyText" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="16000"></textarea></label>
 <label>Demo private key file <input id="demoKeyFile" type="file"></label>
 <button type="button" id="demoConnect">VERIFY &amp; SAVE DEMO KEY</button>
 </div><p id="demoUploadStatus" role="status"></p>
@@ -84,18 +85,19 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
 <script>
 (()=>{
  const id=document.getElementById('demoKeyId'), file=document.getElementById('demoKeyFile');
+ const keyText=document.getElementById('demoKeyText');
  const button=document.getElementById('demoConnect'), status=document.getElementById('demoUploadStatus');
  button.addEventListener('click',async()=>{
   const selected=file.files[0];
-  if(!id.value.trim()||!selected||selected.size>16000){status.textContent='Enter the demo key ID and choose the downloaded private key file.';return;}
+  if(!id.value.trim()||(!keyText.value.trim()&&(!selected||selected.size>16000))){status.textContent='Enter the demo key ID and paste the private key or choose its file.';return;}
   button.disabled=true;
   status.textContent='Checking Kalshi Demo…';
   try{
    const response=await fetch('/.netlify/functions/kalshi-demo-status',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({keyId:id.value.trim(),privateKeyPem:await selected.text()})});
+    body:JSON.stringify({keyId:id.value.trim(),privateKeyPem:keyText.value.trim()||await selected.text()})});
    const data=await response.json();
    status.textContent=response.ok?'Kalshi Demo verified and key saved.':data.error||data.status||'Demo verification failed';
-   if(response.ok){id.value='';file.value='';}
+   if(response.ok){id.value='';file.value='';keyText.value='';}
   }catch{status.textContent='Demo verification request failed.';}
   finally{button.disabled=false;}
  });

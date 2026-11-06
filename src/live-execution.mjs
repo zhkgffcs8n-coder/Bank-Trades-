@@ -107,8 +107,12 @@ export async function emergencyStop({state,client,persist}){
  try{snapshot=await client.snapshot();}catch{throw Error('STOPPED_CANCELLATION_SNAPSHOT_FAILED');}
  const own=new Set(state.intents.map(i=>i.id));
  for(const o of snapshot.orders.filter(o=>o.status==='resting'&&own.has(o.client_order_id))){try{await client.cancel(o);}catch{failures.push(o.order_id);}}
- let remaining;try{remaining=(await client.snapshot()).orders.filter(o=>o.status==='resting'&&own.has(o.client_order_id)).map(o=>o.order_id);}catch{throw Error('STOPPED_CANCELLATION_UNVERIFIED');}
- if(state.intents.some(i=>['SUBMITTING','UNKNOWN','AWAITING_RECONCILIATION'].includes(i.status)))throw Error('STOPPED_ORDER_OUTCOME_UNRESOLVED');
+ let after;try{after=await client.snapshot();}catch{throw Error('STOPPED_CANCELLATION_UNVERIFIED');}
+ const remaining=after.orders.filter(o=>o.status==='resting'&&own.has(o.client_order_id)).map(o=>o.order_id);
  if(failures.length||remaining.length)throw Error('STOPPED_CANCEL_FAILED:'+Array.from(new Set([...failures,...remaining])).join(','));
+ if(state.intents.some(i=>['SUBMITTING','UNKNOWN','AWAITING_RECONCILIATION'].includes(i.status))){
+  try{reconcile(state,after);}catch{throw Error('STOPPED_ORDER_OUTCOME_UNRESOLVED');}
+  await persist(state);
+ }
  return {stopped:true,cancelled:true,positionsClosed:false};
 }
