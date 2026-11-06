@@ -3,6 +3,7 @@
 // Research is stored before settlement; no real or paper orders are executed.
 import {getStore} from '@netlify/blobs';
 import {runOmegaResearchRound} from '../../src/omega-orchestrator.mjs';
+import {reviewSharedRound} from '../../src/shared-engine-review.mjs';
 import {omegaProviderStatus} from '../../src/omega-provider-adapters.mjs';
 import {omegaPaperSignal,advanceOmegaPaperStored,fetchOmegaLiveQuote} from './lib/omega-auto-paper.mjs';
 const ASSETS=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
@@ -61,6 +62,10 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    if(!await db.get(key,{type:'json'}))await db.setJSON(key,report);
   }
  }
+ // All engines see one frozen collector snapshot; missing history remains explicitly unvalidated.
+ const market=observation?{ticker:observation.marketTicker,yes_bid_dollars:latest.yesBid,yes_ask_dollars:latest.yesAsk,no_bid_dollars:latest.noBid,no_ask_dollars:latest.noAsk,expected_expiration_time:new Date(latest.expiresAt).toISOString()}:null;
+ const sharedReview=reviewSharedRound({market,records:[],nowMs,forecasts:[],marketBaseline:observation?.marketBaseline?.upProbability});
+ report.sharedEngineReview={ticker:sharedReview.ticker,spiderStatus:sharedReview.spider?.status||'UNAVAILABLE',primalStatus:sharedReview.primal?.status||'UNAVAILABLE',omegaStatus:report.status,ordersAuthorized:false};
  report.paperMonitoring=paperMonitoring;
  await db.setJSON('omega/heartbeat',{...report,checkedAt:new Date(nowMs).toISOString(),expectedIntervalSeconds:60,
   coverage:'One rotating asset per minute; not every market every second',realOrdersAuthorized:false});
