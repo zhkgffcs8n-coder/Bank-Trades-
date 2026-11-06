@@ -37,15 +37,15 @@ export function reconcile(state,snapshot,now=Date.now()){
   const ownFills=[...fills.values()].filter(f=>f.order_id===o.order_id);
   const count=ownFills.reduce((n,f)=>{const q=Number(f.count_fp??f.count);if(!Number.isFinite(q)||q<=0)throw Error('INVALID_FILL_COUNT');return n+q;},0);
   const reported=Number(o.fill_count_fp??o.fill_count);
-  if(!Number.isFinite(reported)||count!==reported||count>intent.qty)throw Error('FILL_COUNT_MISMATCH');
+  if(!Number.isFinite(reported)||Math.abs(count-reported)>1e-7||count>intent.qty+1e-7)throw Error('FILL_COUNT_MISMATCH');
   if(!['executed','canceled'].includes(o.status))throw Error('ORDER_NOT_TERMINAL');
   intent.status='RECONCILED';intent.filled=count;intent.orderId=o.order_id;
   quantities.set(intent.ticker,(quantities.get(intent.ticker)||0)+count*(intent.side==='up'?1:-1)*(intent.action==='buy'?1:-1));
  }
  for(const [ticker,qty] of quantities){if(settlementFor(snapshot,ticker,qty))quantities.set(ticker,0);}
  // An isolated account is required: unknown positions/orders block new trading.
- for(const [ticker,qty] of positions)if(qty!==(quantities.get(ticker)||0))throw Error('POSITION_MISMATCH_'+ticker);
- for(const [ticker,qty] of quantities)if(qty!==(positions.get(ticker)||0))throw Error('POSITION_MISSING_'+ticker);
+ for(const [ticker,qty] of positions)if(Math.abs(qty-(quantities.get(ticker)||0))>1e-7)throw Error('POSITION_MISMATCH_'+ticker);
+ for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Error('POSITION_MISSING_'+ticker);
  if(snapshot.orders.some(o=>o.status==='resting'&&!state.intents.some(i=>i.id===o.client_order_id)))throw Error('UNMANAGED_RESTING_ORDER');
  const ids=new Set(state.intents.map(i=>i.id)),orderIds=new Set(state.intents.map(i=>i.orderId)),tickers=new Set(state.intents.map(i=>i.ticker));
  state.evidence={orders:[...orders.values()].filter(o=>ids.has(o.client_order_id)&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))};
