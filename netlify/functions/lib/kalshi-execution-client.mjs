@@ -25,7 +25,7 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
   }throw Error('PAGINATION_LIMIT');
  }
  return {request,pages,
-  async snapshot(){const startedAt=Date.now();const [balance,orders,fills,positions,settlements]=await Promise.all([request('GET','/trade-api/v2/portfolio/balance'),pages('/trade-api/v2/portfolio/orders','orders'),pages('/trade-api/v2/portfolio/fills','fills'),pages('/trade-api/v2/portfolio/positions','market_positions'),pages('/trade-api/v2/portfolio/settlements','settlements')]);return {balanceCents:balance.balance,orders,fills,positions,settlements,at:startedAt,complete:true};},
+  async snapshot(){const [balance,orders,fills,positions,settlements]=await Promise.all([request('GET','/trade-api/v2/portfolio/balance'),pages('/trade-api/v2/portfolio/orders','orders'),pages('/trade-api/v2/portfolio/fills','fills'),pages('/trade-api/v2/portfolio/positions','market_positions'),pages('/trade-api/v2/portfolio/settlements','settlements')]);return {balanceCents:balance.balance,orders,fills,positions,settlements,at:Date.now(),complete:true};},
   create:body=>request('POST','/trade-api/v2/portfolio/events/orders',body),
   cancel:order=>request('DELETE','/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(order.order_id)+'?'+new URLSearchParams({market_ticker:order.ticker}))};
 }
