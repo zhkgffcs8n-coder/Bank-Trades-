@@ -36,3 +36,6 @@ test('invalid exit bid never poisons trailing peak or permits another entry',asy
 
 test('stale or mismatched exit quote cannot update peaks or submit an order',async()=>{for(const bad of [{...quote(65),ticker:'OTHER-ROUND'},{...quote(65),at:Date.now()-30000}]){const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const r=await runLiveCycle({repo,client,signals,quoteFor:async()=>bad,canTrade:true});assert.equal(r.status,'EXIT_QUOTE_UNAVAILABLE');assert.equal(client.count(),1);assert.equal((await repo.read()).state.peaks?.['BTC-ROUND'],undefined);}}
 );
+
+// Release gating must not be defeated by browser or deployment environment flags.
+test('production release gate stays closed without exchange certification',async()=>{const {releaseStatus,RELEASE_BLOCKERS}=await import('../netlify/functions/lib/kalshi-release-gate.mjs');const result=releaseStatus();assert.equal(result.canTrade,false);assert.equal(result.liveOrdersEnabled,false);assert.equal(result.failures.length,7);assert.deepEqual(result.failures,[...RELEASE_BLOCKERS]);});
