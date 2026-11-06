@@ -12,7 +12,10 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,now=Da
   }
   const snap=await client.snapshot();reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
   for(const p of risk.open){
-   const quote=await quoteFor(p.ticker);if(!quote)throw Error('EXIT_QUOTE_UNAVAILABLE');
+   const quote=await quoteFor(p.ticker);
+   // Missing executable exit liquidity is a degraded monitoring state, not an
+   // exchange/order failure. Do not open new exposure or disable future checks.
+   if(!quote)return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
    state.peaks??={};state.peaks[p.ticker]=Math.max(state.peaks[p.ticker]||p.entryCents,quote[p.side+'Bid']);await persist(state);
    const reason=exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct});
    if(reason||risk.dailyLossCents+risk.openCostCents>=state.limits.lossCents||quote.expiresAt-Date.now()<30000){
