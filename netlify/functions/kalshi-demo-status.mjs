@@ -8,9 +8,9 @@ export default async req=>{try{
  if(req.method==='GET'){
   const uploaded=await store.get('uploaded-connection',{type:'json'});
   const result=uploaded||await store.get('connection',{type:'json'});
-  const latest=await store.get('order-test/v7',{type:'json'});
-  const test=latest||await store.get('order-test/v6',{type:'json'})||await store.get('order-test/v5',{type:'json'})||await store.get('order-test/v4',{type:'json'})||await store.get('order-test/v3',{type:'json'})||await store.get('order-test/v2',{type:'json'})||await store.get('order-test/v1',{type:'json'});
-  return json({status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?7:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
+  const latest=await store.get('order-test/v8',{type:'json'});
+  const test=latest||await store.get('order-test/v7',{type:'json'})||await store.get('order-test/v6',{type:'json'})||await store.get('order-test/v5',{type:'json'})||await store.get('order-test/v4',{type:'json'})||await store.get('order-test/v3',{type:'json'})||await store.get('order-test/v2',{type:'json'})||await store.get('order-test/v1',{type:'json'});
+  return json({status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?8:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
  }
  if(req.method!=='POST')fail(405,'Method not allowed');
  const user=await owner();

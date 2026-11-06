@@ -4,17 +4,20 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {makeOrder} from '../../src/live-execution.mjs';
 
 export async function runDemoOrderTest(store,client,now=Date.now()){
- const prior=await store.get('order-test/v6',{type:'json'});
- if(prior?.status!=='DEMO_ORDER_TERMINAL_WITHOUT_VERIFIED_CANCEL')return;
- const key='order-test/v7';
+ const prior=await store.get('order-test/v7',{type:'json'});
+ if(prior?.exchangeCode!=='insufficient_shard_balance')return;
+ const key='order-test/v8';
  let test=await store.get(key,{type:'json'});
  if(test?.finished)return;
  if(!test){
-  const {markets}=await client.request('GET','/trade-api/v2/markets?status=open&limit=100&mve_filter=exclude');
-  const market=markets?.find(m=>m.status==='active'&&m.market_type==='binary'&&
-   /^[A-Z0-9-]{4,100}$/.test(m.ticker)&&Number(m.yes_ask_dollars)>.01&&
-   Date.parse(m.close_time)>now+180000);
-  if(!market)return;
+  const accepted=await store.get('order-test/v6',{type:'json'});
+  if(!accepted?.orderId||!accepted.ticker)return;
+  const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(accepted.ticker));
+  if(market?.ticker!==accepted.ticker||market.status!=='active'||Number(market.yes_ask_dollars)<=.01||
+   !(Date.parse(market.close_time)>now+180000)){
+   await store.setJSON(key,{finished:true,status:'DEMO_PREVIOUS_MARKET_UNAVAILABLE',checkedAt:new Date(now).toISOString()},{onlyIfNew:true});
+   return;
+  }
   const order=makeOrder({ticker:market.ticker,side:'up',action:'buy',qty:1,priceCents:1});
   test={status:'DEMO_SUBMITTING',ticker:order.ticker,id:order.client_order_id,checkedAt:new Date(now).toISOString()};
   if(!(await store.setJSON(key,test,{onlyIfNew:true})).modified)return;
