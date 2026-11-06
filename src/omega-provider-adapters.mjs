@@ -13,13 +13,15 @@ const CONFIG=Object.freeze({
 });
 export const supportedOmegaProviders=Object.freeze(Object.keys(CONFIG));
 export function omegaProviderStatus(env={}){
- return supportedOmegaProviders.map(provider=>({provider,configured:typeof env[CONFIG[provider].env]==='string'&&env[CONFIG[provider].env].length>0}));
+ return supportedOmegaProviders.map(provider=>({provider,configured:typeof env[CONFIG[provider].env]==='string'&&env[CONFIG[provider].env].trim().length>0}));
 }
 const validProbability=x=>typeof x==='number'&&Number.isFinite(x)&&x>=0&&x<=1;
 export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,marketSnapshot,nowMs,env={},fetchImpl=fetch,timeoutMs=5000}={}){
- const cfg=CONFIG[provider],key=cfg&&env[cfg.env];
+ const cfg=CONFIG[provider],rawKey=cfg&&env[cfg.env];
+ const key=typeof rawKey==='string'?rawKey.trim():'';
  if(!cfg)return {status:'UNSUPPORTED_PROVIDER',provider};
- if(typeof key!=='string'||!key)return {status:'UNCONFIGURED',provider};
+ if(!key)return {status:'UNCONFIGURED',provider};
+ if(/\s|^['"]|['"]$|^Bearer /i.test(key))return {status:'INVALID_KEY_FORMAT',provider};
  if(typeof marketTicker!=='string'||!marketTicker||typeof roundId!=='string'||!roundId||
  !Number.isSafeInteger(nowMs)||nowMs<=0||!marketSnapshot||typeof marketSnapshot!=='object')
  return {status:'INVALID_INPUT',provider};
@@ -40,7 +42,13 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
  }
  try{
   const response=await fetchImpl(url,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(Math.min(15000,Math.max(1000,timeoutMs)))});
-  if(!response.ok)return {status:'PROVIDER_ERROR',provider,httpStatus:response.status};
+  if(!response.ok){
+   // Return only recognized codes. Upstream error text may echo credentials.
+   const error=await response.json().then(data=>data?.error).catch(()=>null);
+   const code=error?.code||error?.type;
+   const known=['invalid_api_key','authentication_error','insufficient_quota','model_not_found','permission_error'];
+   return {status:'PROVIDER_ERROR',provider,httpStatus:response.status,...(known.includes(code)?{errorCode:code}:{})};
+  }
   const data=await response.json();
   const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.[0]?.text:
    provider==='claude'?data?.content?.[0]?.text:data?.choices?.[0]?.message?.content;

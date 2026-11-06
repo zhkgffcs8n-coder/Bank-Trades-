@@ -41,9 +41,10 @@
    if(!response.ok)throw Error('Health unavailable');
    const data=await response.json();
    const fresh=Number.isFinite(data.omegaAgeSeconds)&&data.omegaAgeSeconds<=150;
-   const providers=fresh?(data.omegaProviderStatus||[]).map(p=>p.provider+' '+(p.httpStatus===401?'authentication rejected (401)':p.status.replace(/_/g,' ').toLowerCase())):[];
+   const providers=(data.omegaProviderStatus||[]).map(p=>p.provider+' '+(p.httpStatus===401?'authentication rejected (401)':p.status.replace(/_/g,' ').toLowerCase())+(p.errorCode?' · '+p.errorCode:''));
+   const providerCheck=data.omegaProviderCheckedAt?'Last provider check '+new Date(data.omegaProviderCheckedAt).toLocaleTimeString():null;
    const collector=data.status==='COLLECTOR_FRESH'?'Collector fresh · '+data.sampledAssetCount+' markets':'Collector freshness unverified';
-   health.textContent=[collector,fresh?'OMEGA '+data.omegaStatus.replace(/_/g,' ').toLowerCase():'OMEGA heartbeat unverified',data.omegaProvidersConfigured+' external providers configured',...providers,'Paper last action '+data.paperLastAction,'Real orders off'].join(' · ');
+   health.textContent=[collector,fresh?'OMEGA '+data.omegaStatus.replace(/_/g,' ').toLowerCase():'OMEGA heartbeat unverified',data.omegaProvidersConfigured+' external providers configured',providerCheck,...providers,'Paper last action '+data.paperLastAction,'Real orders off'].filter(Boolean).join(' · ');
   }catch{health.textContent='Research status unavailable · Real orders off'}
   finally{clearTimeout(timeout);checking=false}
  }

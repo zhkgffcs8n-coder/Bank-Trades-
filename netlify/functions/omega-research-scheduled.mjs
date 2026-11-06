@@ -66,6 +66,10 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    if(!await db.get(key,{type:'json'}))await db.setJSON(key,report);
   }
  }
+ // Keep the last actual provider check visible on runs that skip forecasts.
+ const previous=report.providerStatus?null:await db.get('omega/heartbeat',{type:'json'});
+ report.lastProviderCheckAt=report.providerStatus?new Date(nowMs).toISOString():previous?.lastProviderCheckAt||null;
+ report.providerStatus??=(previous?.providerStatus||[]).filter(entry=>configured.includes(entry.provider));
  report.paperMonitoring=paperMonitoring;
  await db.setJSON('omega/heartbeat',{...report,checkedAt:new Date(nowMs).toISOString(),expectedIntervalSeconds:60,
   coverage:'One rotating asset per minute; not every market every second',realOrdersAuthorized:false});
