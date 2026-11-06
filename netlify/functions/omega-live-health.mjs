@@ -15,6 +15,8 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   trainingSucceeded:heartbeat?.trainingSucceeded===true,expectedIntervalSeconds:60,
   omegaExternalProvidersRunning:omegaRunning,omegaLiveResearchRunning:omegaRunning,
   omegaStatus:omegaHeartbeat?.status||'NOT_VERIFIED',omegaAgeSeconds,
+  omegaReasons:Array.isArray(omegaHeartbeat?.reasons)?omegaHeartbeat.reasons:[],
+  omegaProviderStatus:Array.isArray(omegaHeartbeat?.providerStatus)?omegaHeartbeat.providerStatus.map(x=>({provider:x.provider,status:x.status,...(Number.isInteger(x.httpStatus)?{httpStatus:x.httpStatus}:{})})):[],
   omegaProvidersConfigured:omegaHeartbeat?.providersConfigured??0,
   paperLastAction:paperHeartbeat?.action||'NONE_VERIFIED',paperLastActionAtMs:paperHeartbeat?.updatedAtMs??null,
   realOrdersAuthorized:false,

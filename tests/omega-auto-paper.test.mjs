@@ -25,3 +25,10 @@ test('requires active matching contract and side-specific quotes',async()=>{
  assert.equal((await fetchOmegaLiveQuote({ticker:'BTC-ROUND',nowMs:now,fetchImpl})).yesAskDollars,.45);
  assert.equal(await fetchOmegaLiveQuote({ticker:'BAD/TICKER',nowMs:now,fetchImpl}),null);
 });
+
+test('HOLD persists trailing peak without inventing a new completed trade',async()=>{
+ const ticker=quote.ticker,values=new Map([['omega/paper/v1/'+ticker,{state:{positions:{[ticker]:{status:'OPEN',ticker,roundId:ticker,side:'UP',quantity:1,entryCostDollars:.5}},entered:{}}}]]);
+ const db={get:async k=>structuredClone(values.get(k)||null),setJSON:async(k,v)=>values.set(k,structuredClone(v))};
+ const result=await advanceOmegaPaperStored({db,ticker,roundId:ticker,quote:{...quote,yesBidDollars:.8},nowMs:now});
+ assert.equal(result.status,'PAPER_HOLD');assert.equal(values.get('omega/paper/v1/'+ticker).state.positions[ticker].peakNetDollars,.24);assert.equal(values.has('omega/paper/latest'),false);
+});

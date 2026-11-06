@@ -21,7 +21,7 @@ test('configured providers produce stored pre-settlement shadow research',async(
  const data=new Map([['latest/'+asset,sample]]);
  const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>{data.set(key,value)}};
  const r=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'a',DEEPSEEK_API_KEY:'b'},
- fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})})});
+ fetchImpl:async url=>({ok:true,json:async()=>url.includes('/markets/')?{market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}}:{choices:[{message:{content:'{"upProbability":0.6}'}}]}})});
  assert.equal(r.status,'SHADOW_RESEARCH');
  assert.equal([...data.keys()].some(x=>x.startsWith('omega/predictions/')),true);
  assert.equal(r.ordersAuthorized,false);
@@ -42,4 +42,26 @@ test('open paper positions are monitored without configured AI providers',async(
  assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
  assert.equal(data.get('omega/heartbeat').paperMonitoring.open,1);
  assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+});
+
+test('minute-old collector baseline is refreshed before provider comparison',async()=>{
+ const data=new Map([['latest/'+asset,{...sample,observedAt:now-60000}]]);
+ const db={get:async k=>data.get(k)||null,setJSON:async(k,v)=>data.set(k,v)};
+ let providerCalls=0;
+ const report=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},fetchImpl:async url=>{
+  if(url.includes('/markets/'))return {ok:true,json:async()=>({market:{ticker:sample.ticker,status:'active',yes_bid:48,yes_ask:50,no_bid:50,no_ask:52}})};
+  providerCalls++;return {ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})};
+ }});
+ assert.equal(report.status,'SHADOW_RESEARCH');assert.equal(report.baseline,.49);assert.equal(report.observedAtMs,now);assert.equal(providerCalls,2);
+});
+test('failed fresh market read skips provider spending and never relabels stale data',async()=>{
+ const data=new Map([['latest/'+asset,{...sample,observedAt:now-60000}]]);
+ const db={get:async k=>data.get(k)||null,setJSON:async(k,v)=>data.set(k,v)};
+ let calls=0;const report=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},fetchImpl:async url=>{assert.ok(url.includes('/markets/'));calls++;return {ok:false};}});
+ assert.equal(report.status,'NO_FRESH_MARKET_OBSERVATION');assert.equal(calls,1);assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+});
+test('provider failures retain safe HTTP diagnostics without response body or credentials',async()=>{
+ const data=new Map([['latest/'+asset,sample]]),db={get:async k=>data.get(k)||null,setJSON:async(k,v)=>data.set(k,v)};
+ const report=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'secret-a',DEEPSEEK_API_KEY:'secret-b'},fetchImpl:async url=>url.includes('/markets/')?{ok:true,json:async()=>({market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}})}:{ok:false,status:401,json:async()=>({secret:'must not read'})}});
+ assert.equal(report.status,'INSUFFICIENT_DATA');assert.ok(report.reasons.length);assert.equal(report.providerStatus[0].httpStatus,401);assert.equal(JSON.stringify(report).includes('secret-'),false);
 });

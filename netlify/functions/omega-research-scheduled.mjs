@@ -39,15 +39,20 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   else paperMonitoring.unpriced++;
  }
  const latest=await db.get('latest/'+asset,{type:'json'});
- const observation=selectOmegaObservation({latest,nowMs,asset});
+ let observation=selectOmegaObservation({latest,nowMs,asset});
+ let freshQuote=null;
+ if(observation&&configured.length>=2){
+  freshQuote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
+  observation=freshQuote?selectOmegaObservation({asset,nowMs,latest:{...latest,observedAt:freshQuote.asOfMs,yesBid:freshQuote.yesBidDollars,yesAsk:freshQuote.yesAskDollars,noBid:freshQuote.noBidDollars,noAsk:freshQuote.noAskDollars}}):null;
+ }
  let report;
  if(!observation)report={status:'NO_FRESH_MARKET_OBSERVATION',asset,providersConfigured:configured.length,ordersAuthorized:false};
  else if(configured.length<2)report={status:'PROVIDERS_UNCONFIGURED',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
  else{
   const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:configured});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
-   providerStatus:result.providerStatus,accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
-   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:latest.observedAt,recordedAtMs:nowMs,ordersAuthorized:false};
+   providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
+   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:nowMs,ordersAuthorized:false};
   // Paper execution is separate from research. Never submit real orders.
   const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
   if(quote){

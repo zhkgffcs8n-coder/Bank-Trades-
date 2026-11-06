@@ -20,9 +20,9 @@ export async function advanceOmegaPaperStored({db,ticker,roundId,signal,quote,no
  // A settled/expired contract cannot be priced for an exit at a fabricated bid.
  const result=advanceOmegaPaper({state,signal,quote,roundId,feesDollars,nowMs,stakeDollars:5,
   slippageDollars:.01,exitAtProfitDollars:.5,exitAtLossDollars:-.5});
- if(['PAPER_ENTRY','PAPER_EXIT'].includes(result.status)){
+ if(['PAPER_ENTRY','PAPER_EXIT','PAPER_HOLD'].includes(result.status)){
   await db.setJSON(key,{state:result.state,updatedAtMs:nowMs,lastAction:result.status});
-  await db.setJSON('omega/paper/latest',{ticker,roundId,action:result.status,updatedAtMs:nowMs,
+  if(result.status!=='PAPER_HOLD')await db.setJSON('omega/paper/latest',{ticker,roundId,action:result.status,updatedAtMs:nowMs,
    netDollars:result.netDollars??null,realOrdersAuthorized:false});
  }
  return {status:result.status,netDollars:result.netDollars??null,reason:result.reason??null,realOrdersAuthorized:false};

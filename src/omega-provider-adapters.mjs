@@ -40,7 +40,7 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
  }
  try{
   const response=await fetchImpl(url,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(Math.min(15000,Math.max(1000,timeoutMs)))});
-  if(!response.ok)return {status:'PROVIDER_ERROR',provider};
+  if(!response.ok)return {status:'PROVIDER_ERROR',provider,httpStatus:response.status};
   const data=await response.json();
   const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.[0]?.text:
    provider==='claude'?data?.content?.[0]?.text:data?.choices?.[0]?.message?.content;

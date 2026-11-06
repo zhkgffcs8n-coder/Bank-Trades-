@@ -11,7 +11,7 @@ export async function runOmegaResearchRound({marketTicker,roundId,marketSnapshot
  const outcomes=await Promise.all(requested.map(provider=>fetchOmegaResearchForecast({provider,marketTicker,roundId,marketSnapshot,nowMs,env,fetchImpl})));
  const forecasts=outcomes.filter(x=>x.status==='RESEARCH_FORECAST');
  const fusion=evaluateOmegaFusion({marketTicker,roundId,nowMs,marketBaseline,forecasts});
- return {status:fusion.status,fusion,providerStatus:outcomes.map(x=>({provider:x.provider,status:x.status})),ordersAuthorized:false};
+ return {status:fusion.status,fusion,providerStatus:outcomes.map(x=>({provider:x.provider,status:x.status,...(Number.isInteger(x.httpStatus)?{httpStatus:x.httpStatus}:{})})),ordersAuthorized:false};
 }
 export function evaluateOmegaVerifiedBatch({rounds=[],settlements=[]}={}){
  const verified=new Map();
