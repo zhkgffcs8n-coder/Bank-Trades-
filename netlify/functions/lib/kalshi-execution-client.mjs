@@ -22,10 +22,10 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
    await new Promise(resolve=>setTimeout(resolve,Math.max(100,delay)));
   }
  }
- async function pages(path,field){
+ async function pages(path,field,filters={}){
   const all=[],seen=new Set();let cursor='';
   for(let n=0;n<100;n++){
-   const query=new URLSearchParams({limit:'100',...(cursor?{cursor}:{})});
+   const query=new URLSearchParams({...filters,limit:'100',...(cursor?{cursor}:{})});
    const page=await request('GET',path+'?'+query);
    if(!Array.isArray(page[field]))throw Error('INVALID_'+field.toUpperCase());
    all.push(...page[field]);if(!page.cursor)return all;
