@@ -7,8 +7,8 @@ const eligible=(m,now)=>m?.status==='active'&&m.market_type==='binary'&&
 async function placeDemoHold(store,client,key,market,now,condition,signal=null){
  const side=signal?.action==='BUY DOWN'?'down':'up';
  const ask=Number(market[side==='up'?'yes_ask_dollars':'no_ask_dollars']);
- const order=makeOrder({ticker:market.ticker,side,action:'buy',qty:1,priceCents:Math.round(ask*100)});
- const test={status:'DEMO_HOLD_SUBMITTING',ticker:order.ticker,side,signalScore:signal?.score??null,quotedAsk:ask,id:order.client_order_id,startedAt:new Date(now).toISOString()};
+ const order=makeOrder({ticker:market.ticker,side,action:'buy',qty:1,priceCents:Math.min(99,Math.ceil(ask*100-1e-8)+(signal?.demoExtreme?2:0))});
+ const test={status:'DEMO_HOLD_SUBMITTING',ticker:order.ticker,side,attempt:signal?.attempt??1,previousUnfilled:signal?.previousUnfilled??null,signalScore:signal?.score??null,quotedAsk:ask,id:order.client_order_id,startedAt:new Date(now).toISOString()};
  if(!(await store.setJSON(key,test,condition)).modified)return;
  try{
   const submitted=await client.create(Number.isInteger(signal?.exchangeIndex)?{...order,exchange_index:signal.exchangeIndex}:order);
@@ -114,7 +114,11 @@ export async function runExtremeDemo(store,client,now=Date.now()){
  for(const [i,record] of records.entries()){
   if(record?.id&&!record.finished)await reconcileDemoHold(store,client,extremePrefix+(start.round+i),record,now);
  }
- if(round<start.round||round>=start.round+4||records[round-start.round]?.id)return;
+ if(round<start.round||round>=start.round+4)return;
+ const existing=await store.getWithMetadata(key,{type:'json'});
+ const previous=existing?.data;
+ const retry=previous?.status==='DEMO_HOLD_UNFILLED'&&previous.filled===0&&(previous.attempt??1)===1;
+ if(previous&&!retry)return;
  const quotes=await Promise.all(['KXBTC15M','KXETH15M','KXSOL15M'].map(async series=>{
   try{
    const {markets}=await client.request('GET','/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'20'}));
@@ -140,9 +144,12 @@ export async function runExtremeDemo(store,client,now=Date.now()){
   const ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
   if(!(ask>=.10&&ask<=.90&&bid>0&&ask>=bid&&ask-bid<=.05+1e-9))continue;
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance?'+new URLSearchParams({exchange_index:String(exchangeIndex),subaccount:'0'}));
-  if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+10)continue;
+  if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+12)continue;
   if(Date.parse(market.close_time)-Date.now()<120000)return;
-  await placeDemoHold(store,client,key,market,now,{onlyIfNew:true},{action:candidate.up?'BUY UP':'BUY DOWN',exchangeIndex});
+  await placeDemoHold(store,client,key,market,now,retry?{onlyIfMatch:existing.etag}:{onlyIfNew:true},{
+   action:candidate.up?'BUY UP':'BUY DOWN',exchangeIndex,demoExtreme:true,attempt:retry?2:1,
+   previousUnfilled:retry?{id:previous.id,orderId:previous.orderId,ticker:previous.ticker}:null
+  });
   return;
  }
  await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_FUNDED_ELIGIBLE_EXCHANGE',checkedAt:new Date(now).toISOString()});
