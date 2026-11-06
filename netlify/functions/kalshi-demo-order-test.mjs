@@ -28,8 +28,10 @@ export async function runDemoOrderTest(store,client,now=Date.now()){
    return;
   }
  }
- const orders=await client.pages('/trade-api/v2/portfolio/orders','orders',{ticker:test.ticker});
- const order=orders.find(o=>o.client_order_id===test.id&&o.ticker===test.ticker);
+ const orders=test.orderId?
+  [(await client.request('GET','/trade-api/v2/portfolio/orders/'+encodeURIComponent(test.orderId))).order]:
+  await client.pages('/trade-api/v2/portfolio/orders','orders',{ticker:test.ticker});
+ const order=orders.find(o=>o?.client_order_id===test.id&&o.ticker===test.ticker);
  if(!order)return;
  if(order.status==='resting'){
   await client.cancel(order);
