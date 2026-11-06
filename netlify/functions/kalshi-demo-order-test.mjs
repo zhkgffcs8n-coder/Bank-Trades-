@@ -4,9 +4,9 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {makeOrder} from '../../src/live-execution.mjs';
 
 export async function runDemoOrderTest(store,client,now=Date.now()){
- const prior=await store.get('order-test/v5',{type:'json'});
- if(prior?.exchangeCode!=='insufficient_balance')return;
- const key='order-test/v6';
+ const prior=await store.get('order-test/v6',{type:'json'});
+ if(prior?.status!=='DEMO_ORDER_TERMINAL_WITHOUT_VERIFIED_CANCEL')return;
+ const key='order-test/v7';
  let test=await store.get(key,{type:'json'});
  if(test?.finished)return;
  if(!test){
@@ -27,6 +27,16 @@ export async function runDemoOrderTest(store,client,now=Date.now()){
    await store.setJSON(key,{...test,status:/^KALSHI_HTTP_\d{3}$/.test(error.message)?'DEMO_SUBMIT_'+error.message:'DEMO_SUBMIT_OUTCOME_UNKNOWN',exchangeCode:error.exchangeCode??null});
    return;
   }
+  if(test.orderId){
+   try{
+    await client.cancel({order_id:test.orderId,ticker:test.ticker});
+    test={...test,cancelAcknowledged:true,status:'DEMO_CANCEL_ACKNOWLEDGED'};
+    await store.setJSON(key,test);
+   }catch(error){
+    await store.setJSON(key,{...test,status:/^KALSHI_HTTP_\d{3}$/.test(error.message)?'DEMO_CANCEL_'+error.message:'DEMO_CANCEL_OUTCOME_UNKNOWN'});
+    return;
+   }
+  }
  }
  const orders=test.orderId?
   [(await client.request('GET','/trade-api/v2/portfolio/orders/'+encodeURIComponent(test.orderId))).order]:
@@ -39,7 +49,7 @@ export async function runDemoOrderTest(store,client,now=Date.now()){
   if(confirmed.order?.status!=='canceled')return;
   await store.setJSON(key,{...test,finished:true,status:'DEMO_PLACEMENT_AND_CANCEL_VERIFIED',filled:confirmed.order.fill_count_fp??null});
  }else if(['canceled','executed'].includes(order.status)){
-  await store.setJSON(key,{...test,finished:true,status:'DEMO_ORDER_TERMINAL_WITHOUT_VERIFIED_CANCEL',filled:order.fill_count_fp??null});
+  await store.setJSON(key,{...test,finished:true,status:test.cancelAcknowledged&&order.status==='canceled'?'DEMO_PLACEMENT_AND_CANCEL_VERIFIED':'DEMO_ORDER_TERMINAL_WITHOUT_VERIFIED_CANCEL',filled:order.fill_count_fp??null});
  }
 }
 
