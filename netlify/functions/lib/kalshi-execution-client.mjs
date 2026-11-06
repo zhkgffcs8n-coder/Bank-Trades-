@@ -10,9 +10,17 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
  async function request(method,path,body){
   if(!path.startsWith('/trade-api/v2/')||path.includes('..'))throw Error('INVALID_PATH');
   if(method!=='GET'&&!allowWrites&&!(method==='DELETE'&&allowCancellation&&path.startsWith('/trade-api/v2/portfolio/events/orders/')))throw Error('EXCHANGE_WRITES_DISABLED');
-  const response=await fetchImpl(base+path,{method,headers:signedHeaders(credentials,method,path),redirect:'error',signal:AbortSignal.timeout(7000),...(body?{body:JSON.stringify(body)}:{})});
-  if(!response.ok)throw Error('KALSHI_HTTP_'+response.status);
-  return response.json();
+  const signal=AbortSignal.timeout(7000);
+  for(let attempt=0;;attempt++){
+   const response=await fetchImpl(base+path,{method,headers:signedHeaders(credentials,method,path),redirect:'error',signal,...(body?{body:JSON.stringify(body)}:{})});
+   if(response.ok)return response.json();
+   if(method!=='GET'||response.status!==429||attempt>=2)throw Error('KALSHI_HTTP_'+response.status);
+   const retryAfter=response.headers?.get('retry-after');
+   const delay=retryAfter==null?500*2**attempt:/^\d+$/.test(retryAfter)?Number(retryAfter)*1000:Date.parse(retryAfter)-Date.now();
+   if(!Number.isFinite(delay)||delay>2000)throw Error('KALSHI_HTTP_429');
+   await response.body?.cancel();
+   await new Promise(resolve=>setTimeout(resolve,Math.max(100,delay)));
+  }
  }
  async function pages(path,field){
   const all=[],seen=new Set();let cursor='';
@@ -25,7 +33,14 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
   }throw Error('PAGINATION_LIMIT');
  }
  return {request,pages,
-  async snapshot(){const [balance,orders,fills,positions,settlements]=await Promise.all([request('GET','/trade-api/v2/portfolio/balance'),pages('/trade-api/v2/portfolio/orders','orders'),pages('/trade-api/v2/portfolio/fills','fills'),pages('/trade-api/v2/portfolio/positions','market_positions'),pages('/trade-api/v2/portfolio/settlements','settlements')]);return {balanceCents:balance.balance,orders,fills,positions,settlements,at:Date.now(),complete:true};},
+  async snapshot(){
+   const balance=await request('GET','/trade-api/v2/portfolio/balance');
+   const orders=await pages('/trade-api/v2/portfolio/orders','orders');
+   const fills=await pages('/trade-api/v2/portfolio/fills','fills');
+   const positions=await pages('/trade-api/v2/portfolio/positions','market_positions');
+   const settlements=await pages('/trade-api/v2/portfolio/settlements','settlements');
+   return {balanceCents:balance.balance,orders,fills,positions,settlements,at:Date.now(),complete:true};
+  },
   create:body=>request('POST','/trade-api/v2/portfolio/events/orders',body),
   cancel:order=>request('DELETE','/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(order.order_id)+'?'+new URLSearchParams({market_ticker:order.ticker}))};
 }

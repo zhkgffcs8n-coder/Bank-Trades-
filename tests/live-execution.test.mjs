@@ -30,3 +30,13 @@ test('a quote that ages during persistence blocks exchange submission',async()=>
  await assert.rejects(submitIntent(x),/STALE_BEFORE_SUBMISSION/);
  assert.equal(x.stats().calls,0);
 });
+test('Kalshi rate limit retries reads but never order writes',async()=>{
+ let calls=0;
+ const client=kalshiClient(credentials,{allowWrites:true,fetchImpl:async()=>{
+  if(++calls===2)return {ok:true,json:async()=>({balance:100})};
+  return {ok:false,status:429,headers:new Headers({'retry-after':'0'})};
+ }});
+ assert.equal((await client.request('GET','/trade-api/v2/portfolio/balance')).balance,100);
+ await assert.rejects(client.create({}),/KALSHI_HTTP_429/);
+ assert.equal(calls,3);
+});
