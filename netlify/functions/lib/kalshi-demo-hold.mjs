@@ -35,6 +35,7 @@ export async function runDemoHold(store,client,now=Date.now(),loadSignals=null){
   const prior=await store.get('hold-test/v1',{type:'json'});
   if(!prior?.finished)return;
   const signals=await loadSignals();
+  now=Date.now();
   for(const signal of signals.filter(s=>qualifiesLiveEntry(s)&&Number.isFinite(s.at)&&now-s.at>=0&&now-s.at<=10000).slice(0,3)){
    if(!/^[A-Z0-9-]{4,100}$/.test(signal.ticker))continue;
    const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(signal.ticker));
