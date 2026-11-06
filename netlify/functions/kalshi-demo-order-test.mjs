@@ -4,7 +4,9 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {makeOrder} from '../../src/live-execution.mjs';
 
 export async function runDemoOrderTest(store,client,now=Date.now()){
- const key='order-test/v1';
+ const prior=await store.get('order-test/v1',{type:'json'});
+ if(prior?.status!=='DEMO_SUBMIT_KALSHI_HTTP_400')return;
+ const key='order-test/v2';
  let test=await store.get(key,{type:'json'});
  if(test?.finished)return;
  if(!test){
@@ -22,7 +24,7 @@ export async function runDemoOrderTest(store,client,now=Date.now()){
    await store.setJSON(key,test);
   }catch(error){
    // Preserve the client ID and look up the exchange result. Never retry POST.
-   await store.setJSON(key,{...test,status:/^KALSHI_HTTP_\d{3}$/.test(error.message)?'DEMO_SUBMIT_'+error.message:'DEMO_SUBMIT_OUTCOME_UNKNOWN'});
+   await store.setJSON(key,{...test,status:/^KALSHI_HTTP_\d{3}$/.test(error.message)?'DEMO_SUBMIT_'+error.message:'DEMO_SUBMIT_OUTCOME_UNKNOWN',exchangeCode:error.exchangeCode??null});
    return;
   }
  }

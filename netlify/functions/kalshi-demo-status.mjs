@@ -8,8 +8,8 @@ export default async req=>{try{
  if(req.method==='GET'){
   const uploaded=await store.get('uploaded-connection',{type:'json'});
   const result=uploaded||await store.get('connection',{type:'json'});
-  const test=await store.get('order-test/v1',{type:'json'});
-  return json({status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,filled:test.filled??null}:null});
+  const test=await store.get('order-test/v2',{type:'json'})||await store.get('order-test/v1',{type:'json'});
+  return json({status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
  }
  if(req.method!=='POST')fail(405,'Method not allowed');
  const user=await owner();

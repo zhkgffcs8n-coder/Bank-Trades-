@@ -14,7 +14,15 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
   for(let attempt=0;;attempt++){
    const response=await fetchImpl(base+path,{method,headers:signedHeaders(credentials,method,path),redirect:'error',signal,...(body?{body:JSON.stringify(body)}:{})});
    if(response.ok)return response.json();
-   if(method!=='GET'||response.status!==429||attempt>=2)throw Error('KALSHI_HTTP_'+response.status);
+   if(method!=='GET'||response.status!==429||attempt>=2){
+    const error=Error('KALSHI_HTTP_'+response.status);
+    if(environment==='demo'&&method==='POST'){
+     const data=await response.json().catch(()=>null);
+     const code=data?.error?.code;
+     if(typeof code==='string'&&/^[a-z][a-z_]{2,45}$/.test(code))error.exchangeCode=code;
+    }
+    throw error;
+   }
    const retryAfter=response.headers?.get('retry-after');
    const delay=retryAfter==null?500*2**attempt:/^\d+$/.test(retryAfter)?Number(retryAfter)*1000:Date.parse(retryAfter)-Date.now();
    if(!Number.isFinite(delay)||delay>2000)throw Error('KALSHI_HTTP_429');
