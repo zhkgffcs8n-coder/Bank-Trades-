@@ -1,3 +1,4 @@
+import {releaseStatus} from './lib/kalshi-release-gate.mjs';
 // Owner-only live execution safety state. Fail closed: no order execution is implemented.
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
@@ -7,7 +8,7 @@ export default async request=>{try{
  const user=await owner();
  if(request.method==='GET'){
   const saved=await store().get(key(user),{type:'json'});
-  return json({enabled:false,emergencyStopped:saved?.emergencyStopped!==false,
+  return json({...releaseStatus(),enabled:false,emergencyStopped:saved?.emergencyStopped!==false,
    maxOrderDollars:saved?.maxOrderDollars??5,maxDailyDollars:saved?.maxDailyDollars??20,
    reason:'Live order execution is not implemented or authorized. Safety settings alone cannot enable trading.'});
  }
@@ -15,6 +16,8 @@ export default async request=>{try{
  if(request.headers.get('origin')!==new URL(request.url).origin)fail(403,'Origin mismatch');
  if(!request.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const body=await request.json();
+ if(body?.action==='start')return json({...releaseStatus(),error:'Release checks failed; live trading remains disabled'},409);
+ if(body?.action==='stop'){const previous=await store().get(key(user),{type:'json'})||{};await store().setJSON(key(user),{...previous,emergencyStopped:true,updatedAt:Date.now()});return json({...releaseStatus(),stopped:true,cancelled:false});}
  if(body?.action!=='emergency-stop'&&body?.action!=='configure')fail(400,'Invalid action');
  const previous=await store().get(key(user),{type:'json'})||{};
  if(body.action==='emergency-stop'){

@@ -1,3 +1,4 @@
+import {releaseStatus} from './lib/kalshi-release-gate.mjs';
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {assessCollectorHealth} from '../../src/collector-health.mjs';
@@ -29,7 +30,7 @@ export default async function(req){
    privateCredentialVaultReady:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
    emergencyStopVerified:false
   };
-  return json({mode:'LIVE DISABLED',canTrade:false,canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
+  return json({...releaseStatus(),mode:'LIVE DISABLED',canTrade:false,canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
    checks,runnerAgeSeconds:runnerAge,collectorAgeSeconds:collectorHealth.ageSeconds,
    proposedLimits:{maxPositionUsd:1,maxDailyLossUsd:5,maxOpenPositions:1},
    note:'Owner-only encrypted credential enrollment is available only when the server encryption key is configured. No real orders are enabled. A quoted bid does not guarantee a fill.'});
