@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {initialState,makeOrder,reconcile,exitAction,submitIntent,emergencyStop,releaseFailures,validateLimits} from '../src/live-execution.mjs';
+import {qualifiesLiveEntry,initialState,makeOrder,reconcile,exitAction,submitIntent,emergencyStop,releaseFailures,validateLimits} from '../src/live-execution.mjs';
 import {releaseStatus} from '../netlify/functions/lib/kalshi-release-gate.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {generateKeyPairSync,verify,constants} from 'node:crypto';
@@ -39,4 +39,13 @@ test('Kalshi rate limit retries reads but never order writes',async()=>{
  assert.equal((await client.request('GET','/trade-api/v2/portfolio/balance')).balance,100);
  await assert.rejects(client.create({}),/KALSHI_HTTP_429/);
  assert.equal(calls,3);
+});
+
+test('live modes only adjust screening of already qualified entries',()=>{
+ const signal={action:'BUY DOWN',score:65,roundAssessment:{entryQualified:true},entryGate:{finalAction:'BUY DOWN'}};
+ assert.equal(qualifiesLiveEntry(signal,'easy'),false);
+ assert.equal(qualifiesLiveEntry(signal),true);
+ assert.equal(qualifiesLiveEntry({...signal,score:55},'balanced'),false);
+ assert.equal(qualifiesLiveEntry({...signal,score:55},'extreme'),true);
+ assert.equal(qualifiesLiveEntry({...signal,entryGate:{finalAction:'WAIT'}},'extreme'),false);
 });

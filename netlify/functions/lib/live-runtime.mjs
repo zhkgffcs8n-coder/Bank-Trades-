@@ -4,6 +4,7 @@ import {liveRepository} from './live-state.mjs';
 import {openKalshiCredentials} from './kalshi-credential-envelope.mjs';
 import {kalshiClient} from './kalshi-execution-client.mjs';
 import {releaseStatus} from './kalshi-release-gate.mjs';
+import {qualifiesLiveEntry} from '../../../src/live-execution.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
 import sharedSignals from '../shared-signals.mjs';
 export const liveStore=()=>getStore({name:'bank-trades-live-execution-v1',consistency:'strong'});
@@ -22,7 +23,7 @@ export async function runtime(userId){
   if(!releaseStatus().canTrade&&!record.state.intents.length)return {status:'RELEASE_BLOCKED',...releaseStatus()};
   const exchange=await client();
   const result=await runLiveCycle({repo,client:exchange,canTrade:releaseStatus().canTrade,
-   signals:async()=>{const res=await sharedSignals(new Request('https://internal/shared-signals'));if(!res.ok)throw Error('SIGNAL_SERVICE_FAILED');const payload=await res.json();return (payload.results||[]).filter(s=>s.roundAssessment?.entryQualified===true&&s.entryGate?.finalAction===s.action);},
+   signals:async()=>{const res=await sharedSignals(new Request('https://internal/shared-signals'));if(!res.ok)throw Error('SIGNAL_SERVICE_FAILED');const payload=await res.json();return (payload.results||[]).filter(s=>qualifiesLiveEntry(s,record.state.entryMode));},
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
     if(m?.ticker!==ticker||m.status!=='active')return null;

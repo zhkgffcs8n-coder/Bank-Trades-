@@ -5,6 +5,12 @@ export const REQUIRED_CHECKS=['authentication','orderLifecycle','partialFills','
 export function releaseFailures(evidence,commit,now=Date.now()){
  return REQUIRED_CHECKS.filter(k=>!commit||evidence?.commit!==commit||evidence?.checks?.[k]!==true||!Number.isFinite(evidence?.at)||now-evidence.at<0||now-evidence.at>3600000);
 }
+export const ENTRY_MODES=Object.freeze({easy:70,balanced:60,extreme:0});
+export function qualifiesLiveEntry(signal,mode='balanced'){
+ return Object.hasOwn(ENTRY_MODES,mode)&&signal.roundAssessment?.entryQualified===true&&
+  ['BUY UP','BUY DOWN'].includes(signal.action)&&signal.entryGate?.finalAction===signal.action&&
+  Number.isFinite(signal.score)&&signal.score>=ENTRY_MODES[mode];
+}
 export function initialState(){return {enabled:false,stopped:true,intents:[],limits:{orderCents:100,dailyCents:500,lossCents:200,maxPositions:1,profitPct:15,stopPct:8,trailPct:4,trailActivationPct:5},spent:{}};}
 export function validateLimits(l){
  for(const key of ['orderCents','dailyCents','lossCents','maxPositions','profitPct','stopPct'])if(!Number.isSafeInteger(l?.[key])||l[key]<=0)throw Error('INVALID_LIMIT_'+key);
