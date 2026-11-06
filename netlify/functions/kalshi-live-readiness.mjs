@@ -26,12 +26,12 @@ export default async function(req){
    ledgerReconciled:!!audit&&Number.isFinite(cashDifference)&&Math.abs(cashDifference)<0.01,
    orderExecutionVerified:false,
    fillReconciliationVerified:false,
-   privateCredentialVaultReady:false,
+   privateCredentialVaultReady:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
    emergencyStopVerified:false
   };
-  return json({mode:'LIVE DISABLED',canTrade:false,canAcceptApiKeys:false,
+  return json({mode:'LIVE DISABLED',canTrade:false,canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
    checks,runnerAgeSeconds:runnerAge,collectorAgeSeconds:collectorHealth.ageSeconds,
    proposedLimits:{maxPositionUsd:1,maxDailyLossUsd:5,maxOpenPositions:1},
-   note:'No real orders or API key uploads are enabled. A quoted bid does not guarantee a fill.'});
+   note:'Owner-only encrypted credential enrollment is available only when the server encryption key is configured. No real orders are enabled. A quoted bid does not guarantee a fill.'});
  }catch(e){return errorResponse(e)}
 }
