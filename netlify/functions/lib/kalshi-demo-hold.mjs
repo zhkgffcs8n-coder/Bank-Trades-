@@ -59,6 +59,10 @@ export async function runDemoHold(store,client,now=Date.now(),loadSignals=null){
   await placeDemoHold(store,client,key,market,now,{onlyIfNew:true});
   return;
  }
+ await reconcileDemoHold(store,client,key,test,now);
+}
+
+async function reconcileDemoHold(store,client,key,test,now){
  const orders=test.orderId?
   [(await client.request('GET','/trade-api/v2/portfolio/orders/'+encodeURIComponent(test.orderId))).order]:
   await client.pages('/trade-api/v2/portfolio/orders','orders',{ticker:test.ticker});
@@ -93,4 +97,41 @@ export async function runDemoHold(store,client,now=Date.now(),loadSignals=null){
   filled:quantity,positionReconciled:matched,entryCost:cost,markPnl:mark,
   realizedPnl:outcome?(outcome===(down?'no':'yes')?quantity:0)-cost:null,finished:Boolean(outcome&&matched),
   checkedAt:new Date(now).toISOString()});
+}
+
+
+const extremePrefix='extreme-demo/v1/';
+export async function runExtremeDemo(store,client,now=Date.now()){
+ const round=Math.floor(now/900000),startKey=extremePrefix+'start';
+ let start=await store.get(startKey,{type:'json'});
+ if(!start){
+  await store.setJSON(startKey,{round},{onlyIfNew:true});
+  start=await store.get(startKey,{type:'json'});
+ }
+ if(!Number.isSafeInteger(start?.round))return;
+ const key=extremePrefix+round;
+ const records=await Promise.all(Array.from({length:4},(_,i)=>store.get(extremePrefix+(start.round+i),{type:'json'})));
+ for(const [i,record] of records.entries()){
+  if(record?.id&&!record.finished)await reconcileDemoHold(store,client,extremePrefix+(start.round+i),record,now);
+ }
+ if(round<start.round||round>=start.round+4||records[round-start.round]?.id)return;
+ const quotes=await Promise.all(['KXBTC15M','KXETH15M','KXSOL15M'].map(async series=>{
+  try{
+   const {markets}=await client.request('GET','/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'20'}));
+   return Array.isArray(markets)?markets:[];
+  }catch{return [];}
+ }));
+ const candidates=quotes.flat().filter(m=>eligible(m,now)&&Math.floor((Date.parse(m.close_time)-1)/900000)===round&&Date.parse(m.close_time)-now>=120000)
+  .map(market=>{
+   const up=(Number(market.yes_ask_dollars)+Number(market.yes_bid_dollars))/2>=.5;
+   const side=up?'yes':'no',ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
+   return {market,up,ask,bid,spread:ask-bid};
+  }).filter(x=>x.ask>=.10&&x.ask<=.90&&x.bid>0&&x.spread>=0&&x.spread<=.05+1e-9)
+  .sort((a,b)=>a.spread-b.spread||a.ask-b.ask);
+ if(!candidates.length){
+  await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_ELIGIBLE_QUOTE',checkedAt:new Date(now).toISOString()});
+  return;
+ }
+ const {market,up}=candidates[0];
+ await placeDemoHold(store,client,key,market,now,{onlyIfNew:true},{action:up?'BUY UP':'BUY DOWN'});
 }

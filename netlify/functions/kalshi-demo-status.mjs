@@ -16,7 +16,14 @@ export default async req=>{try{
   const [lastRun,ledger]=await Promise.all(['last-run','ledger'].map(key=>paper.get(key,{type:'json'}).catch(()=>null)));
   const extreme=(ledger?.trades||[]).filter(trade=>trade.extremeCoverage===true);
   const resolved=extreme.filter(trade=>['CLOSED','SETTLED'].includes(trade.status)&&Number.isFinite(trade.pnl));
-  return json({extremePaper:{running:lastRun?.running===true,checkedAt:lastRun?.at??null,lastRound:lastRun?.extremeCoverage??null,
+  const start=await store.get('extreme-demo/v1/start',{type:'json'});
+  const demoRounds=Number.isSafeInteger(start?.round)?await Promise.all(Array.from({length:4},async(_,i)=>{
+   const round=start.round+i,t=await store.get('extreme-demo/v1/'+round,{type:'json'});
+   return {round,status:t?.status||'NO_ORDER_RECORDED',side:t?.side??null,filled:t?.filled??null,
+    entryCost:t?.entryCost??null,markPnl:t?.markPnl??null,realizedPnl:t?.realizedPnl??null,exchangeCode:t?.exchangeCode??null};
+  })):[];
+  const lastScan=await store.get('extreme-demo/v1/last-scan',{type:'json'});
+  return json({extremeDemo:{rounds:demoRounds,lastScan},extremePaper:{running:lastRun?.running===true,checkedAt:lastRun?.at??null,lastRound:lastRun?.extremeCoverage??null,
    entries:extreme.length,resolved:resolved.length,pnlBeforeFees:Math.round(resolved.reduce((sum,trade)=>sum+trade.pnl,0)*100)/100},strategyTest:strategy?{status:strategy.status,side:strategy.side,signalScore:strategy.signalScore,filled:strategy.filled??null,entryCost:strategy.entryCost??null,positionReconciled:strategy.positionReconciled??null,realizedPnl:strategy.realizedPnl??null}:{status:'WAITING_FOR_SETTLEMENT_OR_QUALIFIED_SIGNAL'},holdTest:hold?{status:hold.status,filled:hold.filled??null,entryCost:hold.entryCost??null,positionReconciled:hold.positionReconciled??null,markPnl:hold.markPnl??null,realizedPnl:hold.realizedPnl??null,checkedAt:hold.checkedAt??null,exchangeCode:hold.exchangeCode??null}:null,status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?8:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
  }
  if(req.method!=='POST')fail(405,'Method not allowed');

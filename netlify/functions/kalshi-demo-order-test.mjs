@@ -1,5 +1,5 @@
 import sharedSignals from './shared-signals.mjs';
-import {runDemoHold} from './lib/kalshi-demo-hold.mjs';
+import {runDemoHold,runExtremeDemo} from './lib/kalshi-demo-hold.mjs';
 import {getStore} from '@netlify/blobs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
@@ -65,6 +65,7 @@ export default async()=>{
  const credentials=openKalshiCredentials({userId:'demo-'+process.env.KALSHI_LIVE_OWNER_ID,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
  const client=kalshiClient(credentials,{environment:'demo',allowWrites:true});
  await runDemoOrderTest(store,client);
+ await runExtremeDemo(store,client);
  await runDemoHold(store,client);
  await runDemoHold(store,client,Date.now(),async()=>{
   const response=await sharedSignals(new Request('https://internal/shared-signals'));
