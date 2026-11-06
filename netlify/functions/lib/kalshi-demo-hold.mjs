@@ -11,7 +11,7 @@ async function placeDemoHold(store,client,key,market,now,condition,signal=null){
  const test={status:'DEMO_HOLD_SUBMITTING',ticker:order.ticker,side,signalScore:signal?.score??null,quotedAsk:ask,id:order.client_order_id,startedAt:new Date(now).toISOString()};
  if(!(await store.setJSON(key,test,condition)).modified)return;
  try{
-  const submitted=await client.create(order);
+  const submitted=await client.create(Number.isInteger(signal?.exchangeIndex)?{...order,exchange_index:signal.exchangeIndex}:order);
   await store.setJSON(key,{...test,orderId:submitted.order_id,status:'DEMO_HOLD_SUBMITTED'});
  }catch(error){
   await store.setJSON(key,{...test,status:'DEMO_HOLD_SUBMISSION_UNCONFIRMED',exchangeCode:error.exchangeCode??null});
@@ -132,6 +132,18 @@ export async function runExtremeDemo(store,client,now=Date.now()){
   await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_ELIGIBLE_QUOTE',checkedAt:new Date(now).toISOString()});
   return;
  }
- const {market,up}=candidates[0];
- await placeDemoHold(store,client,key,market,now,{onlyIfNew:true},{action:up?'BUY UP':'BUY DOWN'});
+ for(const candidate of candidates.slice(0,3)){
+  const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(candidate.market.ticker));
+  const exchangeIndex=market?.exchange_index;
+  if(market?.ticker!==candidate.market.ticker||!eligible(market,Date.now())||!Number.isInteger(exchangeIndex)||exchangeIndex<0)continue;
+  const side=candidate.up?'yes':'no';
+  const ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
+  if(!(ask>=.10&&ask<=.90&&bid>0&&ask>=bid&&ask-bid<=.05+1e-9))continue;
+  const balance=await client.request('GET','/trade-api/v2/portfolio/balance?'+new URLSearchParams({exchange_index:String(exchangeIndex),subaccount:'0'}));
+  if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+10)continue;
+  if(Date.parse(market.close_time)-Date.now()<120000)return;
+  await placeDemoHold(store,client,key,market,now,{onlyIfNew:true},{action:candidate.up?'BUY UP':'BUY DOWN',exchangeIndex});
+  return;
+ }
+ await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_FUNDED_ELIGIBLE_EXCHANGE',checkedAt:new Date(now).toISOString()});
 }
