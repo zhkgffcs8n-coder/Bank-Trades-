@@ -23,7 +23,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,now=Da
    // exchange/order failure. Do not open new exposure or disable future checks.
    if(!quote||quote.ticker!==p.ticker||!Number.isFinite(quote.at)||Date.now()-quote.at<0||Date.now()-quote.at>10000||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
    state.peaks??={};state.peaks[p.ticker]=Math.max(state.peaks[p.ticker]||p.entryCents,quote[p.side+'Bid']);await persist(state);
-   const reason=exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct});
+   const reason=exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct,trailPct:state.limits.trailPct,trailActivationPct:state.limits.trailActivationPct});
    if(reason||risk.dailyLossCents+risk.openCostCents>=state.limits.lossCents||quote.expiresAt-Date.now()<30000){
     const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal:{ticker:p.ticker,at:Date.now()},quote,action:'sell',position:p});
     reconcile(state,await client.snapshot());await persist(state);return {status:'EXIT_SUBMITTED',reason:reason||'RISK_OR_EXPIRY',id:intent.id};

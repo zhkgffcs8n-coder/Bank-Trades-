@@ -5,9 +5,10 @@ export const REQUIRED_CHECKS=['authentication','orderLifecycle','partialFills','
 export function releaseFailures(evidence,commit,now=Date.now()){
  return REQUIRED_CHECKS.filter(k=>!commit||evidence?.commit!==commit||evidence?.checks?.[k]!==true||!Number.isFinite(evidence?.at)||now-evidence.at<0||now-evidence.at>3600000);
 }
-export function initialState(){return {enabled:false,stopped:true,intents:[],limits:{orderCents:100,dailyCents:500,lossCents:200,maxPositions:1,profitPct:15,stopPct:8},spent:{}};}
+export function initialState(){return {enabled:false,stopped:true,intents:[],limits:{orderCents:100,dailyCents:500,lossCents:200,maxPositions:1,profitPct:15,stopPct:8,trailPct:4,trailActivationPct:5},spent:{}};}
 export function validateLimits(l){
  for(const key of ['orderCents','dailyCents','lossCents','maxPositions','profitPct','stopPct'])if(!Number.isSafeInteger(l?.[key])||l[key]<=0)throw Error('INVALID_LIMIT_'+key);
+ for(const key of ['trailPct','trailActivationPct'])if(l[key]!==undefined&&(!Number.isSafeInteger(l[key])||l[key]<1||l[key]>100))throw Error('INVALID_LIMIT_'+key);
  if(l.orderCents>l.dailyCents||l.dailyCents>10000||l.lossCents>l.dailyCents||l.maxPositions>8||l.profitPct>100||l.stopPct>100)throw Error('LIMIT_OUT_OF_RANGE');return l;
 }
 export function makeOrder({ticker,side,action,qty,priceCents,id=randomUUID()}){
@@ -51,10 +52,10 @@ export function reconcile(state,snapshot,now=Date.now()){
  state.evidence={orders:[...orders.values()].filter(o=>ids.has(o.client_order_id)&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))};
  return {positions,orders,fills};
 }
-export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,stopPct}){
+export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,stopPct,trailPct=4,trailActivationPct=5}){
  if(![entryCents,bidCents,peakCents,profitPct,stopPct].every(Number.isFinite)||entryCents<=0||bidCents<=0)return null;
  const roi=(bidCents-entryCents)/entryCents*100;
- return roi<=-stopPct?'STOP_LOSS':roi>=profitPct?'TAKE_PROFIT':peakCents>=entryCents*1.05&&bidCents<=peakCents*.96?'TRAILING_EXIT':null;
+ return roi<=-stopPct?'STOP_LOSS':roi>=profitPct?'TAKE_PROFIT':peakCents>=entryCents*(1+trailActivationPct/100)&&bidCents<=peakCents*(1-trailPct/100)?'TRAILING_EXIT':null;
 }
 // persist must use a compare-and-swap transaction. Never retry a timed-out POST.
 export async function submitIntent({state,client,persist,checkStopped,snapshot,signal,quote,action='buy',position,now=Date.now()}){
@@ -78,7 +79,7 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  if(action==='buy'&&risk.dailyLossCents+risk.openCostCents+reserve>state.limits.lossCents)throw Error('DAILY_LOSS_LIMIT');
  if(action==='buy'&&quote.expiresAt-now<75000)throw Error('LATE_ENTRY');
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
- if(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5)throw Error('INVALID_SPREAD');
+ if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
  if(action==='buy'&&(reserve>state.limits.orderCents||reserve+(state.spent[day]||0)>state.limits.dailyCents||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
  // Conservative budget includes a 10-cent per-contract fee reserve and is never released on retries.
  const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};

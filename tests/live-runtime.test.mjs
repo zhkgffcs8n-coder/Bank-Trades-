@@ -39,3 +39,17 @@ test('stale or mismatched exit quote cannot update peaks or submit an order',asy
 
 // Release gating must not be defeated by browser or deployment environment flags.
 test('production release gate stays closed without exchange certification',async()=>{const {releaseStatus,RELEASE_BLOCKERS}=await import('../netlify/functions/lib/kalshi-release-gate.mjs');const result=releaseStatus();assert.equal(result.canTrade,false);assert.equal(result.liveOrdersEnabled,false);assert.equal(result.failures.length,7);assert.deepEqual(result.failures,[...RELEASE_BLOCKERS]);});
+
+test('wide spreads block entry but never suppress a reduce-only risk exit',async()=>{
+ const {repo}=await started(),client=exchange();
+ await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
+ const result=await runLiveCycle({repo,client,signals,quoteFor:async()=>({...quote(30),upAsk:70}),canTrade:true});
+ assert.equal(result.reason,'STOP_LOSS');assert.equal(client.count(),2);assert.deepEqual((await client.snapshot()).positions,[]);
+});
+test('trailing thresholds are configurable and invalid limits are rejected',async()=>{
+ const {exitAction,validateLimits}=await import('../src/live-execution.mjs');
+ const p={entryCents:50,peakCents:60,bidCents:57,profitPct:50,stopPct:10};
+ assert.equal(exitAction({...p,trailPct:4,trailActivationPct:5}),'TRAILING_EXIT');
+ assert.equal(exitAction({...p,trailPct:10,trailActivationPct:5}),null);
+ assert.throws(()=>validateLimits({...initialState().limits,trailPct:-1}),/INVALID_LIMIT/);
+});

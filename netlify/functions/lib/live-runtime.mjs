@@ -13,6 +13,7 @@ export async function runtime(userId){
  async function client(){
   const record=await getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'}).get('credentials/'+user.id,{type:'json'});
   if(!record?.envelope)throw Error('KALSHI_CREDENTIALS_NOT_CONNECTED');
+  if(record.securityVersion!==2)throw Error('CREDENTIAL_ROTATION_REQUIRED');
   const credentials=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
   return kalshiClient(credentials,{allowWrites:releaseStatus().canTrade,allowCancellation:true});
  }

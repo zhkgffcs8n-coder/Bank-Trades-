@@ -12,12 +12,10 @@ export default async req=>{
  // Keys are chronological; listing only the first page eventually hides new samples.
  // Scan bounded pages and keep the most recent four hours, never the oldest page.
  const cutoff=Date.now()-4*60*60*1000;
- const keys=[];let cursor,hasMore=false;
- for(let page=0;page<20;page++){
-  const listed=await db.list({prefix:'samples/'+asset+'/',limit:1000,...(cursor?{cursor}:{})});
+ const keys=[];let hasMore=false,pages=0;
+ for await(const listed of db.list({prefix:'samples/'+asset+'/',paginate:true})){
+  if(pages++===20){hasMore=true;break;}
   keys.push(...listed.blobs.filter(b=>sampleTimestampFromKey(b.key,asset)>=cutoff).map(b=>b.key));
-  cursor=listed.cursor;hasMore=!!cursor;
-  if(!cursor)break;
  }
  // A 20-page bounded scan may stop before the newest chronological archive
  // keys. Recover recent samples from the collector's small rolling cache, but

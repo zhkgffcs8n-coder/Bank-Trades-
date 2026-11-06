@@ -1,3 +1,4 @@
+import {blobWindow} from '../../src/blob-window.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
@@ -26,7 +27,8 @@ export default async()=>{
   collection.researchFailures++;
   if(collection.researchErrors.length<16)collection.researchErrors.push({scope,asset,error:String(error).slice(0,160)});
  };
- await db.setJSON('collector/heartbeat',{startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
+ const previousHeartbeat=await db.get('collector/heartbeat',{type:'json'});
+ await db.setJSON('collector/heartbeat',{...previousHeartbeat,startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
@@ -161,7 +163,7 @@ export default async()=>{
   // function runtime or starving new contracts behind older pending keys.
   let model=await db.get('training/model',{type:'json'})||initialModel();
   const assetModels={};
-  await scanBlobPage(db,{prefix:'pending/',cursorKey:'scan-cursors/pending-settlements-v1',limit:150},async item=>{
+  await scanBlobPage(db,{prefix:'pending/',cursorKey:'scan-cursors/pending-settlements-v1',limit:4},async item=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec?.ticker||!Number.isFinite(rec.expiresAt)||rec.expiresAt>now-60000)return;
    const labelKey='outcomes/'+rec.ticker;
@@ -234,7 +236,7 @@ export default async()=>{
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
    // Advance through bounded pages; old unresolved rows cannot starve new contracts.
-   await scanBlobPage(db,{prefix:'signal-observations/v1/',cursorKey:'scan-cursors/signal-observations-v1',limit:250},async item=>{
+   await scanBlobPage(db,{prefix:'signal-observations/v1/',cursorKey:'scan-cursors/signal-observations-v1',limit:8},async item=>{
     const rec=await db.get(item.key,{type:'json'});
     if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)return;
     const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
@@ -248,7 +250,7 @@ export default async()=>{
     };
     await db.setJSON(item.key,rec);
    });
-   const listing=await db.list({prefix:'signal-observations/v1/',limit:1000});
+   const listing=await blobWindow(db,{prefix:'signal-observations/v1/',limit:40});
    const observations=(await Promise.all(listing.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
    const resolved=observations.filter(x=>x.status==='RESOLVED'&&x.counterfactual);
    const summary={at:now,version:1,observed:observations.length,resolved:resolved.length,pending:observations.length-resolved.length,truncated:Boolean(listing.cursor),scope:listing.cursor?'FIRST_PAGE_ONLY':'ALL_OBSERVED',
@@ -271,7 +273,7 @@ export default async()=>{
   }catch(e){researchFailure('signal-outcome-scoring',e);console.warn('Signal outcome comparison unavailable',String(e))}
   // Score the shadow brain only after official settlement. Never rewrite its earlier decision.
   try{
-   await scanBlobPage(db,{prefix:'primal-brain/shadow/v1/',cursorKey:'scan-cursors/primal-brain-v1',limit:200},async item=>{
+   await scanBlobPage(db,{prefix:'primal-brain/shadow/v1/',cursorKey:'scan-cursors/primal-brain-v1',limit:8},async item=>{
     const row=await db.get(item.key,{type:'json'});
     if(!row||row.status!=='PENDING'||row.expiresAt>now-60000)return;
     const outcome=await db.get('outcomes/'+row.ticker,{type:'json'});
@@ -286,7 +288,7 @@ export default async()=>{
    });
   }catch(e){researchFailure('primal-shadow-scoring',e);console.warn('Primal shadow settlement scoring unavailable',String(e))}
   // Resolve the same observed contracts for both strategies using official finalized outcomes.
-  await scanBlobPage(db,{prefix:'comparison/v1/',cursorKey:'scan-cursors/comparison-v1',limit:250},async item=>{
+  await scanBlobPage(db,{prefix:'comparison/v1/',cursorKey:'scan-cursors/comparison-v1',limit:8},async item=>{
    const rec=await db.get(item.key,{type:'json'});
    if(!rec||rec.status!=='PENDING'||rec.expiresAt>now-60000)return;
    const outcome=await db.get('outcomes/'+rec.ticker,{type:'json'});
@@ -303,7 +305,7 @@ export default async()=>{
    await db.setJSON(item.key,rec);
   });
   // Persist a transparent side-by-side report; one hypothetical contract per BUY.
-  const all=await db.list({prefix:'comparison/v1/',limit:1000});
+  const all=await blobWindow(db,{prefix:'comparison/v1/',limit:40});
   const rows=(await Promise.all(all.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
   // Legacy RESOLVED labels without official provenance are not evidence of wins,
   // losses, lessons, or a better paper gate. Quarantine contradictory tickers.
@@ -324,7 +326,7 @@ export default async()=>{
   // Settle only frozen, late-window paired predictions against independently
   // verified official binary outcomes. Separate resolved keys prevent recounting.
   try{
-   await scanBlobPage(db,{prefix:'paired-shadow/pending/v1/',cursorKey:'scan-cursors/paired-shadow-v1',limit:250},async blob=>{
+   await scanBlobPage(db,{prefix:'paired-shadow/pending/v1/',cursorKey:'scan-cursors/paired-shadow-v1',limit:8},async blob=>{
     const row=await db.get(blob.key,{type:'json'});
     if(!row||!Number.isFinite(row.expiresAt)||row.expiresAt>now-60000)return;
     const resolvedKey='paired-shadow/resolved/v1/'+row.ticker;

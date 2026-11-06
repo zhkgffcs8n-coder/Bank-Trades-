@@ -10,7 +10,7 @@ const validUser=id=>typeof id==='string'&&/^[a-zA-Z0-9_-]{8,128}$/.test(id);
 export function sealKalshiCredentials({userId,keyId,privateKeyPem,secret}={}){
  if(!validUser(userId))throw new Error('Invalid account identifier');
  if(typeof keyId!=='string'||keyId.length<8||keyId.length>256||!/^[a-zA-Z0-9_-]+$/.test(keyId))throw new Error('Invalid Kalshi key identifier');
- if(typeof privateKeyPem!=='string'||privateKeyPem.length>16000||!privateKeyPem.includes('-----BEGIN PRIVATE KEY-----'))throw new Error('Invalid private key format');
+ if(typeof privateKeyPem!=='string'||privateKeyPem.length>16000||!/^-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(privateKeyPem.trim()))throw new Error('Invalid private key format');
  const iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',keyFromEnv(secret),iv);
  cipher.setAAD(Buffer.from('kalshi:'+userId+':v'+VERSION));
  const encrypted=Buffer.concat([cipher.update(JSON.stringify({keyId,privateKeyPem}),'utf8'),cipher.final()]);
