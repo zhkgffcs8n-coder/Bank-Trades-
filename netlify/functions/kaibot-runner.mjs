@@ -136,7 +136,9 @@ export default async()=>{
  if(!state?.running){ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',{at:now,running:false});return new Response(null,{status:204});}
  const globalModel=await hdb.get('training/model',{type:'json'});
  const research={model:globalModel,status:training};
+ const round=Math.floor(now/900000);
  const roundAudit={at:now,running:true,entriesPaused:entryPaused,markets:{}};
+ let extremeCandidate=null;
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
@@ -177,6 +179,12 @@ export default async()=>{
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
+    // Late-round coverage experiment uses one simulated contract across all markets.
+    const up=(yesAsk+yesBid)>=100,ask=up?yesAsk:noAsk,bid=up?yesBid:noBid,spread=ask-bid;
+    if(!previous.length&&m._e-now<=300000&&ask>=10&&ask<=90&&bid>0&&spread<=5&&
+     (!extremeCandidate||spread<extremeCandidate.spread)){
+     extremeCandidate={asset,ticker:m.ticker,side:up?'up':'down',ask,bid,spread,expiresAt:m._e};
+    }
     roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Unqualified signal; research observation retained',signal:signal.action};
     continue;
    }
@@ -190,6 +198,22 @@ export default async()=>{
    roundAudit.markets[asset]={status:'ENTERED',ticker:m.ticker,side,ask,entryBasis,entries:previous.length+1};
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
+ }
+ const enteredRound=ledger.trades.some(t=>Math.floor(Number(t.at)/900000)===round);
+ roundAudit.extremeCoverage={round,status:entryPaused?'PAUSED':enteredRound?'ALREADY_ENTERED':'NO_ELIGIBLE_QUOTE'};
+ if(!entryPaused&&!enteredRound&&extremeCandidate&&Math.floor(Date.now()/900000)===round&&extremeCandidate.expiresAt-Date.now()>=120000){
+  const {asset,ticker,side,ask,bid,expiresAt}=extremeCandidate;
+  const cost=ask/100;
+  if(ledger.cash>=cost){
+   const reservation=await s.setJSON('extreme-round/v1/'+round,{ticker,at:now},{onlyIfNew:true});
+   if(reservation.modified){
+    ledger.cash=Math.round((ledger.cash-cost)*100)/100;
+    ledger.trades.push({id:'extreme_'+round,asset,ticker,side,qty:1,ask,cost,at:now,status:'OPEN',
+     source:'SERVER KAIBOT PAPER',entryBasis:'UNVALIDATED QUOTE-BASED PAPER TEST',extremeCoverage:true,
+     secondsToExpiryAtEntry:(expiresAt-now)/1000,entryQuote:side==='up'?{yesAsk:ask,yesBid:bid}:{noAsk:ask,noBid:bid}});
+    roundAudit.extremeCoverage={round,status:'ENTERED',asset,side,ask};
+   }else roundAudit.extremeCoverage.status='ROUND_ALREADY_RESERVED';
+  }else roundAudit.extremeCoverage.status='INSUFFICIENT_VIRTUAL_CASH';
  }
  ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',roundAudit);
  return new Response(null,{status:204});
