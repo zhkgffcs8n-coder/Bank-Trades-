@@ -21,7 +21,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,now=Da
    const quote=await safeQuote(quoteFor,p.ticker);
    // Missing executable exit liquidity is a degraded monitoring state, not an
    // exchange/order failure. Do not open new exposure or disable future checks.
-   if(!quote||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
+   if(!quote||quote.ticker!==p.ticker||!Number.isFinite(quote.at)||Date.now()-quote.at<0||Date.now()-quote.at>10000||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
    state.peaks??={};state.peaks[p.ticker]=Math.max(state.peaks[p.ticker]||p.entryCents,quote[p.side+'Bid']);await persist(state);
    const reason=exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct});
    if(reason||risk.dailyLossCents+risk.openCostCents>=state.limits.lossCents||quote.expiresAt-Date.now()<30000){
