@@ -27,6 +27,7 @@ export async function runtime(userId){
     if(m?.ticker!==ticker||m.status!=='active')return null;
     const price=k=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m[k]);
     const q={ticker,at,expiresAt:Math.min(...[m.close_time,m.expiration_time,m.expected_expiration_time].filter(Boolean).map(v=>Date.parse(v)).filter(Number.isFinite)),upAsk:price('yes_ask'),upBid:price('yes_bid'),downAsk:price('no_ask'),downBid:price('no_bid')};
+    if(!Number.isFinite(q.expiresAt)||![q.upAsk,q.upBid,q.downAsk,q.downBid].every(Number.isFinite))return null;
     return q;
    }});
   await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:process.env.COMMIT_REF||null});return result;
