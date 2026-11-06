@@ -1,15 +1,24 @@
 // Owner-only credential management. No live order execution.
 import {getStore} from '@netlify/blobs';
-import {createPrivateKey} from 'node:crypto';
+import {createPrivateKey,sign,constants} from 'node:crypto';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
-import {sealKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
+import {sealKalshiCredentials,openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 const db=()=>getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'});
 const storageKey=user=>'credentials/'+user.id;
 export default async req=>{try{
  const user=await owner();
  if(req.method==='GET'){
   const record=await db().get(storageKey(user),{type:'json'});
-  return json({connected:false,credentialsStored:!!record,liveOrdersEnabled:false,updatedAt:record?.updatedAt||null});
+  if(!record)return json({connected:false,credentialsStored:false,liveOrdersEnabled:false,reason:'No credentials saved'});
+  if(!process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY)return json({connected:false,credentialsStored:true,liveOrdersEnabled:false,reason:'Server encryption secret unavailable'});
+  try{
+   const {keyId,privateKeyPem}=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
+   const path='/trade-api/v2/portfolio/balance',timestamp=String(Date.now());
+   const signature=sign('sha256',Buffer.from(timestamp+'GET'+path),{key:createPrivateKey(privateKeyPem),padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST}).toString('base64');
+   const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),7000);
+   let response;try{response=await fetch('https://api.elections.kalshi.com'+path,{headers:{'KALSHI-ACCESS-KEY':keyId,'KALSHI-ACCESS-TIMESTAMP':timestamp,'KALSHI-ACCESS-SIGNATURE':signature,Accept:'application/json'},signal:controller.signal});}finally{clearTimeout(timeout)}
+   return json({connected:response.ok,credentialsStored:true,liveOrdersEnabled:false,checkedAt:Date.now(),reason:response.ok?'Authenticated read-only balance request succeeded':'Kalshi authentication returned HTTP '+response.status});
+  }catch{return json({connected:false,credentialsStored:true,liveOrdersEnabled:false,reason:'Authentication test failed or timed out'});}
  }
  if(req.method!=='POST'&&req.method!=='DELETE')fail(405,'Unsupported method');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
