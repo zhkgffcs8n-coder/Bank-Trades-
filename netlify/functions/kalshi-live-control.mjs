@@ -30,7 +30,17 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   }
   if(action==='start'&&process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
   const fence=await live.repo.fence(),client=await live.client();
-  const snapshot=await client.snapshot();reconcile(state,snapshot);state.risk=accountRisk(state,snapshot);state.lastReconciledAt=Date.now();await session.persist(state);
+  const snapshot=await client.snapshot();
+  try{reconcile(state,snapshot);}catch(e){
+   const mismatch=/^POSITION_MISMATCH_(.+)$/.exec(e.message);
+   if(action!=='reconcile'||!mismatch||state.intents.some(intent=>intent.ticker===mismatch[1]&&intent.status!=='ABORTED'))throw e;
+   const positions=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0&&
+    !state.intents.some(intent=>intent.ticker===p.ticker&&intent.status!=='ABORTED'))
+    .map(p=>({ticker:p.ticker,quantity:p.position_fp??p.position}));
+   return json({...getRelease(),accountReadVerified:true,reconciled:false,positions,
+    error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
+  }
+  state.risk=accountRisk(state,snapshot);state.lastReconciledAt=Date.now();await session.persist(state);
   if(action==='reconcile')return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
   if(state.risk.open.length||snapshot.orders.some(o=>o.status==='resting'))fail(409,'Start requires a reconciled flat account without resting orders');
   validateLimits(state.limits);state.enabled=true;state.stopped=false;state.failure=null;await session.persist(state);await live.repo.startFence(fence);
