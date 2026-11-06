@@ -58,7 +58,7 @@ export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,s
  return roi<=-stopPct?'STOP_LOSS':roi>=profitPct?'TAKE_PROFIT':peakCents>=entryCents*(1+trailActivationPct/100)&&bidCents<=peakCents*(1-trailPct/100)?'TRAILING_EXIT':null;
 }
 // persist must use a compare-and-swap transaction. Never retry a timed-out POST.
-export async function submitIntent({state,client,persist,checkStopped,snapshot,signal,quote,action='buy',position,now=Date.now()}){
+export async function submitIntent({state,client,persist,checkStopped,snapshot,signal,quote,action='buy',position,now=Date.now(),clock=Date.now}){
  validateLimits(state.limits);
  if(!state.enabled||state.stopped||await checkStopped())throw Error('TRADING_STOPPED');
  reconcile(state,snapshot,now);
@@ -86,6 +86,12 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  state.intents.push(intent);state.spent[day]=(state.spent[day]||0)+reserve;await persist(state);
  if(await checkStopped()){intent.status='ABORTED';await persist(state);throw Error('STOPPED_BEFORE_SUBMISSION');}
  intent.status='SUBMITTING';await persist(state);
+ const stopped=await checkStopped(),submitAt=clock();
+ if(stopped||!fresh(quote.at,submitAt)||!fresh(signal.at,submitAt)||quote.expiresAt<=submitAt||
+   (action==='buy'&&(quote.expiresAt-submitAt<75000||new Date(submitAt).toISOString().slice(0,10)!==day))){
+  intent.status='ABORTED';await persist(state);
+  throw Error(stopped?'STOPPED_BEFORE_SUBMISSION':'STALE_BEFORE_SUBMISSION');
+ }
  try{const result=await client.create(order);intent.orderId=result.order?.order_id||result.order_id;intent.status='AWAITING_RECONCILIATION';await persist(state);return intent;}
  catch{intent.status='UNKNOWN';state.enabled=false;state.stopped=true;await persist(state);throw Error('ORDER_OUTCOME_UNKNOWN_RECONCILE_REQUIRED');}
 }

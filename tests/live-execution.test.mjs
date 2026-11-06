@@ -17,3 +17,16 @@ test('spending is reserved durably before an exchange request',async()=>{const x
 test('limits and stop block all exchange requests',async()=>{const x=setup();x.state.limits.orderCents=40;await assert.rejects(submitIntent(x),/SPENDING_LIMIT/);assert.equal(x.stats().calls,0);x.state.limits.orderCents=100;x.checkStopped=async()=>true;await assert.rejects(submitIntent(x),/TRADING_STOPPED/);assert.equal(x.stats().calls,0);assert.throws(()=>validateLimits({}),/INVALID_LIMIT/);});
 test('unknown order outcome freezes trading and is not retried',async()=>{const x=setup();let calls=0;x.client.create=async()=>{calls++;throw Error('timeout')};await assert.rejects(submitIntent(x),/OUTCOME_UNKNOWN/);assert.equal(x.state.intents[0].status,'UNKNOWN');await assert.rejects(submitIntent(x),/TRADING_STOPPED/);assert.equal(calls,1);});
 test('stop is persisted before cancellation and cancellation failure is visible',async()=>{const state=initialState();state.intents=[{id:'ours'}];let saved=false;const client={snapshot:async()=>({orders:[{order_id:'o',ticker:'BTC-ROUND',client_order_id:'ours',status:'resting'}]}),cancel:async()=>{assert.ok(saved);throw Error('network')}};await assert.rejects(emergencyStop({state,client,persist:async()=>{saved=true}}),/STOPPED_CANCEL_FAILED:o/);assert.equal(state.stopped,true);assert.equal(state.enabled,false);});
+test('stop during intent persistence blocks exchange submission',async()=>{
+ const x=setup();
+ x.checkStopped=async()=>x.state.intents[0]?.status==='SUBMITTING';
+ await assert.rejects(submitIntent(x),/STOPPED_BEFORE_SUBMISSION/);
+ assert.equal(x.stats().calls,0);
+ assert.equal(x.state.intents[0].status,'ABORTED');
+});
+test('a quote that ages during persistence blocks exchange submission',async()=>{
+ const x=setup();
+ x.clock=()=>x.quote.at+20000;
+ await assert.rejects(submitIntent(x),/STALE_BEFORE_SUBMISSION/);
+ assert.equal(x.stats().calls,0);
+});

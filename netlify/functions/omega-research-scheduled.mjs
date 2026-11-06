@@ -18,7 +18,7 @@ export function selectOmegaObservation({latest,nowMs,asset}){
   expiresAt:latest.expiresAt,observedAt:latest.observedAt},
   marketBaseline:{marketTicker:latest.ticker,roundId:latest.ticker,upProbability:mid,observedAtMs:latest.observedAt}};
 }
-export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch}={}){
+export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch,clock=()=>nowMs}={}){
  const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
  const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider);
  const offset=minute%Math.max(1,configured.length);
@@ -54,7 +54,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:selectedProviders});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
    providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
-   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:nowMs,ordersAuthorized:false};
+   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:clock(),ordersAuthorized:false};
   // Paper execution is separate from research. Never submit real orders.
   const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
   if(quote){
@@ -63,9 +63,9 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    report.paperStatus=paper.status;
   }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
   // Append-only round snapshot: do not overwrite a forecast after settlement.
-  if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>nowMs){
+  if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>report.recordedAtMs){
    const key='omega/predictions/v1/'+observation.marketTicker+'/'+minute;
-   if(!await db.get(key,{type:'json'}))await db.setJSON(key,report);
+   await db.setJSON(key,report,{onlyIfNew:true});
   }
  }
  // Keep the last actual provider check visible on runs that skip forecasts.
@@ -81,7 +81,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  return report;
 }
 export default async()=>{
- try{const db=getStore({name:'bank-trades-market-history',consistency:'strong'});await runOmegaScheduled({db});return new Response(null,{status:204});}
+ try{const db=getStore({name:'bank-trades-market-history',consistency:'strong'});await runOmegaScheduled({db,clock:Date.now});return new Response(null,{status:204});}
  catch(e){console.error('OMEGA scheduled research failed',String(e).slice(0,160));return new Response(null,{status:500});}
 };
 export const config={schedule:'* * * * *'};

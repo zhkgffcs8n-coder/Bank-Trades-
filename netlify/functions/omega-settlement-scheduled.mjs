@@ -1,0 +1,29 @@
+import {getStore} from '@netlify/blobs';
+import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
+import {trustedStoredFinalizedOutcome} from '../../src/official-settlement.mjs';
+import {scoreVerifiedRound} from '../../src/omega-learning.mjs';
+
+export async function scoreOmegaArchive(db){
+ return scanBlobPage(db,{prefix:'omega/predictions/v1/',cursorKey:'omega/score-cursor/v1',limit:16},async ({key})=>{
+  const [, , ,ticker]=key.split('/');
+  if(!ticker)return;
+  const scoreKey='omega/verified-scores/v1/'+ticker;
+  if(await db.get(scoreKey,{type:'json'}))return;
+  const [forecast,label]=await Promise.all([db.get(key,{type:'json'}),db.get('outcomes/'+ticker,{type:'json'})]);
+  const outcome=trustedStoredFinalizedOutcome(label,ticker),settledAtMs=Date.parse(label?.settledAt);
+  if(!outcome||forecast?.ticker!==ticker||!Number.isSafeInteger(forecast.recordedAtMs)||
+   forecast.recordedAtMs>=settledAtMs||!Array.isArray(forecast.accepted)||forecast.accepted.length<2)return;
+  const score=scoreVerifiedRound({status:forecast.status,marketTicker:ticker,roundId:ticker,
+   marketBaseline:forecast.baseline,accepted:forecast.accepted},
+  {marketTicker:ticker,roundId:ticker,upOutcome:Number(outcome==='yes'),settledAtMs,verified:true});
+  if(score.status!=='VERIFIED_SHADOW_SCORE')return;
+  await db.setJSON(scoreKey,{...score,outcome,settledAtMs,forecastKey:key,recordedAtMs:forecast.recordedAtMs},{onlyIfNew:true});
+ });
+}
+
+export default async()=>{
+ const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
+ await scoreOmegaArchive(db);
+ return new Response(null,{status:204});
+};
+export const config={schedule:'2-59/3 * * * *'};

@@ -11,8 +11,10 @@ export function scoreVerifiedRound(fusion,settlement){
  if(!fusion.accepted.every(f=>Number.isSafeInteger(f.observedAtMs)&&f.observedAtMs<settlement.settledAtMs))
   return {status:'BLOCKED',reason:'Lookahead leakage detected'};
  const outcome=settlement.upOutcome;
- const scores=fusion.accepted.map(f=>({provider:f.provider,brier:(f.upProbability-outcome)**2}));
- if(validP(fusion.marketBaseline))scores.push({provider:'kalshi_baseline',brier:(fusion.marketBaseline-outcome)**2});
+ const measure=(provider,probability)=>({provider,brier:(probability-outcome)**2,correct:probability===.5?null:Number(probability>.5)===outcome});
+ const scores=fusion.accepted.map(f=>measure(f.provider,f.upProbability));
+ if(fusion.accepted.length>=2)scores.push(measure('omega_consensus',fusion.accepted.reduce((sum,f)=>sum+f.upProbability,0)/fusion.accepted.length));
+ if(validP(fusion.marketBaseline))scores.push(measure('kalshi_baseline',fusion.marketBaseline));
  return {status:'VERIFIED_SHADOW_SCORE',marketTicker:fusion.marketTicker,roundId:fusion.roundId,scores,ordersAuthorized:false};
 }
 export function summarizeVerifiedScores(records=[]){

@@ -8,7 +8,7 @@ test('two configured independent provider responses reach research fusion',async
  fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})})});
  assert.equal(r.status,'SHADOW_RESEARCH');assert.equal(r.fusion.accepted.length,2);assert.equal(r.ordersAuthorized,false);
  const report=evaluateOmegaVerifiedBatch({rounds:[r],settlements:[{marketTicker:'BTC',roundId:'R1',verified:true,upOutcome:1,settledAtMs:120000}]});
- assert.equal(report.verifiedRounds,1);assert.equal(report.verifiedScores.length,3);
+ assert.equal(report.verifiedRounds,1);assert.equal(report.verifiedScores.length,4);
 });
 test('no provider credentials means insufficient research, not invented consensus',async()=>{
  const r=await runOmegaResearchRound({...base,providers:['gpt','claude'],env:{}});

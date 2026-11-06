@@ -32,6 +32,8 @@ export default async req=>{
   if(trustedStoredFinalizedOutcome(o,ticker))outcomes[ticker]=o;
   else if(o)unverifiedOutcomeRecords++;
  }
+ const omegaVerifiedScores=(await Promise.all(Object.keys(outcomes).map(ticker=>
+  db.get('omega/verified-scores/v1/'+ticker,{type:'json'}).catch(()=>null)))).filter(score=>score?.status==='VERIFIED_SHADOW_SCORE');
  // Expose only the most recent contract's independently paired SHADOW record.
  // Historical legacy A/B aggregate stats are not this paired experiment.
  const latest=await db.get('latest/'+asset,{type:'json'});
@@ -46,5 +48,5 @@ export default async req=>{
  const prospectiveEvaluation=await db.get('comparison/prospective-evaluation-v1',{type:'json'});
  const lessonSummary=await db.get('comparison/lesson-summary-v1',{type:'json'});
  const feedTelemetry=await db.get('telemetry/'+asset,{type:'json'});
- return json({pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling,conflictingSampleCount,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
+ return json({omegaVerifiedScores,pairedShadow,pairedStatus,training,comparison,adaptiveResearch,mistakeAnalysis,prospectiveEvaluation,lessonSummary,feedTelemetry,asset,fetched_at:new Date().toISOString(),records,outcomes,unverifiedOutcomeRecords,hasMore,historyIncomplete:hasMore,recentCacheRecovered:recoveredFromRolling,conflictingSampleCount,source:'BANK TRADES scheduled Kalshi public quote archive with official finalized labels when available'});
 };
