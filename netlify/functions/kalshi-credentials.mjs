@@ -22,8 +22,8 @@ export default async req=>{let liveSession;try{
   try{
    const {keyId,privateKeyPem}=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
    const response=await verifyKalshi(keyId,privateKeyPem);
-   return json({connected:response.ok,credentialsStored:true,liveOrdersEnabled:false,checkedAt:Date.now(),reason:response.ok?'Authenticated read-only balance request succeeded':'Kalshi authentication returned HTTP '+response.status});
-  }catch{return json({connected:false,credentialsStored:true,liveOrdersEnabled:false,reason:'Authentication test failed or timed out'});}
+   return json({connected:response.ok,credentialsStored:true,storageReady:true,liveOrdersEnabled:false,checkedAt:Date.now(),reason:response.ok?'Authenticated read-only balance request succeeded':'Kalshi authentication returned HTTP '+response.status});
+  }catch{return json({connected:false,credentialsStored:true,storageReady:true,liveOrdersEnabled:false,reason:'Authentication test failed or timed out'});}
  }
  if(req.method!=='POST'&&req.method!=='DELETE')fail(405,'Unsupported method');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
@@ -51,5 +51,5 @@ export default async req=>{let liveSession;try{
  catch{fail(503,'Kalshi connection test failed or timed out; credentials were not saved')}
  if(!verified.ok)fail(422,'Kalshi rejected the credentials (HTTP '+verified.status+'); credentials were not saved');
  await db().setJSON(storageKey(user),{envelope,updatedAt:Date.now()});
- return json({ok:true,credentialsStored:true,connected:true,checkedAt:Date.now(),liveOrdersEnabled:false});
+ return json({ok:true,credentialsStored:true,storageReady:true,connected:true,checkedAt:Date.now(),liveOrdersEnabled:false});
 }catch(e){return errorResponse(e)}finally{if(liveSession)await liveSession.release();}};
