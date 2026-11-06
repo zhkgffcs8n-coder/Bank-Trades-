@@ -119,11 +119,11 @@ export async function runExtremeDemo(store,client,now=Date.now()){
  }
  if(!Number.isSafeInteger(start?.round))return;
  const key=extremePrefix+round;
- const records=await Promise.all(Array.from({length:4},(_,i)=>store.get(extremePrefix+(start.round+i),{type:'json'})));
+ const records=await Promise.all(Array.from({length:Math.max(0,Math.min(36,round-start.round+1))},(_,i)=>store.get(extremePrefix+(start.round+i),{type:'json'})));
  for(const [i,record] of records.entries()){
   if(record?.id&&!record.finished)await reconcileDemoHold(store,client,extremePrefix+(start.round+i),record,now);
  }
- if(round<start.round||round>=start.round+4)return;
+ if(round<start.round||round>=start.round+36)return;
  const existing=await store.getWithMetadata(key,{type:'json'});
  const previous=existing?.data;
  const retry=previous?.status==='DEMO_HOLD_UNFILLED'&&previous.filled===0&&(previous.attempt??1)===1;

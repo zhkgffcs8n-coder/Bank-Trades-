@@ -17,7 +17,7 @@ export default async req=>{try{
   const extreme=(ledger?.trades||[]).filter(trade=>trade.extremeCoverage===true);
   const resolved=extreme.filter(trade=>['CLOSED','SETTLED'].includes(trade.status)&&Number.isFinite(trade.pnl));
   const start=await store.get('extreme-demo/v1/start',{type:'json'});
-  const demoRounds=Number.isSafeInteger(start?.round)?await Promise.all(Array.from({length:4},async(_,i)=>{
+  const demoRounds=Number.isSafeInteger(start?.round)?await Promise.all(Array.from({length:36},async(_,i)=>{
    const round=start.round+i,t=await store.get('extreme-demo/v1/'+round,{type:'json'});
    return {round,status:t?.status||'NO_ORDER_RECORDED',side:t?.side??null,filled:t?.filled??null,
     entryCost:t?.entryCost??null,markPnl:t?.markPnl??null,realizedPnl:t?.realizedPnl??null,exchangeCode:t?.exchangeCode??null};
