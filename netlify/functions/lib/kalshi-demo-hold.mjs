@@ -100,6 +100,15 @@ async function reconcileDemoHold(store,client,key,test,now){
 }
 
 
+const demoQuote=(market,up)=>{
+ const side=up?'yes':'no',ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
+ return {market,up,ask,bid,spread:ask-bid};
+};
+const tradableDemoQuote=({ask,bid,spread})=>ask>=.05&&ask<=.95&&bid>0&&spread>=0&&spread<=.10+1e-9;
+const demoRound=market=>Math.floor((Date.parse(market.expected_expiration_time||market.close_time)-1)/900000);
+const eligibleExtreme=(market,now,round)=>market?.status==='active'&&market.market_type==='binary'&&
+ /^[A-Z0-9-]{4,100}$/.test(market.ticker)&&demoRound(market)===round&&Date.parse(market.close_time)-now>=90000;
+
 const extremePrefix='extreme-demo/v1/';
 export async function runExtremeDemo(store,client,now=Date.now()){
  const round=Math.floor(now/900000),startKey=extremePrefix+'start';
@@ -125,12 +134,8 @@ export async function runExtremeDemo(store,client,now=Date.now()){
    return Array.isArray(markets)?markets:[];
   }catch{return [];}
  }));
- const candidates=quotes.flat().filter(m=>eligible(m,now)&&Math.floor((Date.parse(m.close_time)-1)/900000)===round&&Date.parse(m.close_time)-now>=120000)
-  .map(market=>{
-   const up=(Number(market.yes_ask_dollars)+Number(market.yes_bid_dollars))/2>=.5;
-   const side=up?'yes':'no',ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
-   return {market,up,ask,bid,spread:ask-bid};
-  }).filter(x=>x.ask>=.10&&x.ask<=.90&&x.bid>0&&x.spread>=0&&x.spread<=.05+1e-9)
+ const candidates=quotes.flat().filter(m=>eligibleExtreme(m,now,round))
+  .flatMap(market=>[demoQuote(market,true),demoQuote(market,false)]).filter(tradableDemoQuote)
   .sort((a,b)=>a.spread-b.spread||a.ask-b.ask);
  if(!candidates.length){
   await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_ELIGIBLE_QUOTE',checkedAt:new Date(now).toISOString()});
@@ -139,13 +144,13 @@ export async function runExtremeDemo(store,client,now=Date.now()){
  for(const candidate of candidates.slice(0,3)){
   const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(candidate.market.ticker));
   const exchangeIndex=market?.exchange_index;
-  if(market?.ticker!==candidate.market.ticker||!eligible(market,Date.now())||!Number.isInteger(exchangeIndex)||exchangeIndex<0)continue;
-  const side=candidate.up?'yes':'no';
-  const ask=Number(market[side+'_ask_dollars']),bid=Number(market[side+'_bid_dollars']);
-  if(!(ask>=.10&&ask<=.90&&bid>0&&ask>=bid&&ask-bid<=.05+1e-9))continue;
+  if(market?.ticker!==candidate.market.ticker||!eligibleExtreme(market,Date.now(),round)||!Number.isInteger(exchangeIndex)||exchangeIndex<0)continue;
+  const quote=demoQuote(market,candidate.up);
+  if(!tradableDemoQuote(quote))continue;
+  const {ask}=quote;
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance?'+new URLSearchParams({exchange_index:String(exchangeIndex),subaccount:'0'}));
   if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+12)continue;
-  if(Date.parse(market.close_time)-Date.now()<120000)return;
+  if(Date.parse(market.close_time)-Date.now()<90000)return;
   await placeDemoHold(store,client,key,market,now,retry?{onlyIfMatch:existing.etag}:{onlyIfNew:true},{
    action:candidate.up?'BUY UP':'BUY DOWN',exchangeIndex,demoExtreme:true,attempt:retry?2:1,
    previousUnfilled:retry?{id:previous.id,orderId:previous.orderId,ticker:previous.ticker}:null
