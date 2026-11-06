@@ -12,7 +12,7 @@ export default async(req)=>{
   if(req.method==='GET'){
    const access=await entitlement(user);
    const plans=Object.entries(squarePlans).map(([name,p])=>({name,label:p.label,amount:p.amount,currency:'USD',interval:p.interval,intervalCount:1,available:squareReady()}));
-   return json({email:user.email,owner:isOwner(user),access,plans});
+   return json({userId:user.id,email:user.email,owner:isOwner(user),access,plans});
   }
   if(Number(req.headers.get('content-length')||0)>4096)fail(413,'Request too large.');
   const body=await req.json();

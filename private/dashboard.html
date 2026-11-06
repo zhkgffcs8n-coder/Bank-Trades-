@@ -169,14 +169,27 @@ function signalFor(asset,m,stale){
  return {action:'WAIT',score:0,reason:window.__BANK_TRADES_SHARED_ERROR__?'Shared signal fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__:!s?'Shared signal missing for '+asset:s.ticker!==m?.ticker?'Signal ticker mismatch: quotes '+m?.ticker+' vs signal '+s.ticker:'Shared signal stale'};
 }
 
+// Keep manual tracking usable for this page when browser storage is unavailable.
+const trackingFallback=new Map();
+function readTrackingValue(key){
+ if(trackingFallback.has(key))return trackingFallback.get(key);
+ try{return localStorage.getItem(key)}catch{return null}
+}
+function writeTrackingValue(key,value){
+ try{
+  if(value===null)localStorage.removeItem(key);
+  else localStorage.setItem(key,value);
+  trackingFallback.delete(key);
+ }catch{trackingFallback.set(key,value)}
+}
 const trackedKey='banktrades:manual-positions:v1';
-function readTracked(){try{const v=JSON.parse(localStorage.getItem(trackedKey)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch{return {}}}
+function readTracked(){try{const v=JSON.parse(readTrackingValue(trackedKey)||'{}');return v&&typeof v==='object'&&!Array.isArray(v)?v:{}}catch{return {}}}
 function trackedFor(asset){return readTracked()[asset]||null}
-function saveTracked(asset,value){try{const all=readTracked();if(value)all[asset]=value;else delete all[asset];localStorage.setItem(trackedKey,JSON.stringify(all));return true}catch{return false}}
+function saveTracked(asset,value){const all=readTracked();if(value)all[asset]=value;else delete all[asset];writeTrackingValue(trackedKey,JSON.stringify(all))}
 function beginTracked(side){
  const m=current()?.market,entry=Number($('entry').value),qty=Number($('qty').value),fees=Number($('fees').value);
  if(!m?.ticker||!Number.isFinite(entry)||entry<=0||entry>=100||!Number.isSafeInteger(qty)||qty<1||!Number.isFinite(fees)||fees<0){$('trackedPosition').textContent='Select an active contract and enter a valid fill price, quantity and fees.';return}
- if(!saveTracked(selected,{ticker:m.ticker,side,entry,qty,fees,at:Date.now(),expiresAt:expiryMs(m)})){$('trackedPosition').textContent='Browser storage unavailable; position could not be saved.';return}
+ saveTracked(selected,{ticker:m.ticker,side,entry,qty,fees,at:Date.now(),expiresAt:expiryMs(m)});
  show();
 }
 function renderTracked(m,stale){
@@ -233,9 +246,9 @@ function draw(){
 $('trackUp').addEventListener('click',()=>beginTracked('UP'));
 $('trackDown').addEventListener('click',()=>beginTracked('DOWN'));
 $('closeTracked').addEventListener('click',()=>{saveTracked(selected,null);show();syncQuickPosition()});
-let quickSelectedAsset=localStorage.getItem('bankTradesQuickAsset')||'';
-let quickPendingSide=localStorage.getItem('bankTradesQuickSide')||'';
-let quickTrackingActive=localStorage.getItem('bankTradesQuickTracking')==='1';
+let quickSelectedAsset=readTrackingValue('bankTradesQuickAsset')||'';
+let quickPendingSide=readTrackingValue('bankTradesQuickSide')||'';
+let quickTrackingActive=readTrackingValue('bankTradesQuickTracking')==='1';
 
 function quickStatus(msg){const q=$('quickPosition');if(q)q.textContent=msg}
 function paintQuickAssets(){
@@ -277,11 +290,11 @@ function syncQuickPosition(){
 
 }
 const quickAssetBox=$('quickAssets');
-quickAssetBox?.addEventListener('click',e=>{const btn=e.target.closest('button[data-quick-asset]');if(!btn)return;quickSelectedAsset=btn.dataset.quickAsset;localStorage.setItem('bankTradesQuickAsset',quickSelectedAsset);quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');paintQuickAssets();syncQuickPosition()});
-$('quickUp')?.addEventListener('click',()=>{quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');quickPendingSide='up';localStorage.setItem('bankTradesQuickSide','up');paintQuickAssets();syncQuickPosition()});
-$('quickDown')?.addEventListener('click',()=>{quickTrackingActive=false;localStorage.removeItem('bankTradesQuickTracking');quickPendingSide='down';localStorage.setItem('bankTradesQuickSide','down');paintQuickAssets();syncQuickPosition()});
-$('quickStart')?.addEventListener('click',()=>{if(!quickSave())return;quickTrackingActive=true;localStorage.setItem('bankTradesQuickTracking','1');syncQuickPosition()});
-$('quickClose')?.addEventListener('click',()=>{if(quickSelectedAsset)saveTracked(quickSelectedAsset,null);quickTrackingActive=false;quickPendingSide='';localStorage.removeItem('bankTradesQuickTracking');localStorage.removeItem('bankTradesQuickSide');paintQuickAssets();quickStatus('✅ Position closed. Pick a coin to track another position.')});
+quickAssetBox?.addEventListener('click',e=>{const btn=e.target.closest('button[data-quick-asset]');if(!btn)return;quickSelectedAsset=btn.dataset.quickAsset;writeTrackingValue('bankTradesQuickAsset',quickSelectedAsset);quickTrackingActive=false;writeTrackingValue('bankTradesQuickTracking',null);paintQuickAssets();syncQuickPosition()});
+$('quickUp')?.addEventListener('click',()=>{quickTrackingActive=false;writeTrackingValue('bankTradesQuickTracking',null);quickPendingSide='up';writeTrackingValue('bankTradesQuickSide','up');paintQuickAssets();syncQuickPosition()});
+$('quickDown')?.addEventListener('click',()=>{quickTrackingActive=false;writeTrackingValue('bankTradesQuickTracking',null);quickPendingSide='down';writeTrackingValue('bankTradesQuickSide','down');paintQuickAssets();syncQuickPosition()});
+$('quickStart')?.addEventListener('click',()=>{if(!quickSave())return;quickTrackingActive=true;writeTrackingValue('bankTradesQuickTracking','1');syncQuickPosition()});
+$('quickClose')?.addEventListener('click',()=>{if(quickSelectedAsset)saveTracked(quickSelectedAsset,null);quickTrackingActive=false;quickPendingSide='';writeTrackingValue('bankTradesQuickTracking',null);writeTrackingValue('bankTradesQuickSide',null);paintQuickAssets();quickStatus('✅ Position closed. Pick a coin to track another position.')});
 paintQuickAssets();syncQuickPosition();
 setInterval(()=>{if(quickTrackingActive)syncQuickPosition()},1000);
 function render(){
