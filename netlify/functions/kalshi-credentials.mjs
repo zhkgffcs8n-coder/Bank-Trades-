@@ -1,11 +1,12 @@
 // Owner-only credential management. No live order execution.
 import {getStore} from '@netlify/blobs';
+import {liveRepository} from './lib/live-state.mjs';
 import {createPrivateKey,sign,constants} from 'node:crypto';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials,openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 const db=()=>getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'});
 const storageKey=user=>'credentials/'+user.id;
-export default async req=>{try{
+export default async req=>{let liveSession;try{
  const user=await owner();
  if(req.method==='GET'){
   const record=await db().get(storageKey(user),{type:'json'});
@@ -22,6 +23,9 @@ export default async req=>{try{
  }
  if(req.method!=='POST'&&req.method!=='DELETE')fail(405,'Unsupported method');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
+ const live=liveRepository(getStore({name:'bank-trades-live-execution-v1',consistency:'strong'}),user.id);
+ liveSession=await live.acquire();const current={state:liveSession.state};
+ if(current.lock||current.state.enabled||current.state.risk?.open?.length||current.state.intents.some(i=>!['RECONCILED','ABORTED'].includes(i.status))||(current.state.intents.length&&!current.state.risk))fail(409,'Stop and reconcile all bot exposure before changing credentials');
  if(req.method==='DELETE'){
   await db().delete(storageKey(user));
   return json({ok:true,credentialsStored:false,liveOrdersEnabled:false});
@@ -39,4 +43,4 @@ export default async req=>{try{
  catch{fail(400,'Invalid credentials or encryption configuration')}
  await db().setJSON(storageKey(user),{envelope,updatedAt:Date.now()});
  return json({ok:true,credentialsStored:true,connected:false,liveOrdersEnabled:false});
-}catch(e){return errorResponse(e)}};
+}catch(e){return errorResponse(e)}finally{if(liveSession)await liveSession.release();}};
