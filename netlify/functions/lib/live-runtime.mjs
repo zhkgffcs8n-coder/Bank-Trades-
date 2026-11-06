@@ -26,7 +26,7 @@ export async function runtime(userId){
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
     if(m?.ticker!==ticker||m.status!=='active')return null;
     const price=k=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m[k]);
-    const q={ticker,at,expiresAt:Math.min(...[m.close_time,m.expiration_time,m.expected_expiration_time].map(Date.parse).filter(Number.isFinite)),upAsk:price('yes_ask'),upBid:price('yes_bid'),downAsk:price('no_ask'),downBid:price('no_bid')};
+    const q={ticker,at,expiresAt:Math.min(...[m.close_time,m.expiration_time,m.expected_expiration_time].filter(Boolean).map(v=>Date.parse(v)).filter(Number.isFinite)),upAsk:price('yes_ask'),upBid:price('yes_bid'),downAsk:price('no_ask'),downBid:price('no_bid')};
     return q;
    }});
   await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:process.env.COMMIT_REF||null});return result;
