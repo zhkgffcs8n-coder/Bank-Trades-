@@ -43,3 +43,15 @@ test('open paper positions are monitored without configured AI providers',async(
  assert.equal(data.get('omega/heartbeat').paperMonitoring.open,1);
  assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
 });
+
+test('scheduled heartbeat includes all three research engine statuses without live authorization',async()=>{
+ const data=new Map([['latest/'+asset,sample]]);
+ const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>{data.set(key,value)}};
+ const report=await runOmegaScheduled({nowMs:now,db,env:{}});
+ assert.equal(report.sharedEngineReview.ticker,sample.ticker);
+ assert.equal(typeof report.sharedEngineReview.spiderStatus,'string');
+ assert.equal(typeof report.sharedEngineReview.primalStatus,'string');
+ assert.equal(report.sharedEngineReview.omegaStatus,'PROVIDERS_UNCONFIGURED');
+ assert.equal(report.sharedEngineReview.ordersAuthorized,false);
+ assert.equal(data.get('omega/heartbeat').realOrdersAuthorized,false);
+});
