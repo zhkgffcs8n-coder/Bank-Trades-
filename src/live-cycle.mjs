@@ -2,7 +2,7 @@ import {reconcile,submitIntent,emergencyStop,exitAction} from './live-execution.
 import {accountRisk} from './live-accounting.mjs';
 // Retry temporary quote-service failures without allowing additional exposure.
 // Authentication and data-integrity failures still trip the execution stop.
-const temporaryQuoteError=e=>/^(KALSHI_HTTP_(429|500|502|503|504)|AbortError|TimeoutError)$/.test(e?.message||e?.name||'');
+const temporaryQuoteError=e=>/^KALSHI_HTTP_(429|500|502|503|504)$/.test(e?.message||'')||['AbortError','TimeoutError'].includes(e?.name);
 async function safeQuote(quoteFor,ticker){
  try{return await quoteFor(ticker)}catch(e){if(temporaryQuoteError(e))return null;throw e}
 }
