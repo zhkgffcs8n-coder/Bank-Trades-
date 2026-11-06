@@ -1,10 +1,34 @@
 import {makeOrder} from '../../../src/live-execution.mjs';
 import {verifiedFinalizedBinaryOutcome} from '../../../src/official-settlement.mjs';
 
+const eligible=(m,now)=>m?.status==='active'&&m.market_type==='binary'&&
+ /^[A-Z0-9-]{4,100}$/.test(m.ticker)&&Number(m.yes_ask_dollars)>=.01&&Number(m.yes_ask_dollars)<=.99&&Date.parse(m.close_time)>now+30000;
+
+async function placeDemoHold(store,client,key,market,now,condition){
+ const order=makeOrder({ticker:market.ticker,side:'up',action:'buy',qty:1,priceCents:Math.round(Number(market.yes_ask_dollars)*100)});
+ const test={status:'DEMO_HOLD_SUBMITTING',ticker:order.ticker,id:order.client_order_id,startedAt:new Date(now).toISOString()};
+ if(!(await store.setJSON(key,test,condition)).modified)return;
+ try{
+  const submitted=await client.create(order);
+  await store.setJSON(key,{...test,orderId:submitted.order_id,status:'DEMO_HOLD_SUBMITTED'});
+ }catch(error){
+  await store.setJSON(key,{...test,status:'DEMO_HOLD_SUBMISSION_UNCONFIRMED',exchangeCode:error.exchangeCode??null});
+ }
+}
+
 export async function runDemoHold(store,client,now=Date.now()){
  const key='hold-test/v1';
  let test=await store.get(key,{type:'json'});
- if(test?.finished)return;
+ if(test?.finished&&test.status!=='DEMO_HOLD_MARKET_UNAVAILABLE')return;
+ if(test?.status==='DEMO_HOLD_MARKET_UNAVAILABLE'){
+  const reset=await store.getWithMetadata(key,{type:'json'});
+  if(reset?.data?.status!=='DEMO_HOLD_MARKET_UNAVAILABLE')return;
+  const {markets}=await client.request('GET','/trade-api/v2/markets?status=open&limit=100&mve_filter=exclude');
+  const market=markets?.find(m=>eligible(m,now));
+  if(!market)return;
+  await placeDemoHold(store,client,key,market,now,{onlyIfMatch:reset.etag});
+  return;
+ }
  if(!test){
   const prior=await store.get('order-test/v8',{type:'json'});
   if(prior?.status!=='DEMO_PLACEMENT_AND_CANCEL_VERIFIED')return;
@@ -14,17 +38,8 @@ export async function runDemoHold(store,client,now=Date.now()){
    !(Date.parse(market.close_time)>now+30000)){
    await store.setJSON(key,{status:'DEMO_HOLD_MARKET_UNAVAILABLE',finished:true},{onlyIfNew:true});return;
   }
-  const order=makeOrder({ticker:market.ticker,side:'up',action:'buy',qty:1,priceCents:price});
-  test={status:'DEMO_HOLD_SUBMITTING',ticker:order.ticker,id:order.client_order_id,startedAt:new Date(now).toISOString()};
-  if(!(await store.setJSON(key,test,{onlyIfNew:true})).modified)return;
-  try{
-   const submitted=await client.create(order);
-   test={...test,orderId:submitted.order_id,status:'DEMO_HOLD_SUBMITTED'};
-   await store.setJSON(key,test);
-  }catch(error){
-   await store.setJSON(key,{...test,status:'DEMO_HOLD_SUBMISSION_UNCONFIRMED',exchangeCode:error.exchangeCode??null});
-   return;
-  }
+  await placeDemoHold(store,client,key,market,now,{onlyIfNew:true});
+  return;
  }
  const orders=test.orderId?
   [(await client.request('GET','/trade-api/v2/portfolio/orders/'+encodeURIComponent(test.orderId))).order]:
