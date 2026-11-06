@@ -105,7 +105,7 @@ const demoQuote=(market,up)=>{
  return {market,up,ask,bid,spread:ask-bid};
 };
 const tradableDemoQuote=({ask,bid,spread})=>ask>=.05&&ask<=.95&&bid>0&&spread>=0&&spread<=.10+1e-9;
-const demoRound=market=>Math.floor((Date.parse(market.expected_expiration_time||market.close_time)-1)/900000);
+const demoRound=market=>Math.floor((Date.parse(market.close_time)-1)/900000);
 const eligibleExtreme=(market,now,round)=>market?.status==='active'&&market.market_type==='binary'&&
  /^[A-Z0-9-]{4,100}$/.test(market.ticker)&&demoRound(market)===round&&Date.parse(market.close_time)-now>=90000;
 
@@ -128,19 +128,21 @@ export async function runExtremeDemo(store,client,now=Date.now()){
  const previous=existing?.data;
  const retry=previous?.status==='DEMO_HOLD_UNFILLED'&&previous.filled===0&&(previous.attempt??1)===1;
  if(previous&&!retry)return;
+ const feedErrors=[];
  const quotes=await Promise.all(['KXBTC15M','KXETH15M','KXSOL15M'].map(async series=>{
   try{
    const {markets}=await client.request('GET','/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'20'}));
    return Array.isArray(markets)?markets:[];
-  }catch{return [];}
+  }catch(error){feedErrors.push({series,error:/^KALSHI_HTTP_\d{3}$/.test(error.message)?error.message:'DEMO_MARKET_READ_FAILED'});return [];}
  }));
  const candidates=quotes.flat().filter(m=>eligibleExtreme(m,now,round))
   .flatMap(market=>[demoQuote(market,true),demoQuote(market,false)]).filter(tradableDemoQuote)
   .sort((a,b)=>a.spread-b.spread||a.ask-b.ask);
  if(!candidates.length){
-  await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_ELIGIBLE_QUOTE',checkedAt:new Date(now).toISOString()});
+  await store.setJSON(extremePrefix+'last-scan',{round,status:feedErrors.length===quotes.length?'MARKET_FEED_UNAVAILABLE':'NO_ELIGIBLE_QUOTE',feedErrors,checkedAt:new Date(now).toISOString()});
   return;
  }
+ const unfundedExchanges=new Set();
  for(const candidate of candidates.slice(0,3)){
   const {market}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(candidate.market.ticker));
   const exchangeIndex=market?.exchange_index;
@@ -149,7 +151,7 @@ export async function runExtremeDemo(store,client,now=Date.now()){
   if(!tradableDemoQuote(quote))continue;
   const {ask}=quote;
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance?'+new URLSearchParams({exchange_index:String(exchangeIndex),subaccount:'0'}));
-  if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+12)continue;
+  if(!Number.isSafeInteger(balance.balance)||balance.balance<Math.ceil(ask*100)+12){unfundedExchanges.add(exchangeIndex);continue;}
   if(Date.parse(market.close_time)-Date.now()<90000)return;
   await placeDemoHold(store,client,key,market,now,retry?{onlyIfMatch:existing.etag}:{onlyIfNew:true},{
    action:candidate.up?'BUY UP':'BUY DOWN',exchangeIndex,demoExtreme:true,attempt:retry?2:1,
@@ -157,5 +159,5 @@ export async function runExtremeDemo(store,client,now=Date.now()){
   });
   return;
  }
- await store.setJSON(extremePrefix+'last-scan',{round,status:'NO_FUNDED_ELIGIBLE_EXCHANGE',checkedAt:new Date(now).toISOString()});
+ await store.setJSON(extremePrefix+'last-scan',{round,status:unfundedExchanges.size?'NO_FUNDED_ELIGIBLE_EXCHANGE':'NO_ELIGIBLE_REFRESHED_QUOTE',unfundedExchanges:[...unfundedExchanges],feedErrors,checkedAt:new Date(now).toISOString()});
 }
