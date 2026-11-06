@@ -9,8 +9,8 @@ export default async req=>{try{
  const user=await owner();
  if(req.method==='GET'){
   const record=await db().get(storageKey(user),{type:'json'});
-  if(!record)return json({connected:false,credentialsStored:false,liveOrdersEnabled:false,reason:'No credentials saved'});
-  if(!process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY)return json({connected:false,credentialsStored:true,liveOrdersEnabled:false,reason:'Server encryption secret unavailable'});
+  if(!record)return json({connected:false,credentialsStored:false,liveOrdersEnabled:false,storageReady:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),reason:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY?'No credentials saved':'Server encryption secret unavailable'});
+  if(!/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''))return json({connected:false,credentialsStored:true,storageReady:false,liveOrdersEnabled:false,reason:'Server encryption secret unavailable or invalid'});
   try{
    const {keyId,privateKeyPem}=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
    const path='/trade-api/v2/portfolio/balance',timestamp=String(Date.now());
@@ -30,7 +30,7 @@ export default async req=>{try{
  const body=await req.json();
  if(!body||typeof body!=='object')fail(400,'Invalid request');
  // Fail closed if encryption is not configured. Never store plaintext credentials.
- if(!process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY)fail(503,'Secure credential storage is not configured');
+ if(!/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''))fail(503,'Secure credential storage is not configured');
  let parsed;
  try{parsed=createPrivateKey(body.privateKeyPem)}catch{fail(400,'Invalid RSA private key')}
  if(parsed.asymmetricKeyType!=='rsa'||(parsed.asymmetricKeyDetails?.modulusLength||0)<2048)fail(400,'RSA private key must be at least 2048 bits');
