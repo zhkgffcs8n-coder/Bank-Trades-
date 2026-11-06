@@ -1,3 +1,4 @@
+import {createPrivateKey} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 
@@ -6,11 +7,14 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch){
  const privateKeyPem=env.KALSHI_DEMO_PRIVATE_KEY?.replace(/\\n/g,'\n').trim();
  if(!keyId||!privateKeyPem)return 'DEMO_CREDENTIALS_MISSING';
  try{
+  if(createPrivateKey(privateKeyPem).asymmetricKeyType!=='rsa')return 'DEMO_PRIVATE_KEY_NOT_RSA';
+ }catch{return 'DEMO_PRIVATE_KEY_INVALID_PEM';}
+ try{
   const client=kalshiClient({keyId,privateKeyPem},{environment:'demo',fetchImpl});
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance');
   return Number.isSafeInteger(balance?.balance)&&balance.balance>=0?'DEMO_AUTHENTICATED':'DEMO_INVALID_BALANCE_RESPONSE';
  }catch(error){
-  return /^KALSHI_HTTP_\d{3}$/.test(error.message)?error.message:'DEMO_KEY_OR_TRANSPORT_ERROR';
+  return /^KALSHI_HTTP_\d{3}$/.test(error.message)?error.message:'DEMO_TRANSPORT_ERROR';
  }
 }
 
