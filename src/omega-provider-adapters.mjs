@@ -53,7 +53,10 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
   const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.[0]?.text:
    provider==='claude'?data?.content?.[0]?.text:data?.choices?.[0]?.message?.content;
   if(typeof raw!=='string'||raw.length>2000)return {status:'INVALID_RESPONSE',provider};
-  let parsed;try{parsed=JSON.parse(raw);}catch{return {status:'INVALID_RESPONSE',provider};}
+  // Accept a single JSON code block while still requiring valid JSON and a valid probability.
+  const content=raw.trim();
+  const fenced=content.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  let parsed;try{parsed=JSON.parse(fenced?fenced[1]:content);}catch{return {status:'INVALID_RESPONSE',provider};}
   if(!validProbability(parsed?.upProbability))return {status:'INVALID_RESPONSE',provider};
   return {status:'RESEARCH_FORECAST',provider,marketTicker,roundId,observedAtMs:nowMs,upProbability:parsed.upProbability,ordersAuthorized:false};
  }catch{return {status:'PROVIDER_UNAVAILABLE',provider};}

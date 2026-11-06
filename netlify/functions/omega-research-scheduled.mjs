@@ -20,7 +20,9 @@ export function selectOmegaObservation({latest,nowMs,asset}){
 }
 export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch}={}){
  const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
- const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider).slice(0,2);
+ const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider);
+ const offset=minute%Math.max(1,configured.length);
+ const selectedProviders=[...configured.slice(offset),...configured.slice(0,offset)].slice(0,2);
  // Monitor already-open paper positions independently of provider availability and asset rotation.
  // Only active contracts with independently fetched executable quotes can be exited.
  const paperMonitoring={open:0,exits:0,holds:0,unpriced:0};
@@ -49,7 +51,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  if(!observation)report={status:'NO_FRESH_MARKET_OBSERVATION',asset,providersConfigured:configured.length,ordersAuthorized:false};
  else if(configured.length<2)report={status:'PROVIDERS_UNCONFIGURED',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
  else{
-  const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:configured});
+  const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:selectedProviders});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
    providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
    disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:nowMs,ordersAuthorized:false};
@@ -67,9 +69,12 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   }
  }
  // Keep the last actual provider check visible on runs that skip forecasts.
- const previous=report.providerStatus?null:await db.get('omega/heartbeat',{type:'json'});
- report.lastProviderCheckAt=report.providerStatus?new Date(nowMs).toISOString():previous?.lastProviderCheckAt||null;
- report.providerStatus??=(previous?.providerStatus||[]).filter(entry=>configured.includes(entry.provider));
+ const previous=await db.get('omega/heartbeat',{type:'json'});
+ const checkedAt=new Date(nowMs).toISOString(), checked=report.providerStatus||[];
+ const checks=new Map((previous?.providerStatus||[]).map(entry=>[entry.provider,entry]));
+ for(const entry of checked)checks.set(entry.provider,{...entry,checkedAt});
+ report.lastProviderCheckAt=checked.length?checkedAt:previous?.lastProviderCheckAt||null;
+ report.providerStatus=configured.map(provider=>checks.get(provider)||{provider,status:'AWAITING_CHECK'});
  report.paperMonitoring=paperMonitoring;
  await db.setJSON('omega/heartbeat',{...report,checkedAt:new Date(nowMs).toISOString(),expectedIntervalSeconds:60,
   coverage:'One rotating asset per minute; not every market every second',realOrdersAuthorized:false});
