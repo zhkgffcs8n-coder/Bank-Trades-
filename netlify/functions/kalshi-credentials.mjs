@@ -1,17 +1,19 @@
 // Owner-only credential management. No live order execution.
 import {getStore} from '@netlify/blobs';
 import {liveRepository} from './lib/live-state.mjs';
-import {createPrivateKey,createHash,sign,constants} from 'node:crypto';
+import {createPrivateKey,createHash} from 'node:crypto';
+import {signedHeaders} from './lib/kalshi-execution-client.mjs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials,openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 const db=()=>getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'});
 const storageKey=user=>'credentials/'+user.id;
-async function verifyKalshi(keyId,privateKeyPem){
- const path='/trade-api/v2/portfolio/balance',timestamp=String(Date.now());
- const signature=sign('sha256',Buffer.from(timestamp+'GET'+path),{key:createPrivateKey(privateKeyPem),padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST}).toString('base64');
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),7000);
- try{return await fetch('https://api.elections.kalshi.com'+path,{headers:{'KALSHI-ACCESS-KEY':keyId,'KALSHI-ACCESS-TIMESTAMP':timestamp,'KALSHI-ACCESS-SIGNATURE':signature,Accept:'application/json'},signal:controller.signal});}
- finally{clearTimeout(timeout)}
+export async function verifyKalshi(keyId,privateKeyPem,fetchImpl=fetch){
+ const path='/trade-api/v2/portfolio/balance';
+ const response=await fetchImpl('https://external-api.kalshi.com'+path,{method:'GET',headers:signedHeaders({keyId,privateKeyPem},'GET',path),redirect:'error',signal:AbortSignal.timeout(7000)});
+ if(!response.ok)return response;
+ const data=await response.json();
+ if(!Number.isSafeInteger(data?.balance)||data.balance<0)throw Error('INVALID_ACCOUNT_BALANCE');
+ return {ok:true,status:response.status};
 }
 export function createCredentialHandler({getOwner=owner,getDb=db,getLive=(userId)=>liveRepository(getStore({name:'bank-trades-live-execution-v1',consistency:'strong'}),userId),verify=verifyKalshi}={}){return async req=>{let liveSession;try{
  const user=await getOwner();

@@ -26,3 +26,15 @@ test('provider errors never leak credentials',async()=>{
  const result=await fetchOmegaResearchForecast({...base,provider:'claude',env:{ANTHROPIC_API_KEY:'secret'},fetchImpl:async()=>{throw Error('secret');}});
  assert.equal(result.status,'PROVIDER_UNAVAILABLE');assert.equal(JSON.stringify(result).includes('secret'),false);
 });
+
+test('Claude text blocks can follow non-text blocks without accepting malformed probabilities',async()=>{
+ const result=await fetchOmegaResearchForecast({...base,provider:'claude',env:{ANTHROPIC_API_KEY:'secret'},fetchImpl:async()=>({ok:true,json:async()=>({content:[{type:'thinking',thinking:'hidden'},{type:'text',text:'{"upProbability":0.52}'}]})})});
+ assert.equal(result.status,'RESEARCH_FORECAST');assert.equal(result.upProbability,.52);
+});
+test('Gemini credentials stay out of URLs and recognized API failure reasons are reported',async()=>{
+ const result=await fetchOmegaResearchForecast({...base,provider:'gemini',env:{GEMINI_API_KEY:'secret'},fetchImpl:async(url,opts)=>{
+  assert.ok(!url.includes('secret'));assert.equal(opts.headers['x-goog-api-key'],'secret');
+  return {ok:false,status:400,json:async()=>({error:{code:400,status:'INVALID_ARGUMENT',message:'secret',details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',reason:'API_KEY_INVALID'}]}})};
+ }});
+ assert.equal(result.errorCode,'API_KEY_INVALID');assert.ok(!JSON.stringify(result).includes('secret'));
+});

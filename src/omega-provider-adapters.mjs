@@ -31,11 +31,11 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
  const message=JSON.stringify({marketTicker,roundId,marketSnapshot});
  let url=cfg.url,headers={'content-type':'application/json'},body;
  if(provider==='gemini'){
-  url+='?key='+encodeURIComponent(key);
-  body={contents:[{parts:[{text:instruction+'\\n'+message}]}],generationConfig:{responseMimeType:'application/json',temperature:0}};
+  headers['x-goog-api-key']=key;
+  body={contents:[{parts:[{text:instruction+'\n'+message}]}],generationConfig:{responseMimeType:'application/json',temperature:0}};
  }else if(provider==='claude'){
   headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';
-  body={model:cfg.model,max_tokens:100,system:instruction,messages:[{role:'user',content:message}]};
+  body={model:cfg.model,max_tokens:256,system:instruction,messages:[{role:'user',content:message}]};
  }else{
   headers.authorization='Bearer '+key;
   body={model:cfg.model,temperature:0,max_tokens:100,messages:[{role:'system',content:instruction},{role:'user',content:message}]};
@@ -45,13 +45,14 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
   if(!response.ok){
    // Return only recognized codes. Upstream error text may echo credentials.
    const error=await response.json().then(data=>data?.error).catch(()=>null);
-   const code=error?.code||error?.type;
-   const known=['invalid_api_key','authentication_error','insufficient_quota','model_not_found','permission_error'];
-   return {status:'PROVIDER_ERROR',provider,httpStatus:response.status,...(known.includes(code)?{errorCode:code}:{})};
+   const code=error?.type||error?.status||error?.code;
+   const reason=error?.details?.find(d=>d?.['@type']==='type.googleapis.com/google.rpc.ErrorInfo')?.reason;
+   const known=['invalid_api_key','authentication_error','insufficient_quota','model_not_found','permission_error','RESOURCE_EXHAUSTED','INVALID_ARGUMENT','PERMISSION_DENIED','UNAUTHENTICATED','NOT_FOUND','API_KEY_INVALID','API_KEY_SERVICE_BLOCKED','BILLING_DISABLED'];
+   return {status:'PROVIDER_ERROR',provider,httpStatus:response.status,...(known.includes(reason)?{errorCode:reason}:known.includes(code)?{errorCode:code}:{})};
   }
   const data=await response.json();
-  const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.[0]?.text:
-   provider==='claude'?data?.content?.[0]?.text:data?.choices?.[0]?.message?.content;
+  const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string'&&p.thought!==true).map(p=>p.text).join(''):
+   provider==='claude'?data?.content?.filter(p=>p.type==='text').map(p=>p.text).join(''):data?.choices?.[0]?.message?.content;
   if(typeof raw!=='string'||raw.length>2000)return {status:'INVALID_RESPONSE',provider};
   // Accept a single JSON code block while still requiring valid JSON and a valid probability.
   const content=raw.trim();

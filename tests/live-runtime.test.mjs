@@ -16,7 +16,7 @@ test('automatic entry then profit exit uses actual fills and leaves account flat
 test('automatic stop-loss exit fires below actual fill including entry fee',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const result=await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(40),canTrade:true});assert.equal(result.reason,'STOP_LOSS');assert.equal(accountRisk((await repo.read()).state,await client.snapshot()).dailyLossCents,12);});
 test('a concurrent STOP during POST drains the worker and prevents another entry',async()=>{const {repo}=await started(),client=exchange(),create=client.create;client.create=async order=>{await repo.stop();return create(order);};await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});assert.equal((await repo.read()).state.stopped,true);assert.equal(await repo.stopped(),true);await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});assert.equal(client.count(),1);});
 test('partial fills reconcile fractional quantities without inventing a full position',()=>{const s=initialState();s.intents=[{id:'i',ticker:'BTC-ROUND',side:'up',action:'buy',qty:1,status:'AWAITING_RECONCILIATION'}];const snap={complete:true,at:Date.now(),balanceCents:100,orders:[{client_order_id:'i',order_id:'o',ticker:'BTC-ROUND',fill_count_fp:'0.50',status:'canceled'}],fills:[{fill_id:'f',order_id:'o',ticker:'BTC-ROUND',count_fp:'0.50',yes_price_dollars:'0.5',fee_cost:'0.01',created_time:new Date().toISOString()}],positions:[{ticker:'BTC-ROUND',position_fp:'0.50'}],settlements:[]};reconcile(s,snap);assert.equal(s.intents[0].filled,.5);assert.equal(accountRisk(s,snap).openCostCents,26);});
-test('settlement closes only matching exposure and accounts for loss',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const state=(await repo.read()).state,snap=await client.snapshot();snap.positions=[];snap.settlements=[{ticker:'BTC-ROUND',market_result:'no',yes_count_fp:'1.00',no_count_fp:'0.00',revenue:0,fee_cost:'0.00',settled_time:new Date().toISOString()}];reconcile(state,snap);const risk=accountRisk(state,snap);assert.equal(risk.open.length,0);assert.equal(risk.dailyLossCents,51);snap.settlements[0].revenue=100;assert.throws(()=>reconcile(state,snap),/SETTLEMENT_REVENUE_MISMATCH/);});
+test('settlement closes only matching exposure and accounts for loss',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const state=(await repo.read()).state,snap=await client.snapshot();snap.positions=[];snap.settlements=[{ticker:'BTC-ROUND',market_result:'no',yes_count_fp:'1.00',no_count_fp:'0.00',revenue:0,fee_cost:'0.00',settled_time:new Date().toISOString()}];reconcile(state,snap);const risk=accountRisk(state,snap);assert.equal(risk.open.length,0);assert.equal(risk.dailyLossCents,51);snap.settlements[0].revenue=100;assert.throws(()=>reconcile(state,snap),/CONFLICTING_CACHED_SETTLEMENTS/);});
 test('missing fees prevents an invented net P/L',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const s=(await repo.read()).state,snap=await client.snapshot();delete snap.fills[0].fee_cost;assert.throws(()=>accountRisk(s,snap),/MISSING_FILL_FEES/);});
 test('daily loss budget reserves open cost and blocks entry before network',async()=>{const state=initialState();state.enabled=true;state.stopped=false;state.limits.lossCents=50;let called=false;await assert.rejects(submitIntent({state,client:{create:async()=>{called=true}},persist:async()=>{},checkStopped:async()=>false,snapshot:await exchange().snapshot(),signal:(await signals())[0],quote:quote(49)}),/DAILY_LOSS_LIMIT/);assert.equal(called,false);});
 test('owner authorization and same-origin checks precede control mutations',async()=>{let runtimeCalls=0;const denied=createLiveControl({getOwner:async()=>{throw Object.assign(Error('Owner access required'),{status:403})},getRuntime:async()=>{runtimeCalls++}});assert.equal((await denied(new Request('https://site.test/control'))).status,403);assert.equal(runtimeCalls,0);const {repo}=await started();const allowed=createLiveControl({getOwner:async()=>({id}),getRuntime:async()=>({repo})});const res=await allowed(new Request('https://site.test/control',{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:JSON.stringify({action:'stop'})}));assert.equal(res.status,403);assert.equal(await repo.stopped(),false);});
@@ -52,4 +52,38 @@ test('trailing thresholds are configurable and invalid limits are rejected',asyn
  assert.equal(exitAction({...p,trailPct:4,trailActivationPct:5}),'TRAILING_EXIT');
  assert.equal(exitAction({...p,trailPct:10,trailActivationPct:5}),null);
  assert.throws(()=>validateLimits({...initialState().limits,trailPct:-1}),/INVALID_LIMIT/);
+});
+
+test('previously verified fills cannot silently change cost or fee',async()=>{
+ const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
+ for(const field of ['fee_cost','yes_price_dollars','created_time']){
+  const state=(await repo.read()).state,snap=await client.snapshot();snap.fills[0][field]='changed';
+  assert.throws(()=>reconcile(state,snap),/CONFLICTING_CACHED_FILLS/);
+ }
+});
+test('economic evidence tolerates object property ordering but rejects altered terminal orders',async()=>{
+ const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
+ const state=(await repo.read()).state,snap=await client.snapshot();snap.fills[0]=Object.fromEntries(Object.entries(snap.fills[0]).reverse());reconcile(state,snap);
+ snap.orders[0].fill_count_fp='0.00';assert.throws(()=>reconcile(state,snap),/CONFLICTING_CACHED_ORDERS/);
+});
+test('fractional settlement tolerates binary floating point without tolerating wrong exposure',()=>{
+ const {settlementFor}=accounting;
+ const snapshot={settlements:[{ticker:'BTC-ROUND',yes_count_fp:'0.30',no_count_fp:'0.00',market_result:'yes',revenue:30,settled_time:new Date().toISOString()}]};
+ assert.ok(settlementFor(snapshot,'BTC-ROUND',.1+.2));assert.throws(()=>settlementFor(snapshot,'BTC-ROUND',.31),/SETTLEMENT_MISMATCH/);
+});
+import * as accounting from '../src/live-accounting.mjs';
+import {runDemoLifecycle} from '../netlify/functions/lib/kalshi-demo-lifecycle.mjs';
+test('demo lifecycle uses real execution reconciliation and never resubmits an ambiguous order',async()=>{
+ const db=database(),repo=liveRepository(db,'demo-owner'),client=exchange();let calls=0;
+ client.create=async()=>{calls++;throw Error('timeout')};
+ const args={repo,client,findMarket:async()=>({ticker:'BTC-ROUND'}),quoteFor:async()=>quote(49),commit:'test'};
+ const result=await runDemoLifecycle(args);assert.equal(result.status,'DEMO_LIFECYCLE_FAILED');assert.match(result.error,/OUTCOME_UNKNOWN/);
+ await runDemoLifecycle(args);assert.equal(calls,1);
+});
+test('demo lifecycle requires actual exit fills before reporting a round trip',async()=>{
+ const db=database(),repo=liveRepository(db,'demo-owner'),client=exchange();
+ const args={repo,client,findMarket:async()=>({ticker:'BTC-ROUND'}),quoteFor:async()=>quote(49),commit:'test'};
+ assert.equal((await runDemoLifecycle(args)).status,'DEMO_ENTRY_RECONCILED');
+ assert.equal((await runDemoLifecycle(args)).upRoundTripVerified,undefined);
+ assert.equal((await runDemoLifecycle(args)).upRoundTripVerified,true);
 });

@@ -29,6 +29,13 @@ export function reconcile(state,snapshot,now=Date.now()){
  for(const [field,id] of [['orders','order_id'],['fills','fill_id'],['settlements','ticker']]){
   const key=x=>field==='fills'?(x.fill_id||x.trade_id):x[id];
   const incoming=snapshot[field]||[],seen=new Set(incoming.map(key));
+  // Previously verified economic facts must never be silently replaced.
+  const facts=field==='fills'?['order_id','ticker','market_ticker','count_fp','count','yes_price_dollars','fee_cost','created_time','side','action','book_side','subaccount_number','exchange_index']:
+   field==='orders'?['client_order_id','ticker','fill_count_fp','fill_count','status']:
+   ['ticker','market_result','yes_count_fp','no_count_fp','revenue','fee_cost','settled_time'];
+  const previous=new Map((cached[field]||[]).map(x=>[key(x),x]));
+  for(const item of incoming){const old=previous.get(key(item));if(old&&facts.some(k=>old[k]!==item[k]))throw Error('CONFLICTING_CACHED_'+field.toUpperCase());}
+
   snapshot[field]=[...incoming,...(cached[field]||[]).filter(x=>!seen.has(key(x)))];
  }
  const orders=new Map(),fills=new Map(),positions=new Map();
@@ -55,7 +62,7 @@ export function reconcile(state,snapshot,now=Date.now()){
  for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Error('POSITION_MISSING_'+ticker);
  if(snapshot.orders.some(o=>o.status==='resting'&&!state.intents.some(i=>i.id===o.client_order_id)))throw Error('UNMANAGED_RESTING_ORDER');
  const ids=new Set(state.intents.map(i=>i.id)),orderIds=new Set(state.intents.map(i=>i.orderId)),tickers=new Set(state.intents.map(i=>i.ticker));
- state.evidence={orders:[...orders.values()].filter(o=>ids.has(o.client_order_id)&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))};
+ state.evidence=structuredClone({orders:[...orders.values()].filter(o=>ids.has(o.client_order_id)&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))});
  return {positions,orders,fills};
 }
 export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,stopPct,trailPct=4,trailActivationPct=5}){
@@ -93,7 +100,7 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  if(await checkStopped()){intent.status='ABORTED';await persist(state);throw Error('STOPPED_BEFORE_SUBMISSION');}
  intent.status='SUBMITTING';await persist(state);
  const stopped=await checkStopped(),submitAt=clock();
- if(stopped||!fresh(quote.at,submitAt)||!fresh(signal.at,submitAt)||quote.expiresAt<=submitAt||
+ if(stopped||!fresh(quote.at,submitAt)||!fresh(signal.at,submitAt)||!fresh(snapshot.at,submitAt)||quote.expiresAt<=submitAt||
    (action==='buy'&&(quote.expiresAt-submitAt<75000||new Date(submitAt).toISOString().slice(0,10)!==day))){
   intent.status='ABORTED';await persist(state);
   throw Error(stopped?'STOPPED_BEFORE_SUBMISSION':'STALE_BEFORE_SUBMISSION');

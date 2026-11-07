@@ -75,3 +75,26 @@ test('emergency stop reconciles a partial fill from the post-cancel snapshot',as
  assert.equal(state.intents[0].filled,.5);
  assert.equal(state.intents[0].status,'RECONCILED');
 });
+
+test('snapshot freshness starts before the first account request',async()=>{
+ const started=Date.now();let first;
+ const client=kalshiClient(credentials,{fetchImpl:async url=>{
+  first??=Date.now();await new Promise(r=>setTimeout(r,2));
+  const field=url.includes('/orders')?'orders':url.includes('/fills')?'fills':url.includes('/positions')?'market_positions':'settlements';
+  return {ok:true,json:async()=>url.includes('/balance')?{balance:100}:{[field]:[]}};
+ }});
+ const snap=await client.snapshot();assert.ok(snap.at>=started&&snap.at<=first);assert.ok(Date.now()>snap.at);
+});
+test('account evidence aging during persistence prevents submission',async()=>{
+ const x=setup();x.snapshot.at=Date.now()-9000;x.clock=()=>Date.now()+2000;
+ await assert.rejects(submitIntent(x),/STALE_BEFORE_SUBMISSION/);assert.equal(x.stats().calls,0);
+});
+
+test('credential enrollment validates the same production host and balance schema as execution',async()=>{
+ const {verifyKalshi}=await import('../netlify/functions/kalshi-credentials.mjs');
+ const valid=await verifyKalshi(credentials.keyId,credentials.privateKeyPem,async(url,opts)=>{
+  assert.equal(url,'https://external-api.kalshi.com/trade-api/v2/portfolio/balance');assert.equal(opts.method,'GET');assert.equal(opts.redirect,'error');
+  return {ok:true,status:200,json:async()=>({balance:0})};
+ });assert.equal(valid.ok,true);
+ await assert.rejects(verifyKalshi(credentials.keyId,credentials.privateKeyPem,async()=>({ok:true,json:async()=>({})})),/INVALID_ACCOUNT_BALANCE/);
+});

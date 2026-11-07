@@ -36,3 +36,22 @@ The release endpoint reports: exchange authentication; buy/sell/partial-fill lif
 - https://docs.kalshi.com/api-reference/orders/cancel-order-v2
 - https://docs.kalshi.com/api-reference/portfolio/get-fills
 - https://docs.kalshi.com/api-reference/portfolio/get-settlements
+
+## Follow-up verification, 2026-11-07
+
+Based on main `0f2b18da7c8058cb67f1689dbab9f9f7829b3912`, preserving its newer paper monitoring, learning, demo and dashboard changes.
+
+Production observations before this follow-up:
+- `/build-version.json` matched that main commit.
+- `/kalshi-demo-status` reported DEMO_AUTHENTICATED, DEMO_PLACEMENT_AND_CANCEL_VERIFIED, UP and DOWN filled and settled demo contracts, including a 0.23-contract partial fill. These are historical deployed reports, not certification of the production execution engine or the new commit. The hold fixture reported positionReconciled=true.
+- `/omega-live-health` reported a running collector, but NOT_VERIFIED research: GPT HTTP 429, Gemini HTTP 400, Claude INVALID_RESPONSE. No accuracy or performance improvement is inferred from those reports or the small demo sample.
+- The protected dashboard redirected an unauthenticated browser to sign-in. Authenticated owner and non-owner end-to-end tests remain pending.
+
+Repairs:
+- Account snapshot age starts before the first request, and is rechecked after durable reservation immediately before submission.
+- Cached economic evidence is cloned and contradictions in returning fills, terminal orders and settlements stop reconciliation instead of silently rewriting prior P/L.
+- Fractional settlement/sell comparisons tolerate floating-point representation error, but reject economically different quantities.
+- Provider parsing reads text blocks without treating reasoning blocks as answers. Gemini keys use the authentication header instead of query strings. Safe error reasons are retained to distinguish configuration from quota problems without leaking upstream messages.
+- A separate scheduled `kalshi-demo-lifecycle` uses only the demo host and existing encrypted demo credentials. It runs a bounded UP then DOWN entry/exit test through submitIntent/reconcile/accountRisk, with the same conservative spending/loss limits. Maximum eight submission attempts, one contract per entry, no retries for ambiguous outcomes. It requires a flat, reconciled demo account, default-exchange markets and executable quotes. It reports missing credentials, liquidity, funding or conflicting account state rather than declaring success. Results appear in `kalshi-demo-status.lifecycleTest`. A failed or interrupted run is not automatically restarted.
+
+The seven production release blockers remain in force. Historical demo evidence does not prove the current release's sell lifecycle, production credentials, concurrent STOP/submit timing, production owner isolation, worker latency or settlement accounting. A minute scheduler is not a guaranteed rapid exit service, and a crashed execution lock requires operator review. No real-money request is authorized by this verification work.

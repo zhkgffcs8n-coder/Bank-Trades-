@@ -5,9 +5,9 @@ export function settlementFor(snapshot,ticker,qty){
  if(!matches.length)return null;
  if(matches.length!==1)throw Error('DUPLICATE_SETTLEMENT');const s=matches[0];
  const yes=numeric(s.yes_count_fp,'SETTLEMENT_YES'),no=numeric(s.no_count_fp,'SETTLEMENT_NO');
- if(yes-no!==qty||!['yes','no'].includes(s.market_result)||!Number.isFinite(Date.parse(s.settled_time)))throw Error('SETTLEMENT_MISMATCH');
+ if(Math.abs(yes-no-qty)>1e-7||!['yes','no'].includes(s.market_result)||!Number.isFinite(Date.parse(s.settled_time)))throw Error('SETTLEMENT_MISMATCH');
  const revenue=numeric(s.revenue,'SETTLEMENT_REVENUE');
- if(revenue!==(s.market_result==='yes'?yes:no)*100)throw Error('SETTLEMENT_REVENUE_MISMATCH');return s;
+ if(Math.abs(revenue-(s.market_result==='yes'?yes:no)*100)>1e-7)throw Error('SETTLEMENT_REVENUE_MISMATCH');return s;
 }
 // Gains never replenish this conservative daily risk budget. Open cost is reserved in full.
 export function accountRisk(state,snapshot,now=Date.now()){
@@ -26,7 +26,7 @@ export function accountRisk(state,snapshot,now=Date.now()){
    const yes=numeric(f.yes_price_dollars,'YES_FILL_PRICE');if(yes>1)throw Error('INVALID_FILL_PRICE');
    const cost=qty*(i.side==='up'?yes:1-yes)*100,fees=numeric(f.fee_cost,'FILL_FEES')*100;
    if(i.action==='buy'){t.qty+=qty;t.cost+=cost+fees;}
-   else{if(qty>t.qty)throw Error('SELL_WITHOUT_FILL');const basis=t.cost*qty/t.qty,pnl=cost-fees-basis;t.qty-=qty;t.cost-=basis;if(dayOf(at)===today)dailyLossCents+=Math.max(0,-pnl);}
+   else{if(qty>t.qty+1e-7)throw Error('SELL_WITHOUT_FILL');const basis=t.cost*qty/t.qty,pnl=cost-fees-basis;t.qty=Math.max(0,t.qty-qty);t.cost=Math.max(0,t.cost-basis);if(dayOf(at)===today)dailyLossCents+=Math.max(0,-pnl);}
   }
  }
  for(const t of trades.values()){
