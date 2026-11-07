@@ -60,3 +60,20 @@ test('impossible simulated exit profits invalidate the archive instead of inflat
  assert.equal(r.maxRealizedDrawdownDollars,null);
  assert.equal(r.ordersAuthorized,false);
 });
+
+test('OMEGA paper archive rejects entries above the $5 execution cap before reporting PnL',async()=>{
+ const db=store([
+  record('BTC-OVER-CLOSED',{status:'CLOSED',closedAtMs:2000,quantity:20,entryCostDollars:5.50,netDollars:2}),
+  record('BTC-OVER-SETTLED',{status:'SETTLED',settledAtMs:3000,quantity:20,entryCostDollars:6,netDollars:14,
+   payoutDollars:20,outcome:'yes',settlementVerification:SETTLEMENT_VERIFICATION}),
+  record('BTC-WITHIN-CAP',{status:'CLOSED',closedAtMs:4000,quantity:8,entryCostDollars:4.95,netDollars:-.5})
+ ]);
+ const r=await summarizeOmegaPaper(db);
+ assert.equal(r.invalidPositions,2);
+ assert.equal(r.simulatedBidExits,1);
+ assert.equal(r.officiallySettledPositions,0);
+ assert.equal(r.status,'INCOMPLETE_PAPER_HISTORY');
+ assert.equal(r.realizedNetDollars,null);
+ assert.equal(r.maxRealizedDrawdownDollars,null);
+ assert.equal(r.ordersAuthorized,false);
+});
