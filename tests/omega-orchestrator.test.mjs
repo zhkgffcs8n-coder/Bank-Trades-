@@ -107,3 +107,19 @@ test('walk-forward excludes outcomes settled after a later prediction and missin
  assert.equal(legitimate.evaluated,7);
  assert.equal(legitimate.ordersAuthorized,false);
 });
+
+test('bounded leaderboard refuses a champion when historical score records are truncated',async()=>{
+ const {omegaLeaderboard}=await import('../netlify/functions/omega-leaderboard.mjs');
+ const values=new Map(Array.from({length:60},(_,i)=>['omega/verified-scores/v1/BTC-'+String(i).padStart(3,'0'),{
+  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'BTC-'+i,
+  predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
+  scores:[{provider:'omega_consensus',brier:.01},{provider:'kalshi_baseline',brier:.5}]}]));
+ const db={async *list(){yield {blobs:[...values.keys()].map(key=>({key}))}},async get(key){return values.get(key)}};
+ const result=await omegaLeaderboard(db,{limit:50});
+ assert.equal(result.historyTruncated,true);
+ assert.equal(result.status,'INCOMPLETE_HISTORY');
+ assert.equal(result.champion,null);
+ assert.equal(result.leaderboard.every(x=>!x.eligible),true);
+ assert.equal(result.walkForward.beatsMarketBaseline,false);
+ assert.equal(result.realOrdersAuthorized,false);
+});
