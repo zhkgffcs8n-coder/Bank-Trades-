@@ -5,6 +5,7 @@ import {getStore} from '@netlify/blobs';
 import {runOmegaResearchRound} from '../../src/omega-orchestrator.mjs';
 import {omegaProviderStatus} from '../../src/omega-provider-adapters.mjs';
 import {omegaPaperSignal,advanceOmegaPaperStored,fetchOmegaLiveQuote} from './lib/omega-auto-paper.mjs';
+import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 const ASSETS=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 export function selectOmegaObservation({latest,nowMs,asset}){
  if(!latest||latest.asset!==asset||typeof latest.ticker!=='string'||!latest.ticker||
@@ -25,20 +26,51 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  const selectedProviders=[...configured.slice(offset),...configured.slice(0,offset)].slice(0,2);
  // Monitor already-open paper positions independently of provider availability and asset rotation.
  // Only active contracts with independently fetched executable quotes can be exited.
- const paperMonitoring={open:0,exits:0,holds:0,unpriced:0};
- for(const monitoredAsset of ASSETS){
-  const snapshot=await db.get('latest/'+monitoredAsset,{type:'json'});
-  const ticker=snapshot?.ticker;
-  if(typeof ticker!=='string'||!ticker)continue;
+ const paperMonitoring={open:0,exits:0,holds:0,unpriced:0,backfilled:0};
+ const monitoredTickers=new Set();
+ async function monitorOpenTicker(ticker){
+  if(typeof ticker!=='string'||!/^[A-Z0-9-]{3,100}$/.test(ticker)||monitoredTickers.has(ticker))return;
+  monitoredTickers.add(ticker);
   const stored=await db.get('omega/paper/v1/'+ticker,{type:'json'});
-  if(stored?.state?.positions?.[ticker]?.status!=='OPEN')continue;
+  if(stored?.state?.positions?.[ticker]?.status!=='OPEN'){
+   // A stale index marker must not resurrect a closed position.
+   if(typeof db.delete==='function')await db.delete('omega/paper/open/v1/'+ticker);
+   return;
+  }
   paperMonitoring.open++;
   const quote=await fetchOmegaLiveQuote({ticker,nowMs,fetchImpl});
-  if(!quote){paperMonitoring.unpriced++;continue;}
+  if(!quote){paperMonitoring.unpriced++;return;}
   const action=await advanceOmegaPaperStored({db,ticker,roundId:ticker,signal:null,quote,nowMs});
   if(action.status==='PAPER_EXIT')paperMonitoring.exits++;
   else if(action.status==='PAPER_HOLD')paperMonitoring.holds++;
   else paperMonitoring.unpriced++;
+ }
+ // Durable per-ticker open markers survive asset rotation. Bound every scan to
+ // keep scheduled function costs predictable; cursors resume on later minutes.
+ if(typeof db.list==='function'){
+  await scanBlobPage(db,{prefix:'omega/paper/open/v1/',cursorKey:'omega/paper/scan/open-v1',limit:32},
+   async ({key})=>monitorOpenTicker(key.slice('omega/paper/open/v1/'.length)));
+  // Recover positions opened before the marker index was introduced (or before
+  // an interrupted marker write). Never mark them closed without a valid quote.
+  await scanBlobPage(db,{prefix:'omega/paper/v1/',cursorKey:'omega/paper/scan/backfill-v1',limit:16},
+   async ({key})=>{
+    const ticker=key.slice('omega/paper/v1/'.length);
+    if(!/^[A-Z0-9-]{3,100}$/.test(ticker))return;
+    const stored=await db.get(key,{type:'json'});
+    if(stored?.state?.positions?.[ticker]?.status!=='OPEN')return;
+    const marker='omega/paper/open/v1/'+ticker;
+    if(!await db.get(marker,{type:'json')){
+     await db.setJSON(marker,{ticker,backfilledAtMs:nowMs,realOrdersAuthorized:false});
+     paperMonitoring.backfilled++;
+    }
+    await monitorOpenTicker(ticker);
+   });
+ }
+ // Fast path: current collector contracts are monitored every minute, even
+ // when a bounded archive scan has not yet reached their marker.
+ for(const monitoredAsset of ASSETS){
+  const snapshot=await db.get('latest/'+monitoredAsset,{type:'json'});
+  await monitorOpenTicker(snapshot?.ticker);
  }
  const latest=await db.get('latest/'+asset,{type:'json'});
  let observation=selectOmegaObservation({latest,nowMs,asset});
