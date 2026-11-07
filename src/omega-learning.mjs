@@ -115,7 +115,7 @@ export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumIm
  for(let i=minimumHistory;i<clean.length;i++){
   const current=clean[i],past=clean.slice(0,i).filter(x=>x.at<current.at);
   if(past.length<minimumHistory)continue;
-  const providers=new Set(past.flatMap(x=>[...x.scores.keys()].filter(p=>p!=='kalshi_baseline'));
+  const providers=new Set(past.flatMap(x=>[...x.scores.keys()].filter(p=>p!=='kalshi_baseline')));
   const ranked=[];
   for(const provider of providers){
    const paired=past.filter(x=>x.scores.has(provider));
