@@ -15,3 +15,12 @@ test('original robot crew is visual only, motion is persistent, and no trade end
 test('arcade honors reduced motion and mobile viewports',()=>{
  const css=read('arcade-theme.css');assert.match(css,/prefers-reduced-motion:reduce/);assert.match(css,/max-width:700px/);
 });
+
+test('arena never claims an order or profit from signal-table changes',()=>{
+ const js=read('arcade-crew.js');
+ assert.match(js,/btBattleArena/);
+ assert.match(js,/not an executed order/);
+ assert.match(js,/fill not verified/);
+ assert.match(js,/if\(!prior\.has\(asset\)\)/);
+ assert.match(js,/state!==priorPaperStatus&&running/);
+});
