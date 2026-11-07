@@ -384,7 +384,10 @@ function syncSignals(){
   const color=decision==='BUY UP'?'#22c55e':decision==='BUY DOWN'||decision==='SELL FAST'?'#ef4444':decision==='HOLD'?'#a78bfa':'#facc15';
   const badge=document.createElement('div');
   badge.style.cssText='display:inline-block;padding:4px 9px;margin:1px 0 3px;border:2px solid '+color+';border-radius:9px;background:'+color+'20;color:'+color+';font-size:clamp(12px,1.1vw,16px);font-weight:900;letter-spacing:.2px;box-shadow:0 0 8px '+color+'44';
-  badge.textContent=(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
+  const forecast=sig?.roundCall;
+  const forecastFresh=decision==='WAIT'&&forecast?.ticker===ticker&&Number.isFinite(forecast.asOf)&&Date.now()-forecast.asOf>=0&&Date.now()-forecast.asOf<90000&&['UP','DOWN'].includes(forecast.direction);
+  badge.textContent=forecastFresh?tr.dataset.asset+' · '+(forecast.direction==='UP'?'🟢 BUY UP':'🔴 BUY DOWN')+' · FORECAST ONLY':(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
+  if(forecastFresh){badge.title='Directional forecast only. Actual entry remains blocked until qualified; no order placed.';badge.style.borderColor='#38bdf8';badge.style.color='#7dd3fc';}
   cell.prepend(badge);
   // Display the per-round directional call next to WAIT; do not mislabel an
   // unqualified quote-based prediction as an approved trading entry.
