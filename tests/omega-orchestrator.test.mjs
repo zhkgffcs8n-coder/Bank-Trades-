@@ -76,3 +76,18 @@ test('leaderboard endpoint only reports verified archived scores and never autho
  assert.equal(result.realOrdersAuthorized,false);
  assert.equal(result.originalPrimalComparison,'NOT_VERIFIED');
 });
+
+test('walk-forward champion never selects from the future or claims unverified Primal wins',async()=>{
+ const {walkForwardChampionAudit}=await import('../src/omega-learning.mjs');
+ const make=(i,model,baseline)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,predictedAtMs:1000+i,
+  scores:[{provider:'gpt',brier:model},{provider:'kalshi_baseline',brier:baseline}]});
+ const history=Array.from({length:25},(_,i)=>make(i,i<5?.1:.4,.3));
+ const result=walkForwardChampionAudit(history,{minimumHistory:5,minimumImprovement:.05});
+ assert.equal(result.evaluated,5);
+ assert.equal(result.beatsMarketBaseline,false);
+ assert.equal(result.promoted,false);
+ assert.equal(result.ordersAuthorized,false);
+ assert.equal(result.originalPrimalComparison,'NOT_VERIFIED');
+ const conflict=walkForwardChampionAudit([...history,make(0,.9,.1)],{minimumHistory:5,minimumImprovement:.05});
+ assert.equal(conflict.evaluated,4);
+});
