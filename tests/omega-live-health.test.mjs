@@ -27,3 +27,18 @@ test('paper monitoring counters are read-only, bounded and not fabricated',()=>{
  assert.equal(result.omegaExternalProvidersRunning,false);
  assert.equal(result.realOrdersAuthorized,false);
 });
+
+test('last-run learning and paper PnL diagnostics never masquerade as lifetime totals',()=>{
+ const enriched={...heartbeat,newPendingPredictions:5,trainedThisRun:2,trainingReviewCount:1,
+  settlementFailures:0,researchFailures:3};
+ const result=omegaLiveHealth(enriched,now,null,{action:'PAPER_EXIT',updatedAtMs:now-1000,netDollars:-.37});
+ assert.deepEqual(result.collectorLastRunCounts,{newPendingPredictions:5,trained:2,trainingReviews:1,
+  settlementFailures:0,researchFailures:3});
+ assert.equal(result.paperLastActionNetDollars,-.37);
+ assert.equal(result.paperLastActionAtMs,now-1000);
+ const absent=omegaLiveHealth(heartbeat,now,null,{action:'PAPER_ENTRY',updatedAtMs:now+60000,netDollars:'3'});
+ assert.equal(absent.collectorLastRunCounts.trained,null);
+ assert.equal(absent.paperLastActionNetDollars,null);
+ assert.equal(absent.paperLastActionAtMs,null);
+ assert.equal(absent.realOrdersAuthorized,false);
+});
