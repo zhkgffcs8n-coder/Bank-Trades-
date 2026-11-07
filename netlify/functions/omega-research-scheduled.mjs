@@ -48,11 +48,11 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  // Durable per-ticker open markers survive asset rotation. Bound every scan to
  // keep scheduled function costs predictable; cursors resume on later minutes.
  if(typeof db.list==='function'){
-  await scanBlobPage(db,{prefix:'omega/paper/open/v1/',cursorKey:'omega/paper/scan/open-v1',limit:32},
+  await scanBlobPage(db,{prefix:'omega/paper/open/v1/',cursorKey:'omega/paper/scan/open-v1',limit:4},
    async ({key})=>monitorOpenTicker(key.slice('omega/paper/open/v1/'.length)));
   // Recover positions opened before the marker index was introduced (or before
   // an interrupted marker write). Never mark them closed without a valid quote.
-  await scanBlobPage(db,{prefix:'omega/paper/v1/',cursorKey:'omega/paper/scan/backfill-v1',limit:16},
+  await scanBlobPage(db,{prefix:'omega/paper/v1/',cursorKey:'omega/paper/scan/backfill-v1',limit:2},
    async ({key})=>{
     const ticker=key.slice('omega/paper/v1/'.length);
     if(!/^[A-Z0-9-]{3,100}$/.test(ticker))return;
