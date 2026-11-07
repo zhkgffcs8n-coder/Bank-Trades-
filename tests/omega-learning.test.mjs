@@ -45,6 +45,28 @@ test('OMEGA public Brier summary quarantines conflicting duplicate rounds indepe
  assert.equal(summarizeVerifiedScores([base,{...base,scores:[...base.scores].reverse()}])[0].verifiedRounds,1);
  assert.deepEqual(summarizeVerifiedScores([base,conflicting]),[]);
 });
+test('malformed duplicate OMEGA score records quarantine a market round regardless of scan order',()=>{
+ const good={status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'duplicate',
+  scores:[{provider:'omega_consensus',brier:.01},{provider:'kalshi_baseline',brier:.2}]};
+ const independent={...good,roundId:'independent',
+  scores:[{provider:'omega_consensus',brier:.16},{provider:'kalshi_baseline',brier:.36}]};
+ for(const bad of [
+  {...good,scores:null},
+  {...good,scores:[]},
+  {...good,scores:[{provider:'omega_consensus',brier:-.1}]},
+  {...good,scores:[{provider:'omega_consensus',brier:.01},{provider:'omega_consensus',brier:.02}]}
+ ]){
+  for(const records of [[good,bad,independent],[bad,independent,good]]){
+   const scores=summarizeVerifiedScores(records);
+   assert.deepEqual(scores.map(x=>x.provider),['omega_consensus','kalshi_baseline']);
+   assert.equal(scores.find(x=>x.provider==='omega_consensus').verifiedRounds,1);
+   assert.equal(scores.find(x=>x.provider==='omega_consensus').meanBrier,.16);
+   assert.equal(scores.find(x=>x.provider==='kalshi_baseline').meanBrier,.36);
+  }
+ }
+ assert.deepEqual(summarizeVerifiedScores([good,{...good,scores:null}]),[]);
+});
+
 test('scheduled archive scores strict settlements once and excludes late forecasts',async()=>{
  const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
  const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
