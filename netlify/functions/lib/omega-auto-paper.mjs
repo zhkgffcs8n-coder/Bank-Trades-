@@ -61,11 +61,20 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
    const closesAt=Date.parse(market.close_time);
    if(!Number.isFinite(closesAt)||closesAt<=nowMs)return null;
   }
-  const parse=(d,c)=>{const v=d===undefined?Number(c)/100:Number(d);return Number.isFinite(v)&&v>0&&v<1?v:NaN};
+  // A legitimate 0 bid means there is no executable exit liquidity; it must
+  // not invalidate the whole quote or be mistaken for a positive exit price.
+  // Reject absent/null/blank/boolean values so missing bids cannot become zero.
+  const parse=(d,c,allowZero=false)=>{
+   const raw=d===undefined?c:d;
+   if(raw===null||raw===undefined||typeof raw==='boolean'||
+    (typeof raw==='string'&&!/^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(raw)))return NaN;
+   const v=d===undefined?Number(raw)/100:Number(raw);
+   return Number.isFinite(v)&&v<1&&(allowZero?v>=0:v>0)?v:NaN;
+  };
   const quote={ticker,asOfMs:nowMs,yesAskDollars:parse(market.yes_ask_dollars,market.yes_ask),
    noAskDollars:parse(market.no_ask_dollars,market.no_ask),
-   yesBidDollars:parse(market.yes_bid_dollars,market.yes_bid),
-   noBidDollars:parse(market.no_bid_dollars,market.no_bid)};
+   yesBidDollars:parse(market.yes_bid_dollars,market.yes_bid,true),
+   noBidDollars:parse(market.no_bid_dollars,market.no_bid,true)};
   return Object.values(quote).slice(2).every(Number.isFinite)&&
    quote.yesBidDollars<=quote.yesAskDollars&&quote.noBidDollars<=quote.noAskDollars?quote:null;
  }catch{return null;}
