@@ -12,12 +12,12 @@ test('no entry without a fresh executable-side edge',()=>{
 });
 test('paper direction follows net ask edge, not probability majority or absolute midpoint difference',()=>{
  const down={...research,fusion:{...research.fusion,modelMean:.55,modelMinusMarket:-.20}};
- const downQuote={...quote,yesAskDollars:.90,noAskDollars:.20};
+ const downQuote={...quote,yesAskDollars:.90,noAskDollars:.20,noBidDollars:.19};
  assert.equal(omegaPaperSignal(down,downQuote).forecast.consensus,'DOWN');
  const up={...research,fusion:{...research.fusion,modelMean:.45,modelMinusMarket:.20}};
- const upQuote={...quote,yesAskDollars:.20,noAskDollars:.90};
+ const upQuote={...quote,yesAskDollars:.20,yesBidDollars:.19,noAskDollars:.90};
  assert.equal(omegaPaperSignal(up,upQuote).forecast.consensus,'UP');
- const overpriced={...quote,yesAskDollars:.75,noAskDollars:.35};
+ const overpriced={...quote,yesAskDollars:.75,noAskDollars:.35,noBidDollars:.34};
  assert.equal(omegaPaperSignal(research,overpriced),null);
 });
 test('automatically enters and exits paper without a second entry',async()=>{
@@ -74,4 +74,21 @@ test('paper settlement rejects unverified outcomes and never invents a zero payo
  const r=await settleOmegaPaperStored({db,ticker,nowMs:120000});
  assert.equal(r.status,'WAITING_FOR_VERIFIED_SETTLEMENT');
  assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+});
+
+test('crossed quotes never create a shadow entry, even when AI claims a large edge',()=>{
+ const crossedUp={...quote,yesBidDollars:.90,yesAskDollars:.20};
+ const crossedDown={...quote,noBidDollars:.90,noAskDollars:.20};
+ assert.equal(omegaPaperSignal(research,crossedUp),null);
+ assert.equal(omegaPaperSignal(research,crossedDown),null);
+});
+test('live Kalshi quote parser rejects crossed books and expired or malformed close times',async()=>{
+ const market={ticker:quote.ticker,status:'active',yes_bid_dollars:'0.44',yes_ask_dollars:'0.45',
+  no_bid_dollars:'0.54',no_ask_dollars:'0.55',close_time:new Date(now+10000).toISOString()};
+ const fetchMarket=record=>async()=>({ok:true,json:async()=>({market:record})});
+ assert.ok(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket(market)}));
+ assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,yes_bid_dollars:'0.80'})}),null);
+ assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,no_bid_dollars:'0.80'})}),null);
+ assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,close_time:new Date(now-1).toISOString()})}),null);
+ assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,close_time:'not-a-time'})}),null);
 });
