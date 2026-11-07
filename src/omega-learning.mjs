@@ -84,12 +84,15 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
    typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0)continue;
   const key=JSON.stringify([r.marketTicker,r.roundId]);
   const scores=new Map();
-  for(const s of r.scores||[]){
-   if(typeof s.provider!=='string'||!s.provider||!Number.isFinite(s.brier)||s.brier<0||s.brier>1||
-    scores.has(s.provider)){scores.clear();break;}
-   scores.set(s.provider,s.brier);
+  let valid=Array.isArray(r.scores)&&r.scores.length>0;
+  if(valid)for(const score of r.scores){
+   if(typeof score?.provider!=='string'||!score.provider||!Number.isFinite(score.brier)||
+    score.brier<0||score.brier>1||scores.has(score.provider)){valid=false;break;}
+   scores.set(score.provider,score.brier);
   }
-  if(!scores.has('kalshi_baseline'))continue;
+  // Do not allow an invalid duplicate to disappear while its valid copy
+  // remains eligible to choose a research champion.
+  if(!valid||!scores.has('kalshi_baseline')){conflicts.add(key);continue;}
   if(rounds.has(key)){conflicts.add(key);continue;}
   rounds.set(key,{key,at:r.predictedAtMs,scores});
  }
@@ -126,19 +129,23 @@ export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumIm
  const keys=new Set(),conflicts=new Set(),valid=[];
  for(const r of records){
   if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
-   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0||
-   !Number.isSafeInteger(r.settledAtMs)||r.settledAtMs<=r.predictedAtMs)continue;
+   typeof r.roundId!=='string'||!r.roundId)continue;
   const key=JSON.stringify([r.marketTicker,r.roundId]);
+  if(!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0||
+   !Number.isSafeInteger(r.settledAtMs)||r.settledAtMs<=r.predictedAtMs){
+   conflicts.add(key);continue;
+  }
   if(keys.has(key)){conflicts.add(key);continue;}
   keys.add(key);
   const scores=new Map();
-  for(const s of r.scores||[]){
-   if(typeof s.provider!=='string'||!s.provider||!Number.isFinite(s.brier)||s.brier<0||s.brier>1||scores.has(s.provider)){
-    scores.clear();break;
-   }
-   scores.set(s.provider,s.brier);
+  let validScores=Array.isArray(r.scores)&&r.scores.length>0;
+  if(validScores)for(const score of r.scores){
+   if(typeof score?.provider!=='string'||!score.provider||!Number.isFinite(score.brier)||
+    score.brier<0||score.brier>1||scores.has(score.provider)){validScores=false;break;}
+   scores.set(score.provider,score.brier);
   }
-  if(scores.has('kalshi_baseline'))valid.push({key,at:r.predictedAtMs,settledAtMs:r.settledAtMs,scores});
+  if(!validScores||!scores.has('kalshi_baseline')){conflicts.add(key);continue;}
+  valid.push({key,at:r.predictedAtMs,settledAtMs:r.settledAtMs,scores});
  }
  valid.sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
  const clean=valid.filter(x=>!conflicts.has(x.key)),decisions=[];
