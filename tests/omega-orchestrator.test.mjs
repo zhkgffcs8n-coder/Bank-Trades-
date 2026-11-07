@@ -53,7 +53,8 @@ test('conflicting frozen OMEGA predictions quarantine a round rather than select
 test('research champion requires verified chronological holdout improvement',async()=>{
  const {evaluateResearchChampions}=await import('../src/omega-learning.mjs');
  const make=(i,model,baseline)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,
-  predictedAtMs:1000+i,scores:[{provider:'gpt',brier:model},{provider:'kalshi_baseline',brier:baseline}]});
+  predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
+  scores:[{provider:'gpt',brier:model},{provider:'kalshi_baseline',brier:baseline}]});
  const records=Array.from({length:6},(_,i)=>make(i,.1,.3));
  const insufficient=evaluateResearchChampions(records.slice(0,4),{minimumTrain:3,minimumHoldout:2});
  assert.equal(insufficient.champion,null);
@@ -79,7 +80,8 @@ test('leaderboard endpoint only reports verified archived scores and never autho
  const {omegaLeaderboard}=await import('../netlify/functions/omega-leaderboard.mjs');
  const values=new Map();
  for(let i=0;i<52;i++)values.set('omega/verified-scores/v1/BTC-'+i,{
-  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'BTC-'+i,predictedAtMs:1000+i,
+  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'BTC-'+i,
+  predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
   scores:[{provider:'omega_consensus',brier:.1},{provider:'kalshi_baseline',brier:.3}]});
  values.set('omega/verified-scores/v1/UNVERIFIED',{status:'BLOCKED',scores:[]});
  const db={async *list(){yield {blobs:[...values.keys()].sort().map(key=>({key}))}},
