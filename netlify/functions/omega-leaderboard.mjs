@@ -1,7 +1,7 @@
 // Public, read-only verified OMEGA research leaderboard. Never authorizes trading.
 import {getStore} from '@netlify/blobs';
 import {blobWindow} from '../../src/blob-window.mjs';
-import {evaluateResearchChampions,summarizeVerifiedScores} from '../../src/omega-learning.mjs';
+import {evaluateResearchChampions,summarizeVerifiedScores,walkForwardChampionAudit} from '../../src/omega-learning.mjs';
 export async function omegaLeaderboard(db,{limit=250}={}){
  const page=await blobWindow(db,{prefix:'omega/verified-scores/v1/',limit});
  const records=[];
@@ -10,8 +10,9 @@ export async function omegaLeaderboard(db,{limit=250}={}){
   if(record?.status==='VERIFIED_SHADOW_SCORE')records.push(record);
  }
  const selection=evaluateResearchChampions(records);
+ const walkForward=walkForwardChampionAudit(records);
  return {status:selection.status,observedRecords:records.length,historyTruncated:Boolean(page.cursor),
-  scores:summarizeVerifiedScores(records),...selection,selectedForTrading:false,realOrdersAuthorized:false,
+  scores:summarizeVerifiedScores(records),...selection,walkForward,selectedForTrading:false,realOrdersAuthorized:false,
   originalPrimalComparison:'NOT_VERIFIED',
   notice:'Verified OMEGA scores only. No independent paired Original Primal predictions are available in this report; no outperformance claim.'};
 }
