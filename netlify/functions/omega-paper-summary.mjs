@@ -28,7 +28,14 @@ export async function summarizeOmegaPaper(db,{limit=80}={}){
   if(!validTime(at)||at<=p.openedAtMs){invalid++;continue;}
   // A simulated bid exit cannot return more than $1 per contract before costs.
   // Treat impossible stored profits as corrupt evidence, never as paper P&L.
-  if(p.status==='CLOSED'&&p.netDollars>p.quantity-p.entryCostDollars+.00011){invalid++;continue;}
+  // The production simulator models a fixed $0.05 exit fee and nonnegative
+  // bid proceeds after slippage. Even a worthless bid cannot lose more than
+  // entry cost plus that fee. Reject impossible negative exits as well as
+  // impossible gains; otherwise corrupt losses inflate reported drawdown.
+  if(p.status==='CLOSED'&&(
+   p.netDollars>p.quantity-p.entryCostDollars+.00011||
+   p.netDollars< -p.entryCostDollars-.05011
+  )){invalid++;continue;}
   if(p.status==='SETTLED'&&(
    p.settlementVerification!==SETTLEMENT_VERIFICATION||
    !['yes','no'].includes(p.outcome)||!validMoney(p.payoutDollars)||
