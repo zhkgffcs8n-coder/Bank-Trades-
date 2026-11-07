@@ -1,5 +1,5 @@
 import {blobWindow} from '../../src/blob-window.mjs';
-import {freezeForecast,scoreFrozenForecast} from '../../src/forecast-shadow-learning.mjs';
+import {freezeForecast,scoreFrozenForecast,summarizeForecastResearch} from '../../src/forecast-shadow-learning.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
@@ -252,6 +252,12 @@ export default async()=>{
     if(scored)await db.setJSON(item.key,scored);
    });
   }catch(e){researchFailure('forecast-settlement-scoring',e)}
+  // Bounded verified forecast report. Never imply complete history if paginated.
+  try{
+   const page=await blobWindow(db,{prefix:'forecast-shadow/v1/',limit:40});
+   const rows=(await Promise.all(page.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
+   await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor})});
+  }catch(e){researchFailure('forecast-summary',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
