@@ -33,7 +33,11 @@ export function summarizeVerifiedScores(records=[]){
  const rounds=new Map(),conflicts=new Set();
  for(const record of records){
   if(record?.status!=='VERIFIED_SHADOW_SCORE'||typeof record.marketTicker!=='string'||!record.marketTicker||
-   typeof record.roundId!=='string'||!record.roundId||!Array.isArray(record.scores))continue;
+   typeof record.roundId!=='string'||!record.roundId)continue;
+  const key=JSON.stringify([record.marketTicker,record.roundId]);
+  // A malformed duplicate is conflicting evidence, not permission to keep
+  // the favorable valid copy. Quarantine the round regardless of scan order.
+  if(!Array.isArray(record.scores)){conflicts.add(key);continue;}
   const scores=new Map();
   let valid=true;
   for(const score of record.scores){
@@ -41,8 +45,7 @@ export function summarizeVerifiedScores(records=[]){
     score.brier<0||score.brier>1||scores.has(score.provider)){valid=false;break;}
    scores.set(score.provider,score.brier);
   }
-  if(!valid||!scores.size)continue;
-  const key=JSON.stringify([record.marketTicker,record.roundId]);
+  if(!valid||!scores.size){conflicts.add(key);continue;}
   const fingerprint=JSON.stringify([...scores].sort((a,b)=>a[0].localeCompare(b[0])));
   if(rounds.has(key)){
    if(rounds.get(key).fingerprint!==fingerprint)conflicts.add(key);
