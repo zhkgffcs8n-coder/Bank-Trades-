@@ -11,16 +11,16 @@ root.insertAdjacentElement('beforebegin',controls);
 let motion=true;try{motion=localStorage.getItem('banktrades:arcade-motion')!=='false'}catch{}
 const paint=()=>{document.body.classList.toggle('bt-arcade-muted',!motion);const b=document.querySelector('#btArcadeMotion');b.textContent=motion?'✨ MOTION ON':'⏸ MOTION OFF';b.setAttribute('aria-pressed',String(motion))};paint();
 document.querySelector('#btArcadeMotion').addEventListener('click',()=>{motion=!motion;try{localStorage.setItem('banktrades:arcade-motion',String(motion))}catch{}paint()});
-let prior=new Map();const activate=(id,mode)=>{const node=root.querySelector('[data-bot="'+id+'"]');if(!node)return;node.dataset.mode=mode;clearTimeout(node._reset);node._reset=setTimeout(()=>{node.dataset.mode='idle'},1700)};
+let prior=new Map();let priorPaperStatus='';const activate=(id,mode)=>{const node=root.querySelector('[data-bot="'+id+'"]');if(!node)return;node.dataset.mode=mode;clearTimeout(node._reset);node._reset=setTimeout(()=>{node.dataset.mode='idle'},1700)};
 function scan(){if(document.hidden)return;
  for(const tr of document.querySelectorAll('#premiumRows tr')){const asset=tr.dataset.asset||'',label=tr.children[3]?.textContent||'';if(!asset)continue;
  const action=/SELL FAST|CASH OUT|TAKE PROFITS/.test(label)?'EXIT':/POSSIBLE FLIP|FLIP WATCH|FLIP UP|FLIP DOWN/.test(label)?'FLIP':/QUALIFIED PAPER SIGNAL: BUY UP|QUALIFIED PAPER SIGNAL: BUY DOWN/.test(label)?'ENTRY':/STAY OUT/.test(label)?'RISK':'';
- if(!action||prior.get(asset)===action)continue;prior.set(asset,action);
+ if(!prior.has(asset)){prior.set(asset,action);continue}if(!action||prior.get(asset)===action){prior.set(asset,action);continue}prior.set(asset,action);
  if(action==='ENTRY'){activate('primal','entry');activate('omega','entry')}
  else if(action==='EXIT'||action==='RISK')activate('guard','danger');
  else if(action==='FLIP')activate('flip','flip');
  }
- const paper=document.querySelector('#paperBotStatus,#kaibotStatus');if(paper&&/RUNNING|ACTIVE/i.test(paper.textContent||'')&&!/STOPPED|NOT ACTIVE/i.test(paper.textContent||''))activate('kai','entry');
+ const paper=document.querySelector('#paperBotStatus,#kaibotStatus');if(paper){const state=paper.textContent||'';const running=/RUNNING|ACTIVE/i.test(state)&&!/STOPPED|NOT ACTIVE/i.test(state);if(priorPaperStatus&&state!==priorPaperStatus&&running)activate('kai','entry');priorPaperStatus=state;}
 }
 scan();setInterval(scan,2500);
 })();
