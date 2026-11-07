@@ -112,7 +112,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  clearTimeout(overlay._autoDismissTimer);
  overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},2000);
- overlay.querySelector('button').focus();
+ // Non-modal toast: do not steal keyboard focus from the trading dashboard.
 }
 const voicedMarketStatuses=new Set();
 function evaluateLiveVoiceAlerts(){
