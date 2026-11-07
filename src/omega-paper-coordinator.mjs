@@ -22,6 +22,10 @@ export function advanceOmegaPaper({state={},signal,quote,roundId,feesDollars,now
   const next={...state,positions:{...positions,[ticker]:{...position,status:'CLOSED',closedAtMs:nowMs,netDollars:marked.netDollars,peakNetDollars:peak,exitReason:trailingExit?'TRAILING_PROFIT':marked.netDollars>=exitAtProfitDollars?'TAKE_PROFIT':'LOSS_LIMIT'}},entered};
   return {status:'PAPER_EXIT',netDollars:marked.netDollars,state:next,realOrdersAuthorized:false};
  }
+ // A persisted terminal position is an irreversible entry record even if a
+ // legacy/interrupted write lost the separate `entered` marker. Never overwrite
+ // a CLOSED or SETTLED position with another simulated entry for this ticker.
+ if(position)return {status:'BLOCKED',reason:'Market round already has a persisted position',state,realOrdersAuthorized:false};
  if(entered[key])return {status:'BLOCKED',reason:'Already entered this market round',state,realOrdersAuthorized:false};
  if(signal?.marketTicker!==ticker||signal?.roundId!==roundId)return {status:'BLOCKED',reason:'Signal contract or round mismatch',state,realOrdersAuthorized:false};
  const opened=paperEntry({signal,quote,feesDollars,slippageDollars,nowMs,stakeDollars});
