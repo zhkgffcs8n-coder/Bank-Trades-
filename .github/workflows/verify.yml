@@ -18,7 +18,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm test
+      - name: Full regression suite (capture TAP results)
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p ci-evidence
+          npm test 2>&1 | tee ci-evidence/npm-test.log
       - name: Verify public assets and protected dashboard
         run: |
           test -s dist/index.html
@@ -28,3 +33,17 @@ jobs:
           test -s dist/account-client.js
           test ! -e dist/dashboard.html
           test ! -e dist/private
+      - name: Record build and regression evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ci-evidence
+          printf 'commit=%s\nrun_id=%s\nrun_attempt=%s\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > ci-evidence/run-info.txt
+          if [ -s dist/build-version.json ]; then cp dist/build-version.json ci-evidence/build-version.json; fi
+      - name: Upload CI evidence (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bank-trades-ci-evidence
+          path: ci-evidence/
+          retention-days: 14
