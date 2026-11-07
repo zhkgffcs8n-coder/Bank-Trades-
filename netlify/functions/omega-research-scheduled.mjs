@@ -6,12 +6,13 @@ import {runOmegaResearchRound} from '../../src/omega-orchestrator.mjs';
 import {omegaProviderStatus} from '../../src/omega-provider-adapters.mjs';
 import {omegaPaperSignal,advanceOmegaPaperStored,settleOmegaPaperStored,fetchOmegaLiveQuote} from './lib/omega-auto-paper.mjs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
+import {validCollectorQuote} from '../../src/collector-quote.mjs';
 const ASSETS=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 export function selectOmegaObservation({latest,nowMs,asset}){
  if(!latest||latest.asset!==asset||typeof latest.ticker!=='string'||!latest.ticker||
  !Number.isSafeInteger(latest.observedAt)||latest.observedAt>nowMs||nowMs-latest.observedAt>120000||
  !Number.isFinite(latest.expiresAt)||latest.expiresAt<=nowMs||
- ![latest.yesBid,latest.yesAsk,latest.noBid,latest.noAsk].every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=1))
+ !validCollectorQuote(latest))
  return null;
  const mid=(latest.yesBid+latest.yesAsk)/2;
  return {marketTicker:latest.ticker,roundId:latest.ticker,marketSnapshot:{
