@@ -108,7 +108,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  const color=kind==='sell'||kind==='stay'?'#ed2929':kind==='down'?'#16a34a':kind==='up'?'#16a34a':kind==='hold'?'#a78bfa':'#eab308';
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
- overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🟢 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD · REVIEW':kind==='stay'?'🔴 STAY OUT':'🟡 DEMO / WAIT');
+ overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🟢 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD · REVIEW':kind==='stay'?'🔴 STAY OUT':kind==='near'?'🟡 NEAR ENTRY':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  clearTimeout(overlay._autoDismissTimer);
  overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},2000);
@@ -149,10 +149,14 @@ function evaluateScreenAlerts(){
   const exitText=trackedExit?.action||'';
   const isExit=/SELL FAST|CASH OUT|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
   const isHoldReview=/HOLD TILL END · REVIEW/.test(exitText);
-  const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':'stay';
+  const filters=signal?.entryDiagnostics?.filters;
+  const failures=filters&&typeof filters==='object'?Object.values(filters).filter(v=>v===false).length:null;
+  const quoteFresh=Number.isFinite(latestPositionQuoteAt)&&Date.now()-latestPositionQuoteAt>=0&&Date.now()-latestPositionQuoteAt<10000&&latestPositionQuotes.some(x=>x.asset===asset&&x.market?.ticker===ticker);
+  const near=!isExit&&!isHoldReview&&action==='WAIT'&&quoteFresh&&failures===1&&signal?.entryGate?.rawAction!=='BUY UP'&&signal?.entryGate?.rawAction!=='BUY DOWN';
+  const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':near?'near':'stay';
   if(kind){
    const message=(isExit||isHoldReview)?exitText+' · '+(trackedExit.reason||'Tracked position review'):
-    kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':'STAY OUT · No qualified entry; tracking forecast only';
+    kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':kind==='near'?'NEAR ENTRY · One check remains blocked; WATCH ONLY, do not buy':'STAY OUT · No qualified entry; tracking forecast only';
    showScreenAlert(asset,kind,message,ticker);
   }
  }
