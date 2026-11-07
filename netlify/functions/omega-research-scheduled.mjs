@@ -4,7 +4,7 @@
 import {getStore} from '@netlify/blobs';
 import {runOmegaResearchRound} from '../../src/omega-orchestrator.mjs';
 import {omegaProviderStatus} from '../../src/omega-provider-adapters.mjs';
-import {omegaPaperSignal,advanceOmegaPaperStored,fetchOmegaLiveQuote} from './lib/omega-auto-paper.mjs';
+import {omegaPaperSignal,advanceOmegaPaperStored,settleOmegaPaperStored,fetchOmegaLiveQuote} from './lib/omega-auto-paper.mjs';
 import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 const ASSETS=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 export function selectOmegaObservation({latest,nowMs,asset}){
@@ -26,7 +26,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  const selectedProviders=[...configured.slice(offset),...configured.slice(0,offset)].slice(0,2);
  // Monitor already-open paper positions independently of provider availability and asset rotation.
  // Only active contracts with independently fetched executable quotes can be exited.
- const paperMonitoring={open:0,exits:0,holds:0,unpriced:0,backfilled:0};
+ const paperMonitoring={open:0,exits:0,holds:0,settled:0,unpriced:0,backfilled:0};
  const monitoredTickers=new Set();
  async function monitorOpenTicker(ticker){
   if(typeof ticker!=='string'||!/^[A-Z0-9-]{3,100}$/.test(ticker)||monitoredTickers.has(ticker))return;
@@ -39,7 +39,12 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   }
   paperMonitoring.open++;
   const quote=await fetchOmegaLiveQuote({ticker,nowMs,fetchImpl});
-  if(!quote){paperMonitoring.unpriced++;return;}
+  if(!quote){
+   const settled=await settleOmegaPaperStored({db,ticker,nowMs});
+   if(settled.status==='PAPER_SETTLED')paperMonitoring.settled++;
+   else paperMonitoring.unpriced++;
+   return;
+  }
   const action=await advanceOmegaPaperStored({db,ticker,roundId:ticker,signal:null,quote,nowMs});
   if(action.status==='PAPER_EXIT')paperMonitoring.exits++;
   else if(action.status==='PAPER_HOLD')paperMonitoring.holds++;
