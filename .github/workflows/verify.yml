@@ -19,3 +19,12 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
+      - name: Verify public assets and protected dashboard
+        run: |
+          test -s dist/index.html
+          test -s dist/premium.js
+          test -s dist/arcade-crew.js
+          test -s dist/arcade-theme.css
+          test -s dist/account-client.js
+          test ! -e dist/dashboard.html
+          test ! -e dist/private
