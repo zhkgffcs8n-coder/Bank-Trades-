@@ -9,6 +9,12 @@ test('fresh collector sample becomes a matched research observation',()=>{
  assert.equal(r.marketBaseline.upProbability,.475);assert.equal(r.roundId,sample.ticker);
  assert.equal(selectOmegaObservation({latest:{...sample,observedAt:now-180000},nowMs:now,asset}),null);
 });
+test('OMEGA rejects crossed, zero-ask and missing quotes before model research',()=>{
+ for(const bad of [{yesBid:.7,yesAsk:.5},{noBid:.7,noAsk:.55},{yesAsk:0},{noAsk:1},{yesBid:NaN},{noAsk:undefined}]){
+  assert.equal(selectOmegaObservation({latest:{...sample,...bad},nowMs:now,asset}),null,JSON.stringify(bad));
+ }
+ assert.ok(selectOmegaObservation({latest:{...sample,yesBid:0,noBid:0},nowMs:now,asset}));
+});
 test('unconfigured providers do not create invented predictions',async()=>{
  const data=new Map([['latest/'+asset,sample]]);
  const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>{data.set(key,value)}};
