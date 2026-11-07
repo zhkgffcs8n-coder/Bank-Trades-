@@ -2,15 +2,27 @@
 // Requires fresh independently fetched side-specific Kalshi bid/ask quotes.
 import {advanceOmegaPaper} from '../../../src/omega-paper-coordinator.mjs';
 import {trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
-export function omegaPaperSignal(research){
- const edge=research?.fusion?.modelMinusMarket;
- const mean=research?.fusion?.modelMean;
- const disagreement=research?.fusion?.modelDisagreement;
- if(research?.status!=='SHADOW_RESEARCH'||!Number.isFinite(edge)||!Number.isFinite(mean)||
- !Number.isFinite(disagreement)||disagreement>.2||Math.abs(edge)<.1)
- return null;
- return {status:'SHADOW_CANDIDATE',marketTicker:research.fusion.marketTicker,roundId:research.fusion.roundId,
-  forecast:{consensus:mean>=.5?'UP':'DOWN'},ordersAuthorized:false};
+export function omegaPaperSignal(research,quote){
+ const fusion=research?.fusion;
+ const mean=fusion?.modelMean,disagreement=fusion?.modelDisagreement;
+ // A probability above 50% is NOT evidence that buying UP is profitable:
+ // compare each outcome probability to the actual executable side ask.
+ // Include the paper simulator's 1c/contract slippage and a conservative
+ // 5c/contract allowance for its fixed entry fee.
+ if(research?.status!=='SHADOW_RESEARCH'||!Number.isFinite(mean)||mean<0||mean>1||
+  !Number.isFinite(disagreement)||disagreement<0||disagreement>.2||
+  !quote||quote.ticker!==fusion?.marketTicker||fusion?.roundId!==quote.ticker)
+  return null;
+ const validAsk=p=>typeof p==='number'&&Number.isFinite(p)&&p>0&&p<1;
+ if(!validAsk(quote.yesAskDollars)||!validAsk(quote.noAskDollars))return null;
+ const costs=.01+.05,minimumNetEdge=.10;
+ const upEdge=mean-quote.yesAskDollars-costs;
+ const downEdge=(1-mean)-quote.noAskDollars-costs;
+ const best=Math.max(upEdge,downEdge);
+ if(best<minimumNetEdge)return null;
+ const side=upEdge>=downEdge?'UP':'DOWN';
+ return {status:'SHADOW_CANDIDATE',marketTicker:fusion.marketTicker,roundId:fusion.roundId,
+  forecast:{consensus:side},ordersAuthorized:false};
 }
 export async function advanceOmegaPaperStored({db,ticker,roundId,signal,quote,nowMs=Date.now(),feesDollars=.05}={}){
  if(!ticker||ticker!==quote?.ticker||ticker!==roundId||!Number.isSafeInteger(nowMs))
