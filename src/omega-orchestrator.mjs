@@ -24,15 +24,30 @@ export function evaluateOmegaVerifiedBatch({rounds=[],settlements=[]}={}){
   if(prior&&(prior.upOutcome!==s.upOutcome||prior.settledAtMs!==s.settledAtMs))conflicts.add(key);
   else if(!prior)verified.set(key,s);
  }
- const records=[];
+ // Exactly one scored observation per market/round. Identical replays are
+ // harmless; conflicting frozen forecasts invalidate the round rather than
+ // allowing whichever happened to arrive first to inflate the scorecard.
+ const frozen=new Map(),forecastConflicts=new Set();
+ let duplicateForecastsExcluded=0;
  for(const round of rounds){
   const f=round?.fusion;
-  if(f?.status!=='SHADOW_RESEARCH')continue;
-  const s=verified.get(f.marketTicker+'|'+f.roundId);
-  if(!s||conflicts.has(f.marketTicker+'|'+f.roundId))continue;
-  const score=scoreVerifiedRound(f,s);
+  if(f?.status!=='SHADOW_RESEARCH'||typeof f.marketTicker!=='string'||typeof f.roundId!=='string')continue;
+  const key=f.marketTicker+'|'+f.roundId,signature=JSON.stringify(f);
+  if(frozen.has(key)){
+   duplicateForecastsExcluded++;
+   if(frozen.get(key).signature!==signature)forecastConflicts.add(key);
+  }else frozen.set(key,{fusion:f,signature});
+ }
+ const records=[];
+ for(const [key,{fusion}] of frozen){
+  if(forecastConflicts.has(key)||conflicts.has(key))continue;
+  const settlement=verified.get(key);
+  if(!settlement)continue;
+  const score=scoreVerifiedRound(fusion,settlement);
   if(score.status==='VERIFIED_SHADOW_SCORE')records.push(score);
  }
- return {status:'RESEARCH_ONLY',verifiedScores:summarizeVerifiedScores(records),verifiedRounds:records.length,ordersAuthorized:false,
+ return {status:'RESEARCH_ONLY',verifiedScores:summarizeVerifiedScores(records),verifiedRounds:records.length,
+  duplicateForecastsExcluded,conflictingForecastRoundsExcluded:forecastConflicts.size,
+  conflictingSettlementsExcluded:conflicts.size,ordersAuthorized:false,
   notice:'Historical scoring does not establish out-of-sample improvement or authorize trades.'};
 }
