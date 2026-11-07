@@ -88,27 +88,27 @@ function manualPositionAdvice(asset){
  manualPeaks.set(key,p.peak);return advice;
 }
 // Large in-page visual alerts. Only works while the dashboard page is active.
-let screenAlertsEnabled=false;
-try{screenAlertsEnabled=localStorage.getItem('banktrades:screen-alerts-enabled')==='true';}catch{}
+let screenAlertsEnabled=true;
+try{screenAlertsEnabled=localStorage.getItem('banktrades:screen-alerts-enabled')!=='false';}catch{}
 const seenScreenAlerts=new Set();
 function showScreenAlert(asset,kind,label,ticker,isTest=false){
  if((!screenAlertsEnabled&&!isTest)||document.hidden)return;
- const key=[asset,kind,label,ticker].join('|');
+ const key=[asset,kind,ticker].join('|');
  if(!isTest){if(seenScreenAlerts.has(key))return;seenScreenAlerts.add(key);if(seenScreenAlerts.size>150)seenScreenAlerts.clear();}
  let overlay=document.getElementById('bankScreenAlert');
  if(!overlay){
   const style=document.createElement('style');
-  style.textContent='@keyframes bankAlertPulse{0%,100%{opacity:.10}50%{opacity:.28}}@media(prefers-reduced-motion:reduce){#bankScreenAlert .bank-flash{animation:none!important}}#bankScreenAlert{position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;color:white;font-family:system-ui,sans-serif}#bankScreenAlert .bank-flash{position:absolute;inset:0;pointer-events:none;animation:bankAlertPulse 1.1s ease-in-out 2}#bankScreenAlert .bank-box{position:relative;max-width:680px;width:100%;border:4px solid white;border-radius:28px;padding:28px 20px;background:#111b27;box-shadow:0 0 36px currentColor,0 0 0 9999px rgba(0,0,0,.55)}#bankScreenAlert .bank-head{font-size:clamp(28px,7vw,64px);font-weight:900}#bankScreenAlert button{margin-top:24px;font-size:22px;font-weight:800;padding:14px 35px;border:0;border-radius:12px;cursor:pointer}';
+  style.textContent=`@keyframes bankAlertPulse{0%,100%{filter:brightness(1)}50%{filter:brightness(1.6)}}@keyframes bankSideSlide{from{transform:translateX(110%)}to{transform:translateX(0)}}#bankScreenAlert{position:fixed;right:8px;top:18%;width:min(300px,75vw);z-index:2147483647;pointer-events:none;color:white;font-family:system-ui,sans-serif}#bankScreenAlert .bank-flash{display:none}#bankScreenAlert .bank-box{pointer-events:auto;border:4px solid #fff;border-radius:20px;padding:13px 12px;background:#111b27;box-shadow:0 5px 22px #0009;animation:bankSideSlide .35s ease-out,bankAlertPulse .6s ease-in-out 3}#bankScreenAlert .bank-head{font-size:clamp(17px,4vw,24px);font-weight:1000;text-shadow:2px 2px #000}#bankScreenAlert .bank-detail{font-size:12px!important;line-height:1.3}#bankScreenAlert button{font-size:12px;font-weight:900;padding:7px 13px;border:0;border-radius:10px;cursor:pointer}@media(prefers-reduced-motion:reduce){#bankScreenAlert .bank-box{animation:none}}`;
   document.head.append(style);
-  overlay=document.createElement('div');overlay.id='bankScreenAlert';overlay.setAttribute('role','alertdialog');overlay.setAttribute('aria-modal','true');
+  overlay=document.createElement('div');overlay.id='bankScreenAlert';overlay.setAttribute('role','status');overlay.setAttribute('aria-live','polite');
   overlay.innerHTML='<div class="bank-flash"></div><div class="bank-box"><div class="bank-head"></div><p class="bank-detail" style="font-size:clamp(18px,3vw,27px)"></p><p style="font-size:14px">Signal guidance only · no order placed · verify live Kalshi price</p><button type="button">DISMISS</button></div>';
   overlay.querySelector('button').addEventListener('click',()=>{clearTimeout(overlay._autoDismissTimer);overlay.remove();});
  }
  document.body.append(overlay);
- const color=kind==='sell'||kind==='down'?'#ed2929':kind==='up'?'#16a34a':kind==='hold'?'#a78bfa':'#eab308';
+ const color=kind==='sell'||kind==='stay'?'#ed2929':kind==='down'?'#16a34a':kind==='up'?'#16a34a':kind==='hold'?'#a78bfa':'#eab308';
  overlay.querySelector('.bank-flash').style.background=color;
  overlay.querySelector('.bank-box').style.borderColor=color;
- overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🔴 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD TILL END · REVIEW':'🟡 DEMO / WAIT');
+ overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🟢 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD · REVIEW':kind==='stay'?'🔴 STAY OUT':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  clearTimeout(overlay._autoDismissTimer);
  overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},2000);
@@ -149,10 +149,10 @@ function evaluateScreenAlerts(){
   const exitText=trackedExit?.action||'';
   const isExit=/SELL FAST|CASH OUT|TAKE PROFITS|SELL\b|EXIT ALERT/.test(exitText);
   const isHoldReview=/HOLD TILL END · REVIEW/.test(exitText);
-  const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':null;
+  const kind=isExit?'sell':isHoldReview?'hold':action==='BUY UP'?'up':action==='BUY DOWN'?'down':action==='SELL FAST'?'sell':'stay';
   if(kind){
    const message=(isExit||isHoldReview)?exitText+' · '+(trackedExit.reason||'Tracked position review'):
-    kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':'Paper position SELL FAST';
+    kind==='up'?'Qualified paper signal: BUY UP':kind==='down'?'Qualified paper signal: BUY DOWN':'STAY OUT · No qualified entry; tracking forecast only';
    showScreenAlert(asset,kind,message,ticker);
   }
  }
