@@ -97,7 +97,8 @@ export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumIm
  const keys=new Set(),conflicts=new Set(),valid=[];
  for(const r of records){
   if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
-   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0)continue;
+   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0||
+   !Number.isSafeInteger(r.settledAtMs)||r.settledAtMs<=r.predictedAtMs)continue;
   const key=JSON.stringify([r.marketTicker,r.roundId]);
   if(keys.has(key)){conflicts.add(key);continue;}
   keys.add(key);
@@ -108,12 +109,12 @@ export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumIm
    }
    scores.set(s.provider,s.brier);
   }
-  if(scores.has('kalshi_baseline'))valid.push({key,at:r.predictedAtMs,scores});
+  if(scores.has('kalshi_baseline'))valid.push({key,at:r.predictedAtMs,settledAtMs:r.settledAtMs,scores});
  }
  valid.sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
  const clean=valid.filter(x=>!conflicts.has(x.key)),decisions=[];
  for(let i=minimumHistory;i<clean.length;i++){
-  const current=clean[i],past=clean.slice(0,i).filter(x=>x.at<current.at);
+  const current=clean[i],past=clean.slice(0,i).filter(x=>x.at<current.at&&x.settledAtMs<current.at);
   if(past.length<minimumHistory)continue;
   const providers=new Set(past.flatMap(x=>[...x.scores.keys()].filter(p=>p!=='kalshi_baseline')));
   const ranked=[];
@@ -137,5 +138,5 @@ export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumIm
   selected:decisions.slice(-20).map(x=>({marketTicker:x.marketTicker,roundId:x.roundId,provider:x.provider})),
   beatsMarketBaseline:count>=20&&modelBrier<baselineBrier,
   originalPrimalComparison:'NOT_VERIFIED',promoted:false,ordersAuthorized:false,
-  notice:'Strict past-only model selection; observed performance is not a guarantee. Original Primal requires paired independently logged predictions.'};
+  notice:'Strict settled-before-selection model history; observed performance is not a guarantee. Original Primal requires paired independently logged predictions.'};
 }
