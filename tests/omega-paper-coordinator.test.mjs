@@ -40,3 +40,17 @@ test('paper trailing peak is not updated on stale quotes',()=>{
  assert.equal(stale.status,'BLOCKED');
  assert.deepEqual(stale.state,opened.state);
 });
+
+test('terminal paper positions cannot reenter when a legacy entry marker is missing',()=>{
+ const opened=advanceOmegaPaper(base);
+ assert.equal(opened.status,'PAPER_ENTRY');
+ const closed=advanceOmegaPaper({...base,state:opened.state,nowMs:101002,exitAtProfitDollars:.4});
+ assert.equal(closed.status,'PAPER_EXIT');
+ for(const terminal of ['CLOSED','SETTLED']){
+  const state={positions:{'BTC-R1':{...closed.state.positions['BTC-R1'],status:terminal}},entered:{}};
+  const again=advanceOmegaPaper({...base,state,nowMs:101003});
+  assert.equal(again.status,'BLOCKED',terminal);
+  assert.deepEqual(again.state,state);
+  assert.equal(again.realOrdersAuthorized,false);
+ }
+});
