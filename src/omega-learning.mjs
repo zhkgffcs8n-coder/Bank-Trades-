@@ -18,16 +18,32 @@ export function scoreVerifiedRound(fusion,settlement){
  return {status:'VERIFIED_SHADOW_SCORE',marketTicker:fusion.marketTicker,roundId:fusion.roundId,predictedAtMs:Math.max(...fusion.accepted.map(f=>f.observedAtMs)),scores,ordersAuthorized:false};
 }
 export function summarizeVerifiedScores(records=[]){
- const byProvider=new Map(),seen=new Set();
+ // Score each round once. Conflicting archived records must not let the
+ // first-encountered forecast determine the public performance summary.
+ const rounds=new Map(),conflicts=new Set();
  for(const record of records){
-  if(record?.status!=='VERIFIED_SHADOW_SCORE'||typeof record.marketTicker!=='string'||typeof record.roundId!=='string')continue;
-  const key=record.marketTicker+'|'+record.roundId;
-  if(seen.has(key))continue;
-  seen.add(key);
-  for(const score of record.scores||[]){
-   if(typeof score.provider!=='string'||!Number.isFinite(score.brier)||score.brier<0||score.brier>1)continue;
-   const s=byProvider.get(score.provider)||{provider:score.provider,count:0,totalBrier:0};
-   s.count++;s.totalBrier+=score.brier;byProvider.set(score.provider,s);
+  if(record?.status!=='VERIFIED_SHADOW_SCORE'||typeof record.marketTicker!=='string'||!record.marketTicker||
+   typeof record.roundId!=='string'||!record.roundId||!Array.isArray(record.scores))continue;
+  const scores=new Map();
+  let valid=true;
+  for(const score of record.scores){
+   if(typeof score?.provider!=='string'||!score.provider||!Number.isFinite(score.brier)||
+    score.brier<0||score.brier>1||scores.has(score.provider)){valid=false;break;}
+   scores.set(score.provider,score.brier);
+  }
+  if(!valid||!scores.size)continue;
+  const key=JSON.stringify([record.marketTicker,record.roundId]);
+  const fingerprint=JSON.stringify([...scores].sort((a,b)=>a[0].localeCompare(b[0])));
+  if(rounds.has(key)){
+   if(rounds.get(key).fingerprint!==fingerprint)conflicts.add(key);
+  }else rounds.set(key,{scores,fingerprint});
+ }
+ const byProvider=new Map();
+ for(const [key,{scores}] of rounds){
+  if(conflicts.has(key))continue;
+  for(const [provider,brier] of scores){
+   const s=byProvider.get(provider)||{provider,count:0,totalBrier:0};
+   s.count++;s.totalBrier+=brier;byProvider.set(provider,s);
   }
  }
  return [...byProvider.values()].map(x=>({provider:x.provider,verifiedRounds:x.count,meanBrier:x.totalBrier/x.count}))
