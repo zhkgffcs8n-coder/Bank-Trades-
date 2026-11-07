@@ -44,6 +44,18 @@ test('malformed entry costs and missing direction cannot produce paper PnL',()=>
  assert.equal(paperExit({position:base,quote:exitQuote,feesDollars:0,nowMs:100000}).status,'PAPER_CLOSED');
 });
 
+test('corrupted over-cap persisted paper entries cannot realize exits',()=>{
+ const opened=paperEntry({signal,quote,feesDollars:.1,nowMs:100000});
+ assert.equal(opened.status,'PAPER_OPEN');
+ const corrupted={...opened.position,entryCostDollars:5.25};
+ const exitQuote={ticker:'BTC-R1',yesBidDollars:.9,noBidDollars:.1,asOfMs:100001};
+ const result=paperExit({position:corrupted,quote:exitQuote,feesDollars:.05,nowMs:100001});
+ assert.equal(result.status,'BLOCKED');
+ assert.equal(result.realOrdersAuthorized,false);
+ assert.ok(result.reasons.some(x=>x.includes('entry cost')));
+ assert.equal(paperExit({position:opened.position,quote:exitQuote,feesDollars:.05,nowMs:100001}).status,'PAPER_CLOSED');
+});
+
 test('paper exits reject reordered execution and pre-entry quote timestamps',()=>{
  const opened=paperEntry({signal,quote,stakeDollars:5,feesDollars:.1,nowMs:100000});
  assert.equal(opened.status,'PAPER_OPEN');
