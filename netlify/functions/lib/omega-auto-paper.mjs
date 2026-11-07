@@ -22,6 +22,11 @@ export async function advanceOmegaPaperStored({db,ticker,roundId,signal,quote,no
   slippageDollars:.01,exitAtProfitDollars:.5,exitAtLossDollars:-.5});
  if(['PAPER_ENTRY','PAPER_EXIT','PAPER_HOLD'].includes(result.status)){
   await db.setJSON(key,{state:result.state,updatedAtMs:nowMs,lastAction:result.status});
+  // One marker per open contract, not per rotating asset. If a marker write
+  // fails, the scheduler's bounded ledger backfill can reconstruct it.
+  if(result.status==='PAPER_ENTRY')await db.setJSON('omega/paper/open/v1/'+ticker,
+   {ticker,openedAtMs:nowMs,realOrdersAuthorized:false});
+  if(result.status==='PAPER_EXIT'&&typeof db.delete==='function')await db.delete('omega/paper/open/v1/'+ticker);
   if(result.status!=='PAPER_HOLD')await db.setJSON('omega/paper/latest',{ticker,roundId,action:result.status,updatedAtMs:nowMs,
    netDollars:result.netDollars??null,realOrdersAuthorized:false});
  }
