@@ -54,3 +54,23 @@ test('forecast research health exposes only fresh bounded verified hypothetical 
  assert.equal(omegaLiveHealth(heartbeat,now,null,null,{...report,at:now-300000}).forecastShadow.status,'NOT_VERIFIED');
  assert.equal(omegaLiveHealth(heartbeat,now,null,null,{...report,wins:8}).forecastShadow.status,'INVALID_REPORT');
 });
+
+test('OMEGA external provider activity requires two distinct fresh successful checks',()=>{
+ const checkedAt=new Date(now-1000).toISOString();
+ const successful=[
+  {provider:'gpt',status:'RESEARCH_FORECAST',checkedAt},
+  {provider:'deepseek',status:'RESEARCH_FORECAST',checkedAt}
+ ];
+ const omega={checkedAt,status:'SHADOW_RESEARCH',providersConfigured:2,providerStatus:successful};
+ const healthy=omegaLiveHealth(heartbeat,now,omega);
+ assert.equal(healthy.omegaLiveResearchRunning,true);
+ assert.equal(healthy.omegaExternalProvidersRunning,true);
+ assert.equal(healthy.realOrdersAuthorized,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providersConfigured:0}).omegaExternalProvidersRunning,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providerStatus:[]}).omegaExternalProvidersRunning,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providerStatus:[successful[0],successful[0]]}).omegaExternalProvidersRunning,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providerStatus:[successful[0],{...successful[1],status:'PROVIDER_ERROR'}]}).omegaExternalProvidersRunning,false);
+ const stale={...successful[1],checkedAt:new Date(now-180000).toISOString()};
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providerStatus:[successful[0],stale]}).omegaExternalProvidersRunning,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,{...omega,checkedAt:new Date(now-180000).toISOString()}).omegaExternalProvidersRunning,false);
+});
