@@ -10,6 +10,19 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
  const omegaAt=Date.parse(omegaHeartbeat?.checkedAt||'');
  const omegaAgeSeconds=Number.isFinite(omegaAt)&&omegaAt<=nowMs?Math.floor((nowMs-omegaAt)/1000):null;
  const omegaRunning=omegaAgeSeconds!==null&&omegaAgeSeconds<=150&&omegaHeartbeat?.status==='SHADOW_RESEARCH';
+ // A fresh scheduler heartbeat alone does not prove any external provider
+ // actually returned a forecast. Require two distinct recent successful
+ // provider checks; configured keys and stale successes are not activity.
+ const activeProviders=new Set((Array.isArray(omegaHeartbeat?.providerStatus)?omegaHeartbeat.providerStatus:[])
+  .filter(entry=>{
+   const checkedAt=Date.parse(entry?.checkedAt||'');
+   return typeof entry?.provider==='string'&&entry.provider.length>0&&
+    entry.status==='RESEARCH_FORECAST'&&Number.isFinite(checkedAt)&&
+    checkedAt<=nowMs&&nowMs-checkedAt<=150000;
+  }).map(entry=>entry.provider));
+ const externalProvidersRunning=omegaRunning&&
+  Number.isSafeInteger(omegaHeartbeat?.providersConfigured)&&omegaHeartbeat.providersConfigured>=2&&
+  activeProviders.size>=2;
  return {status:healthy?'COLLECTOR_FRESH':'NOT_VERIFIED',collectorStatus:heartbeat?.status||'UNKNOWN',
   collectorAgeSeconds:ageSeconds,sampledAssetCount:sampled.length,sampledAssets:sampled,
   trainingSucceeded:heartbeat?.trainingSucceeded===true,expectedIntervalSeconds:60,
@@ -19,7 +32,7 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
    ['trainingReviews','trainingReviewCount'],['settlementFailures','settlementFailures'],
    ['researchFailures','researchFailures']
   ].map(([label,key])=>[label,Number.isSafeInteger(heartbeat?.[key])&&heartbeat[key]>=0?heartbeat[key]:null])),
-  omegaExternalProvidersRunning:omegaRunning,omegaLiveResearchRunning:omegaRunning,
+  omegaExternalProvidersRunning:externalProvidersRunning,omegaLiveResearchRunning:omegaRunning,
   omegaStatus:omegaHeartbeat?.status||'NOT_VERIFIED',omegaAgeSeconds,
   omegaReasons:Array.isArray(omegaHeartbeat?.reasons)?omegaHeartbeat.reasons:[],
   omegaProviderCheckedAt:omegaHeartbeat?.lastProviderCheckAt||null,
