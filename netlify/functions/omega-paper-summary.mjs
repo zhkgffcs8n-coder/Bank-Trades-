@@ -6,6 +6,9 @@ import {SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 
 const validMoney=x=>typeof x==='number'&&Number.isFinite(x);
 const validTime=x=>Number.isSafeInteger(x)&&x>0;
+// The OMEGA paper coordinator caps each entry at $5 including modeled costs.
+// A larger stored entry is not a valid position for this paper-only ledger.
+const MAX_PAPER_ENTRY_DOLLARS=5;
 export async function summarizeOmegaPaper(db,{limit=80}={}){
  if(!Number.isSafeInteger(limit)||limit<1||limit>250)throw Error('Invalid paper scan limit');
  const page=await blobWindow(db,{prefix:'omega/paper/v1/',limit});
@@ -18,7 +21,7 @@ export async function summarizeOmegaPaper(db,{limit=80}={}){
   const p=stored?.state?.positions?.[ticker];
   if(!p||p.ticker!==ticker||p.roundId!==ticker||!['UP','DOWN'].includes(p.side)||
    !Number.isSafeInteger(p.quantity)||p.quantity<=0||!validMoney(p.entryCostDollars)||
-   p.entryCostDollars<=0||!validTime(p.openedAtMs)){invalid++;continue;}
+   (p.entryCostDollars<=0||p.entryCostDollars>MAX_PAPER_ENTRY_DOLLARS+.00011)||!validTime(p.openedAtMs)){invalid++;continue;}
   if(p.status==='OPEN'){open++;continue;}
   if(!['CLOSED','SETTLED'].includes(p.status)||!validMoney(p.netDollars)){invalid++;continue;}
   const at=p.status==='CLOSED'?p.closedAtMs:p.settledAtMs;
