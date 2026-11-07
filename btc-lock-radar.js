@@ -5,9 +5,22 @@ const scalper=document.createElement('section');
 scalper.className='card';
 scalper.id='btcProScalper';
 scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
-scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:block;padding:12px;border-radius:10px;font-size:clamp(22px,3vw,42px);line-height:1.12"></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
+scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 box.before(scalper);
 const scalpAction=scalper.querySelector('[data-action]');
+const scalpIcon=scalper.querySelector('[data-icon]');
+const scalpLabel=scalper.querySelector('[data-label]');
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+const actionLooks={
+  up:['🚀','#064e3b','#a7f3d0','translateY(-8px) rotate(-12deg)'],
+  down:['☄️','#7f1d1d','#fecaca','translateY(8px) rotate(12deg)'],
+  hold:['🛡️','#713f12','#fef08a','scale(1.24)'],
+  profit:['💰','#064e3b','#a7f3d0','translateY(-7px) rotate(14deg)'],
+  fast:['🚨','#7f1d1d','#fecaca','translateX(-8px) rotate(-16deg)'],
+  exit:['🏁','#7f1d1d','#fecaca','rotate(18deg)'],
+  wait:['🔎','#1e3a5f','#dbeafe',null]
+};
+let scalpMotion;
 const scalpDetail=scalper.querySelector('[data-detail]');
 function mountScalper(){
   const feed=document.getElementById('btVerifiedAlertFeed');
@@ -62,13 +75,21 @@ function showScalp(message){
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
   const detail=separator<0?'':message.slice(separator+3);
-  if(scalpAction.textContent!==action){
-    const colors=/^(BUY UP|TAKE PROFIT)/.test(action)?['#064e3b','#a7f3d0']
-      :/^(BUY DOWN|SELL FAST|TIME EXIT|EXIT)/.test(action)?['#7f1d1d','#fecaca']
-      :/^HOLD/.test(action)?['#713f12','#fef08a']:['#1e3a5f','#dbeafe'];
-    scalpAction.style.background=colors[0];
-    scalpAction.style.color=colors[1];
-    scalpAction.textContent=action;
+  if(scalpLabel.textContent!==action){
+    const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
+      :action.startsWith('HOLD')?'hold':action==='TAKE PROFIT'?'profit':action==='SELL FAST'?'fast'
+      :/^(TIME EXIT|EXIT)/.test(action)?'exit':'wait';
+    const [icon,background,color,move]=actionLooks[kind];
+    scalpAction.style.background=background;
+    scalpAction.style.color=color;
+    scalpAction.style.boxShadow='0 4px 0 '+background+', 0 0 18px '+color+'44';
+    scalpLabel.textContent=action;
+    scalpIcon.textContent=icon;
+    scalpMotion?.cancel();
+    if(move&&!document.hidden&&!reducedMotion.matches&&!document.body.classList.contains('bt-arcade-muted')){
+      scalpMotion=scalpIcon.animate?.([{transform:'none'},{transform:move},{transform:'none'}],
+        {duration:kind==='fast'?300:550,iterations:kind==='fast'?3:2,easing:'ease-in-out'});
+    }
   }
   if(scalpDetail.textContent!==detail)scalpDetail.textContent=detail;
 }
