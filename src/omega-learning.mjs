@@ -38,3 +38,49 @@ export function omegaStudyRound({marketTicker,roundId,nowMs,forecasts,marketBase
  const fusion=evaluateOmegaFusion({marketTicker,roundId,nowMs,forecasts,marketBaseline});
  return {fusion,verification:settlement?scoreVerifiedRound(fusion,settlement):null,ordersAuthorized:false};
 }
+
+/**
+ * Chronological, leakage-resistant research leaderboard. A candidate is eligible
+ * only after beating the same-round market baseline on a held-out suffix.
+ * This is an observation, never an authorization to trade or auto-promote.
+ */
+export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHoldout=20,minimumImprovement=0.01}={}){
+ const safeCount=n=>Number.isSafeInteger(n)&&n>=1;
+ if(!safeCount(minimumTrain)||!safeCount(minimumHoldout)||
+  !Number.isFinite(minimumImprovement)||minimumImprovement<0||minimumImprovement>1)
+  return {status:'INVALID_POLICY',leaderboard:[],champion:null,ordersAuthorized:false};
+ const rounds=new Map(),conflicts=new Set();
+ for(const r of records){
+  if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
+   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0)continue;
+  const key=JSON.stringify([r.marketTicker,r.roundId]);
+  const scores=new Map();
+  for(const s of r.scores||[]){
+   if(typeof s.provider!=='string'||!s.provider||!Number.isFinite(s.brier)||s.brier<0||s.brier>1||
+    scores.has(s.provider)){scores.clear();break;}
+   scores.set(s.provider,s.brier);
+  }
+  if(!scores.has('kalshi_baseline'))continue;
+  if(rounds.has(key)){conflicts.add(key);continue;}
+  rounds.set(key,{key,at:r.predictedAtMs,scores});
+ }
+ const ordered=[...rounds.values()].filter(r=>!conflicts.has(r.key))
+  .sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
+ const providers=new Set(ordered.flatMap(r=>[...r.scores.keys()].filter(p=>p!=='kalshi_baseline')));
+ const leaderboard=[];
+ for(const provider of providers){
+  const paired=ordered.filter(r=>r.scores.has(provider));
+  if(paired.length<minimumTrain+minimumHoldout)continue;
+  const holdout=paired.slice(-minimumHoldout);
+  const mean=p=>holdout.reduce((sum,r)=>sum+r.scores.get(p),0)/holdout.length;
+  const baselineBrier=mean('kalshi_baseline'),modelBrier=mean(provider);
+  leaderboard.push({provider,trainingRounds:paired.length-holdout.length,holdoutRounds:holdout.length,
+   modelBrier,baselineBrier,improvement:baselineBrier-modelBrier,
+   eligible:baselineBrier-modelBrier>=minimumImprovement});
+ }
+ leaderboard.sort((a,b)=>b.improvement-a.improvement||a.provider.localeCompare(b.provider));
+ return {status:leaderboard.length?'HOLDOUT_EVALUATED':'INSUFFICIENT_VERIFIED_HISTORY',
+  leaderboard,champion:leaderboard.find(x=>x.eligible)?.provider??null,
+  promoted:false,ordersAuthorized:false,
+  notice:'Research-only holdout comparison. Overlapping or correlated rounds and repeated selection can overstate performance; independent forward validation is still required.'};
+}
