@@ -82,6 +82,19 @@ test('crossed quotes never create a shadow entry, even when AI claims a large ed
  assert.equal(omegaPaperSignal(research,crossedUp),null);
  assert.equal(omegaPaperSignal(research,crossedDown),null);
 });
+test('OMEGA never paper-enters or accepts inconsistent complementary YES/NO books',async()=>{
+ const lowAsks={...quote,yesBidDollars:.10,noBidDollars:.10,yesAskDollars:.20,noAskDollars:.20};
+ const highBids={...quote,yesBidDollars:.60,noBidDollars:.50,yesAskDollars:.61,noAskDollars:.51};
+ for(const bad of [lowAsks,highBids])assert.equal(omegaPaperSignal(research,bad),null);
+ const market={ticker:quote.ticker,status:'active',yes_bid_dollars:'0.10',no_bid_dollars:'0.10',
+  yes_ask_dollars:'0.20',no_ask_dollars:'0.20'};
+ const fetchImpl=async()=>({ok:true,json:async()=>({market})});
+ assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl}),null);
+ const good={...market,yes_bid_dollars:'0.44',no_bid_dollars:'0.54',yes_ask_dollars:'0.45',no_ask_dollars:'0.55'};
+ assert.ok(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,
+  fetchImpl:async()=>({ok:true,json:async()=>({market:good})})}));
+});
+
 test('live Kalshi quote parser rejects crossed books and expired or malformed close times',async()=>{
  const market={ticker:quote.ticker,status:'active',yes_bid_dollars:'0.44',yes_ask_dollars:'0.45',
   no_bid_dollars:'0.54',no_ask_dollars:'0.55',close_time:new Date(now+10000).toISOString()};
