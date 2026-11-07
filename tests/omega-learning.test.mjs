@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {omegaStudyRound,scoreVerifiedRound,summarizeVerifiedScores} from '../src/omega-learning.mjs';
+import {omegaStudyRound,scoreVerifiedRound,summarizeVerifiedScores,evaluateResearchChampions,walkForwardChampionAudit} from '../src/omega-learning.mjs';
 const forecasts=[{provider:'gemini',marketTicker:'BTC',roundId:'r1',upProbability:.8,observedAtMs:90000},{provider:'grok',marketTicker:'BTC',roundId:'r1',upProbability:.6,observedAtMs:90000}];
 const baseline={marketTicker:'BTC',roundId:'r1',upProbability:.5,observedAtMs:90000};
 const args={marketTicker:'BTC',roundId:'r1',nowMs:95000,forecasts,marketBaseline:baseline};
@@ -65,6 +65,40 @@ test('malformed duplicate OMEGA score records quarantine a market round regardle
   }
  }
  assert.deepEqual(summarizeVerifiedScores([good,{...good,scores:null}]),[]);
+});
+
+test('malformed duplicate rounds cannot select OMEGA research champions or walk-forward winners',()=>{
+ const make=i=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,
+  predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
+  scores:[{provider:'gpt',brier:.05},{provider:'kalshi_baseline',brier:.3}]});
+ const holdout=[0,1,2,3].map(make);
+ const policy={minimumTrain:3,minimumHoldout:1,minimumImprovement:.01};
+ assert.equal(evaluateResearchChampions(holdout,policy).champion,'gpt');
+ for(const bad of [
+  {...holdout[0],scores:null},
+  {...holdout[0],scores:[{provider:'gpt',brier:-1}]},
+  {...holdout[0],predictedAtMs:null}
+ ]){
+  for(const records of [[...holdout,bad],[bad,...holdout]]){
+   const result=evaluateResearchChampions(records,policy);
+   assert.equal(result.champion,null);
+   assert.equal(result.ordersAuthorized,false);
+  }
+ }
+ const forward=holdout.slice(0,3);
+ assert.equal(walkForwardChampionAudit(forward,{minimumHistory:2}).evaluated,1);
+ for(const bad of [
+  {...forward[0],scores:null},
+  {...forward[0],settledAtMs:null},
+  {...forward[0],scores:[{provider:'gpt',brier:1.5}]}
+ ]){
+  for(const records of [[...forward,bad],[bad,...forward]]){
+   const result=walkForwardChampionAudit(records,{minimumHistory:2});
+   assert.equal(result.evaluated,0);
+   assert.equal(result.beatsMarketBaseline,false);
+   assert.equal(result.ordersAuthorized,false);
+  }
+ }
 });
 
 test('scheduled archive scores strict settlements once and excludes late forecasts',async()=>{
