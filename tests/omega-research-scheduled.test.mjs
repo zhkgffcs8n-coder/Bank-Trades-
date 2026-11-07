@@ -65,3 +65,54 @@ test('provider failures retain safe HTTP diagnostics without response body or cr
  const report=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'secret-a',DEEPSEEK_API_KEY:'secret-b'},fetchImpl:async url=>url.includes('/markets/')?{ok:true,json:async()=>({market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}})}:{ok:false,status:401,json:async()=>({secret:'must not read'})}});
  assert.equal(report.status,'INSUFFICIENT_DATA');assert.ok(report.reasons.length);assert.equal(report.providerStatus[0].httpStatus,401);assert.equal(JSON.stringify(report).includes('secret-'),false);
 });
+
+function indexedPaperStore(entries){
+ const values=new Map(entries);
+ return {
+  values,
+  async get(key){return values.get(key)??null},
+  async setJSON(key,value){values.set(key,value)},
+  async delete(key){values.delete(key)},
+  async *list({prefix,paginate}){
+   assert.equal(paginate,true);
+   yield {blobs:[...values.keys()].filter(key=>key.startsWith(prefix)).sort().map(key=>({key}))};
+  }
+ };
+}
+function olderPaperPosition(ticker){
+ return {state:{positions:{[ticker]:{status:'OPEN',ticker,roundId:ticker,side:'UP',quantity:2,entryCostDollars:.5}},entered:{}}};
+}
+test('an indexed older-round position is exited even when collector latest rotated',async()=>{
+ const ticker='KXBTC15M-OLDER';
+ const db=indexedPaperStore([
+  ['latest/'+asset,sample],
+  ['omega/paper/v1/'+ticker,olderPaperPosition(ticker)],
+  ['omega/paper/open/v1/'+ticker,{ticker,realOrdersAuthorized:false}]
+ ]);
+ const requested=[];
+ const report=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl:async url=>{
+  requested.push(url);
+  return {ok:true,json:async()=>({market:{ticker,status:'active',yes_bid_dollars:'0.90',yes_ask_dollars:'0.91',no_bid_dollars:'0.08',no_ask_dollars:'0.09'}})};
+ }});
+ assert.equal(report.status,'PROVIDERS_UNCONFIGURED');
+ assert.equal(report.paperMonitoring.open,1);
+ assert.equal(report.paperMonitoring.exits,1);
+ assert.equal(db.values.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'CLOSED');
+ assert.equal(db.values.has('omega/paper/open/v1/'+ticker),false);
+ assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
+ assert.equal(requested.length,1);
+ assert.ok(requested[0].includes(ticker));
+});
+test('legacy older-round positions are backfilled without a duplicate entry',async()=>{
+ const ticker='KXBTC15M-LEGACY';
+ const db=indexedPaperStore([['latest/'+asset,sample],['omega/paper/v1/'+ticker,olderPaperPosition(ticker)]]);
+ const report=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl:async()=>({
+  ok:true,json:async()=>({market:{ticker,status:'active',yes_bid_dollars:'0.50',yes_ask_dollars:'0.60',no_bid_dollars:'0.40',no_ask_dollars:'0.50'}})
+ })});
+ assert.equal(report.paperMonitoring.backfilled,1);
+ assert.equal(report.paperMonitoring.open,1);
+ assert.equal(report.paperMonitoring.holds,1);
+ assert.equal(db.values.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+ assert.equal(db.values.get('omega/paper/open/v1/'+ticker).realOrdersAuthorized,false);
+ assert.equal([...db.values.keys()].filter(k=>k==='omega/paper/v1/'+ticker).length,1);
+});
