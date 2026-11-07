@@ -32,3 +32,34 @@ test('HOLD persists trailing peak without inventing a new completed trade',async
  const result=await advanceOmegaPaperStored({db,ticker,roundId:ticker,quote:{...quote,yesBidDollars:.8},nowMs:now});
  assert.equal(result.status,'PAPER_HOLD');assert.equal(values.get('omega/paper/v1/'+ticker).state.positions[ticker].peakNetDollars,.24);assert.equal(values.has('omega/paper/latest'),false);
 });
+
+test('official settlement closes stranded paper position with actual payout, once',async()=>{
+ const {settleOmegaPaperStored}=await import('../netlify/functions/lib/omega-auto-paper.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const ticker='BTC-SETTLE',data=new Map();
+ const db={async get(key){return structuredClone(data.get(key)||null)},async setJSON(key,value){data.set(key,structuredClone(value))},async delete(key){data.delete(key)}};
+ const position={status:'OPEN',ticker,roundId:ticker,side:'DOWN',quantity:4,entryCostDollars:2.25,openedAtMs:100000};
+ data.set('omega/paper/v1/'+ticker,{state:{positions:{[ticker]:position},entered:{[ticker+'|'+ticker]:true}}});
+ data.set('omega/paper/open/v1/'+ticker,{ticker});
+ data.set('outcomes/'+ticker,{ticker,result:'no',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()});
+ const tooEarly=await settleOmegaPaperStored({db,ticker,nowMs:109999});
+ assert.equal(tooEarly.status,'WAITING_FOR_VERIFIED_SETTLEMENT');
+ const done=await settleOmegaPaperStored({db,ticker,nowMs:110000});
+ assert.equal(done.status,'PAPER_SETTLED');
+ assert.equal(done.netDollars,1.75);
+ assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'SETTLED');
+ assert.equal(data.has('omega/paper/open/v1/'+ticker),false);
+ assert.equal(data.get('omega/paper/latest').realOrdersAuthorized,false);
+ assert.equal((await settleOmegaPaperStored({db,ticker,nowMs:120000})).status,'BLOCKED');
+});
+test('paper settlement rejects unverified outcomes and never invents a zero payout',async()=>{
+ const {settleOmegaPaperStored}=await import('../netlify/functions/lib/omega-auto-paper.mjs');
+ const ticker='BTC-UNVERIFIED',data=new Map([
+ ['omega/paper/v1/'+ticker,{state:{positions:{[ticker]:{status:'OPEN',ticker,roundId:ticker,side:'UP',quantity:2,entryCostDollars:1.2,openedAtMs:100000}}}}],
+ ['outcomes/'+ticker,{ticker,result:'no',verification:'UNVERIFIED',settledAt:new Date(110000).toISOString()}]
+ ]);
+ const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>data.set(key,value)};
+ const r=await settleOmegaPaperStored({db,ticker,nowMs:120000});
+ assert.equal(r.status,'WAITING_FOR_VERIFIED_SETTLEMENT');
+ assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+});
