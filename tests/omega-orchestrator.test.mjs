@@ -79,7 +79,7 @@ test('leaderboard endpoint only reports verified archived scores and never autho
 
 test('walk-forward champion never selects from the future or claims unverified Primal wins',async()=>{
  const {walkForwardChampionAudit}=await import('../src/omega-learning.mjs');
- const make=(i,model,baseline)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,predictedAtMs:1000+i,
+ const make=(i,model,baseline)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
   scores:[{provider:'gpt',brier:model},{provider:'kalshi_baseline',brier:baseline}]});
  const history=Array.from({length:25},(_,i)=>make(i,i<5?.1:.4,.3));
  const result=walkForwardChampionAudit(history,{minimumHistory:5,minimumImprovement:.05});
@@ -90,4 +90,20 @@ test('walk-forward champion never selects from the future or claims unverified P
  assert.equal(result.originalPrimalComparison,'NOT_VERIFIED');
  const conflict=walkForwardChampionAudit([...history,make(0,.9,.1)],{minimumHistory:5,minimumImprovement:.05});
  assert.equal(conflict.evaluated,3); // Conflicted early training round removes another eligible forward step.
+});
+
+test('walk-forward excludes outcomes settled after a later prediction and missing settlement times',async()=>{
+ const {walkForwardChampionAudit}=await import('../src/omega-learning.mjs');
+ const make=(i,settledAtMs)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'F'+i,
+  predictedAtMs:1000+i*1000,settledAtMs,
+  scores:[{provider:'omega_consensus',brier:.05},{provider:'kalshi_baseline',brier:.3}]});
+ const records=Array.from({length:9},(_,i)=>make(i,100000+i));
+ const leaking=walkForwardChampionAudit(records,{minimumHistory:2});
+ assert.equal(leaking.evaluated,0);
+ assert.equal(leaking.beatsMarketBaseline,false);
+ const missing=walkForwardChampionAudit(records.map(({settledAtMs,...rest})=>rest),{minimumHistory:2});
+ assert.equal(missing.evaluated,0);
+ const legitimate=walkForwardChampionAudit(Array.from({length:9},(_,i)=>make(i,1100+i*1000)),{minimumHistory:2});
+ assert.equal(legitimate.evaluated,7);
+ assert.equal(legitimate.ordersAuthorized,false);
 });
