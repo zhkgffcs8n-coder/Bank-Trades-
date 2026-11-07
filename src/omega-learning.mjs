@@ -8,8 +8,18 @@ export function scoreVerifiedRound(fusion,settlement){
   ![0,1].includes(settlement.upOutcome)||settlement.verified!==true||
   !Number.isSafeInteger(settlement.settledAtMs)||settlement.settledAtMs<=0)
   return {status:'BLOCKED',reason:'Missing verified matching settlement'};
- if(!fusion.accepted.every(f=>Number.isSafeInteger(f.observedAtMs)&&f.observedAtMs<settlement.settledAtMs))
-  return {status:'BLOCKED',reason:'Lookahead leakage detected'};
+ // Even a correctly matched official settlement cannot validate malformed,
+ // missing, duplicate or post-settlement model forecasts. Reject the entire
+ // round rather than counting an invalid score as a verified observation.
+ const accepted=fusion.accepted;
+ if(!Array.isArray(accepted)||accepted.length<2||
+  accepted.some(f=>typeof f?.provider!=='string'||!f.provider.trim()||
+   !validP(f.upProbability)||!Number.isSafeInteger(f.observedAtMs)||
+   f.observedAtMs<=0||f.observedAtMs>=settlement.settledAtMs)||
+  new Set(accepted.map(f=>f.provider)).size!==accepted.length)
+  return {status:'BLOCKED',reason:'Invalid, duplicate or post-settlement provider forecasts'};
+ if(fusion.marketBaseline!=null&&!validP(fusion.marketBaseline))
+  return {status:'BLOCKED',reason:'Invalid market baseline'};
  const outcome=settlement.upOutcome;
  const measure=(provider,probability)=>({provider,brier:(probability-outcome)**2,correct:probability===.5?null:Number(probability>.5)===outcome});
  const scores=fusion.accepted.map(f=>measure(f.provider,f.upProbability));
