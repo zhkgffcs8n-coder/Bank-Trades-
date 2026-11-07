@@ -14,17 +14,22 @@ export async function runOmegaResearchRound({marketTicker,roundId,marketSnapshot
  return {status:fusion.status,fusion,providerStatus:outcomes.map(x=>({provider:x.provider,status:x.status,...(Number.isInteger(x.httpStatus)?{httpStatus:x.httpStatus}:{}),...(x.errorCode?{errorCode:x.errorCode}:{})})),ordersAuthorized:false};
 }
 export function evaluateOmegaVerifiedBatch({rounds=[],settlements=[]}={}){
- const verified=new Map();
+ const verified=new Map(),conflicts=new Set();
  for(const s of settlements){
-  if(s?.verified===true&&typeof s.marketTicker==='string'&&typeof s.roundId==='string')
-   verified.set(s.marketTicker+'|'+s.roundId,s);
+  if(s?.verified!==true||typeof s.marketTicker!=='string'||typeof s.roundId!=='string'||
+   ![0,1].includes(s.upOutcome)||!Number.isSafeInteger(s.settledAtMs)||s.settledAtMs<=0)continue;
+  const key=s.marketTicker+'|'+s.roundId;
+  const prior=verified.get(key);
+  // Contradictory official records must never silently overwrite a result.
+  if(prior&&(prior.upOutcome!==s.upOutcome||prior.settledAtMs!==s.settledAtMs))conflicts.add(key);
+  else if(!prior)verified.set(key,s);
  }
  const records=[];
  for(const round of rounds){
   const f=round?.fusion;
   if(f?.status!=='SHADOW_RESEARCH')continue;
   const s=verified.get(f.marketTicker+'|'+f.roundId);
-  if(!s)continue;
+  if(!s||conflicts.has(f.marketTicker+'|'+f.roundId))continue;
   const score=scoreVerifiedRound(f,s);
   if(score.status==='VERIFIED_SHADOW_SCORE')records.push(score);
  }
