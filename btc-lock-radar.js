@@ -3,11 +3,66 @@ const chart=document.getElementById('btcSpotChart');if(!chart)return;
 const box=document.createElement('section');box.className='card';box.id='btcLockDesk';box.innerHTML='<h2>🔐 BTC 15-MIN · LOCK & FLIP RADAR</h2><div id="btcLockState" class="notice" role="status" aria-live="polite">Collecting independent candle evidence…</div><p id="btcLockFacts" class="premium-foot">A lock candidate is not a confirmed win. Actual settlement determines the result.</p><p class="premium-foot">Uses completed Coinbase BTC-USD candles plus Kalshi quote agreement. No fixed 93% accuracy claim; not the TradingView proprietary script. Paper research only.</p>';chart.closest('section')?.append(box);
 const scalper=document.createElement('section');
 scalper.className='card';
-scalper.innerHTML='<h2>BTC 15-MIN PRO SCALPER</h2><div class="notice" role="status" aria-live="polite"></div><p class="premium-foot">Research signals only. Entry uses the contract ask. Exit uses the bid. Quote changes exclude fees and do not represent fills.</p>';
+scalper.id='btcProScalper';
+scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
+scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:block;padding:12px;border-radius:10px;font-size:clamp(22px,3vw,42px);line-height:1.12"></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 box.before(scalper);
-const scalpState=scalper.querySelector('.notice');
+const scalpAction=scalper.querySelector('[data-action]');
+const scalpDetail=scalper.querySelector('[data-detail]');
+function mountScalper(){
+  const feed=document.getElementById('btVerifiedAlertFeed');
+  if(!feed)return false;
+  const row=document.createElement('div');
+  row.style.position='relative';
+  feed.before(row);
+  row.append(feed,scalper);
+
+  function layout(){
+    const feedBounds=feed.getBoundingClientRect();
+    const range=document.createRange();
+    let textRight=feedBounds.left;
+    for(const line of feed.children){
+      range.selectNodeContents(line);
+      textRight=Math.max(textRight,range.getBoundingClientRect().right);
+    }
+    const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor(feedBounds.right-textRight-36));
+    if(width>=340)scalper.style.width=width+'px';
+    const inline=width>=340&&feedBounds.height>=scalper.offsetHeight+24;
+    scalper.style.position=inline?'absolute':'';
+    scalper.style.right=inline?'12px':'';
+    scalper.style.top=inline?feed.offsetTop+'px':'';
+    scalper.style.width=inline?width+'px':'';
+  }
+
+  const observer=new ResizeObserver(layout);
+  observer.observe(feed);
+  observer.observe(scalper);
+  new MutationObserver(layout).observe(feed,{childList:true});
+  layout();
+  return true;
+}
+if(!mountScalper()){
+  const observer=new MutationObserver(()=>{
+    if(mountScalper())observer.disconnect();
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+}
+
 let tracked=null,busy=false;
-function showScalp(message){if(scalpState.textContent!==message)scalpState.textContent=message}
+function showScalp(message){
+  const separator=message.indexOf(' · ');
+  const action=separator<0?message:message.slice(0,separator);
+  const detail=separator<0?'':message.slice(separator+3);
+  if(scalpAction.textContent!==action){
+    const colors=/^(BUY UP|TAKE PROFIT)/.test(action)?['#064e3b','#a7f3d0']
+      :/^(BUY DOWN|SELL FAST|TIME EXIT|EXIT)/.test(action)?['#7f1d1d','#fecaca']
+      :/^HOLD/.test(action)?['#713f12','#fef08a']:['#1e3a5f','#dbeafe'];
+    scalpAction.style.background=colors[0];
+    scalpAction.style.color=colors[1];
+    scalpAction.textContent=action;
+  }
+  if(scalpDetail.textContent!==detail)scalpDetail.textContent=detail;
+}
 function scalp(market,left,side,strong,quotes){
   const ticker=market.ticker;
   let entered=false;
@@ -37,7 +92,7 @@ function scalp(market,left,side,strong,quotes){
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');let lastDirection='mixed',confirmed=0,history=[];
 const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
 async function evaluate(){if(busy)return;busy=true;try{
-showScalp('DATA WAIT · Checking the BTC contract and spot feed');const e=window.__BANK_TRADES_BTC_EVIDENCE__;if(!e||Date.now()-e.at>90000||Date.now()-e.candleAt>180000){state.textContent='DATA WAIT · BTC spot candle evidence unavailable or stale';showScalp(state.textContent);return}
+const e=window.__BANK_TRADES_BTC_EVIDENCE__;if(!e||Date.now()-e.at>90000||Date.now()-e.candleAt>180000){state.textContent='DATA WAIT · BTC spot candle evidence unavailable or stale';showScalp(state.textContent);return}
 let market=null;try{const r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.ok){const d=await r.json();if(Math.abs(Date.now()-Date.parse(d.fetched_at))<30000)market=(d.results||[]).find(x=>String(x.asset).toUpperCase()==='BTC')?.market}}catch{}
 if(!market){state.textContent='DATA WAIT · Kalshi BTC contract unavailable';showScalp(state.textContent);return}
 const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
