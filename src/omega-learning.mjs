@@ -15,7 +15,7 @@ export function scoreVerifiedRound(fusion,settlement){
  const scores=fusion.accepted.map(f=>measure(f.provider,f.upProbability));
  if(fusion.accepted.length>=2)scores.push(measure('omega_consensus',fusion.accepted.reduce((sum,f)=>sum+f.upProbability,0)/fusion.accepted.length));
  if(validP(fusion.marketBaseline))scores.push(measure('kalshi_baseline',fusion.marketBaseline));
- return {status:'VERIFIED_SHADOW_SCORE',marketTicker:fusion.marketTicker,roundId:fusion.roundId,scores,ordersAuthorized:false};
+ return {status:'VERIFIED_SHADOW_SCORE',marketTicker:fusion.marketTicker,roundId:fusion.roundId,predictedAtMs:Math.max(...fusion.accepted.map(f=>f.observedAtMs)),scores,ordersAuthorized:false};
 }
 export function summarizeVerifiedScores(records=[]){
  const byProvider=new Map(),seen=new Set();
