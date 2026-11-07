@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {freezeForecast,scoreFrozenForecast} from '../src/forecast-shadow-learning.mjs';
+import {freezeForecast,scoreFrozenForecast,summarizeForecastResearch} from '../src/forecast-shadow-learning.mjs';
 const input={ticker:'KXBTC15M-TEST',asset:'BTC',at:1000,expiresAt:2000,yesBid:.58,yesAsk:.61,noBid:.37,noAsk:.40};
 test('freeze forecast from contemporaneous quotes, not later settlement',()=>{
  const row=freezeForecast(input);
@@ -24,4 +24,14 @@ test('directional mistakes are recorded rather than revised',()=>{
  const result=scoreFrozenForecast(freezeForecast(input),'no',2500);
  assert.equal(result.correct,false);assert.equal(result.direction,'UP');assert.equal(result.directionalBrier,1);
  assert.ok(result.simulatedNetPnl<0);
+});
+
+test('scorecard excludes unresolved forecasts and identifies limited archive scope',()=>{
+ const frozen=freezeForecast(input);
+ const win=scoreFrozenForecast(frozen,'yes',2500);
+ const loss=scoreFrozenForecast({...frozen,ticker:'OTHER',at:1100},'no',2500);
+ const report=summarizeForecastResearch([win,loss,frozen],{truncated:true});
+ assert.equal(report.n,2);assert.equal(report.wins,1);assert.equal(report.losses,1);
+ assert.equal(report.scope,'FIRST_PAGE_ONLY');assert.equal(report.modelPromoted,false);
+ assert.equal(report.byAsset.BTC.n,2);assert.ok(report.maxDrawdown>0);
 });
