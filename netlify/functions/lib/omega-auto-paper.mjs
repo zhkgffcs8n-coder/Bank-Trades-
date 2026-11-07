@@ -67,7 +67,7 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
   const parse=(d,c,allowZero=false)=>{
    const raw=d===undefined?c:d;
    if(raw===null||raw===undefined||typeof raw==='boolean'||
-    (typeof raw==='string'&&!/^(?:0|[1-9]\\d*)(?:\\.\\d+)?$/.test(raw)))return NaN;
+    (typeof raw==='string'&&!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(raw)))return NaN;
    const v=d===undefined?Number(raw)/100:Number(raw);
    return Number.isFinite(v)&&v<1&&(allowZero?v>=0:v>0)?v:NaN;
   };
