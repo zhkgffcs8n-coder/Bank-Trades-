@@ -59,3 +59,20 @@ test('verified scoring records the latest forecast timestamp for holdout orderin
  const score=scoreVerifiedRound(fusion,{marketTicker:'BTC',roundId:'R',verified:true,upOutcome:1,settledAtMs:2000});
  assert.equal(score.predictedAtMs,1100);
 });
+
+test('leaderboard endpoint only reports verified archived scores and never authorizes orders',async()=>{
+ const {omegaLeaderboard}=await import('../netlify/functions/omega-leaderboard.mjs');
+ const values=new Map();
+ for(let i=0;i<52;i++)values.set('omega/verified-scores/v1/BTC-'+i,{
+  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'BTC-'+i,predictedAtMs:1000+i,
+  scores:[{provider:'omega_consensus',brier:.1},{provider:'kalshi_baseline',brier:.3}]});
+ values.set('omega/verified-scores/v1/UNVERIFIED',{status:'BLOCKED',scores:[]});
+ const db={async *list(){yield {blobs:[...values.keys()].sort().map(key=>({key}))}},
+  async get(key){return values.get(key)??null}};
+ const result=await omegaLeaderboard(db);
+ assert.equal(result.observedRecords,52);
+ assert.equal(result.champion,'omega_consensus');
+ assert.equal(result.selectedForTrading,false);
+ assert.equal(result.realOrdersAuthorized,false);
+ assert.equal(result.originalPrimalComparison,'NOT_VERIFIED');
+});
