@@ -64,6 +64,22 @@ test('official settlement closes stranded paper position with actual payout, onc
  assert.equal(data.get('omega/paper/latest').realOrdersAuthorized,false);
  assert.equal((await settleOmegaPaperStored({db,ticker,nowMs:120000})).status,'BLOCKED');
 });
+test('paper settlement rejects corrupted over-cap persisted entry costs',async()=>{
+ const {settleOmegaPaperStored}=await import('../netlify/functions/lib/omega-auto-paper.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const ticker='BTC-OVERCAP',position={status:'OPEN',ticker,roundId:ticker,side:'UP',quantity:10,entryCostDollars:5.5,openedAtMs:100000};
+ const data=new Map([
+  ['omega/paper/v1/'+ticker,{state:{positions:{[ticker]:position},entered:{}}}],
+  ['outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()}]
+ ]);
+ const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>data.set(key,value)};
+ const result=await settleOmegaPaperStored({db,ticker,nowMs:120000});
+ assert.equal(result.status,'BLOCKED');
+ assert.equal(result.realOrdersAuthorized,false);
+ assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+ assert.equal(data.has('omega/paper/latest'),false);
+});
+
 test('paper settlement rejects unverified outcomes and never invents a zero payout',async()=>{
  const {settleOmegaPaperStored}=await import('../netlify/functions/lib/omega-auto-paper.mjs');
  const ticker='BTC-UNVERIFIED',data=new Map([
