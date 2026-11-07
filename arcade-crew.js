@@ -6,6 +6,8 @@ const root=document.createElement('section');root.id='btArcadeCrew';root.setAttr
 root.innerHTML=crew.map(([id,name,role,color],i)=>`<div class="bt-bot" data-bot="${id}" data-mode="idle">${svg(color,i)}<strong>${name}</strong><small>${role}</small></div>`).join('');
 const target=document.querySelector('.terminal-heading')||document.querySelector('main header')||document.querySelector('header');
 if(!target)return;target.insertAdjacentElement('afterend',root);
+const arena=document.createElement('section');arena.id='btBattleArena';arena.setAttribute('aria-label','Market risk battle arena');arena.innerHTML='<div class="bt-arena-top"><strong>⚔️ AI MARKET BATTLE ARENA</strong><span id="btArenaStatus" role="status">Scanning live signal table · no verified trades implied</span></div><div class="bt-arena-field"><span class="bt-arena-hero" aria-hidden="true">🛡️</span><span class="bt-arena-beam" aria-hidden="true"></span><span class="bt-arena-foe" aria-hidden="true">👾</span></div><div id="btArenaNarrative">Watching for qualified signal changes. Arcade animation is visualization only.</div>';
+root.insertAdjacentElement('afterend',arena);
 const controls=document.createElement('div');controls.id='btArcadeControls';controls.innerHTML='<button type="button" id="btArcadeMotion" aria-pressed="true">✨ MOTION ON</button>';
 root.insertAdjacentElement('beforebegin',controls);
 let motion=true;try{motion=localStorage.getItem('banktrades:arcade-motion')!=='false'}catch{}
@@ -16,6 +18,7 @@ function scan(){if(document.hidden)return;
  for(const tr of document.querySelectorAll('#premiumRows tr')){const asset=tr.dataset.asset||'',label=tr.children[3]?.textContent||'';if(!asset)continue;
  const action=/SELL FAST|CASH OUT|TAKE PROFITS/.test(label)?'EXIT':/POSSIBLE FLIP|FLIP WATCH|FLIP UP|FLIP DOWN/.test(label)?'FLIP':/QUALIFIED PAPER SIGNAL: BUY UP|QUALIFIED PAPER SIGNAL: BUY DOWN/.test(label)?'ENTRY':/STAY OUT/.test(label)?'RISK':'';
  if(!prior.has(asset)){prior.set(asset,action);continue}if(!action||prior.get(asset)===action){prior.set(asset,action);continue}prior.set(asset,action);
+ const status=document.querySelector('#btArenaStatus');const narrative=document.querySelector('#btArenaNarrative');if(status)status.textContent=asset+' · '+action+' signal transition';if(narrative)narrative.textContent=asset+' · '+(action==='ENTRY'?'Qualified signal observed — not an executed order':action==='EXIT'?'Exit recommendation observed — fill not verified':action==='FLIP'?'Reversal alert observed — flip not executed':'Risk warning observed — no trade implied');arena.dataset.mode=action.toLowerCase();
  if(action==='ENTRY'){activate('primal','entry');activate('omega','entry')}
  else if(action==='EXIT'||action==='RISK')activate('guard','danger');
  else if(action==='FLIP')activate('flip','flip');
