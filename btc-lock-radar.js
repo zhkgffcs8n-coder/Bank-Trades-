@@ -25,7 +25,8 @@ const lastRecord=journal.at(-1);
 if(lastRecord?.event==='ENTRY')record({event:'INTERRUPTED',ticker:lastRecord.ticker});
 const evaluated=new Set(journal.filter(x=>x.event==='ENTRY').map(x=>x.ticker));
 const trades=[];
-let socket,reconnectAt=0,tradeId='';
+const recentTradeIds=new Map();
+let socket,reconnectAt=0;
 function record(entry){
   journal.push({at:Date.now(),...entry});
   journal=journal.slice(-400);
@@ -48,12 +49,16 @@ function connectTrades(){
           const time=Date.parse(trade.time),price=Number(trade.price),size=Number(trade.size);
           if(trade.product_id!=='BTC-USD'||time>now+2000||time<now-30000||
              !Number.isFinite(time)||!Number.isFinite(price)||price<=0||!Number.isFinite(size)||size<=0||
-             !['BUY','SELL'].includes(trade.side)||!trade.trade_id||trade.trade_id===tradeId||
+             !['BUY','SELL'].includes(trade.side)||!trade.trade_id||recentTradeIds.has(trade.trade_id)||
              (trades.length&&time<trades.at(-1).time))continue;
-          tradeId=trade.trade_id;
+          recentTradeIds.set(trade.trade_id,time);
           // Coinbase publishes the maker side. Aggressor direction is the opposite.
           trades.push({time,price,flow:trade.side==='SELL'?size:-size});
         }
+      }
+      for(const [id,time] of recentTradeIds){
+        if(time>=now-30000&&recentTradeIds.size<=5000)break;
+        recentTradeIds.delete(id);
       }
       while(trades.length&&(trades[0].time<now-30000||trades.length>5000))trades.shift();
     };
@@ -93,6 +98,11 @@ async function refreshTitan(){
     const {titanShadow:report}=await response.json();
     if(!report){titan.textContent='🤖 TITAN V7 · Waiting for a fresh server report';return}
     const latest=report.latest;
+    if(latest){
+      window.dispatchEvent(new CustomEvent('banktrades:titan-observation',{detail:{
+        ticker:latest.ticker,at:latest.at,decision:latest.decision,scored:report.scored,trades:report.trades
+      }}));
+    }
     titan.textContent='🤖 TITAN V7 SHADOW · '+(latest?latest.decision+' · '+latest.reason.replaceAll('_',' ').toLowerCase():'Collecting qualified BTC observations')+
       ' · '+report.scored+' officially scored rounds · '+report.trades+' simulated trades'+
       (report.scored?' · Titan / market Brier '+report.brier.toFixed(3)+' / '+report.marketBrier.toFixed(3):'')+
@@ -109,6 +119,11 @@ try{
   const saved=JSON.parse(localStorage.getItem(v6Key)||'[]');
   if(Array.isArray(saved))v6Log=saved.filter(row=>row&&typeof row==='object').slice(-1200);
 }catch{}
+const finishedForecasts=new Set(v6Log.filter(row=>['OUTCOME','MISSED_OUTCOME'].includes(row.event)).map(row=>row.id));
+pending=v6Log.filter(row=>row.event==='FORECAST'&&typeof row.id==='string'&&!finishedForecasts.has(row.id)&&
+  horizons.includes(row.horizon)&&Number.isFinite(row.due)&&Number.isFinite(row.spot)&&
+  Number.isFinite(row.probability)&&row.probability>0&&row.probability<1);
+lastForecast=v6Log.reduce((latest,row)=>row.event==='FORECAST'&&Number.isFinite(row.at)&&row.at<=Date.now()?Math.max(latest,row.at):latest,0);
 const v6Entries=new Set(v6Log.filter(row=>row.event==='ENTRY').map(row=>row.ticker));
 const v6Finished=new Set(v6Log.filter(row=>['EXIT','UNRESOLVED'].includes(row.event)).map(row=>row.ticker));
 function saveV6(rows){
@@ -175,13 +190,21 @@ function updateV6({market,yes,no,spread,current,remaining,latency}){
   const exits=v6Log.filter(row=>row.event==='EXIT'&&Number.isFinite(row.pnl));
   const v5Exits=new Map(journal.filter(row=>row.event==='EXIT'&&Number.isFinite(row.pnl)).map(row=>[row.ticker,row.pnl]));
   const matched=exits.filter(row=>v5Exits.has(row.ticker));
-  const delta=matched.reduce((sum,row)=>sum+row.pnl-v5Exits.get(row.ticker),0);
+  const pairedV5=matched.map(row=>v5Exits.get(row.ticker));
+  const pairedV6=matched.map(row=>row.pnl);
+  const summarizeNet=values=>{
+    const wins=values.filter(value=>value>0).length;
+    const losses=values.filter(value=>value<0).length;
+    const net=values.reduce((sum,value)=>sum+value,0);
+    return wins+'W/'+losses+'L · '+(net*100).toFixed(1)+'¢ net';
+  };
   const outcomes=v6Log.filter(row=>row.event==='OUTCOME'&&row.outcome!==null);
+  const correct=outcomes.filter(row=>(row.probability>=.5?1:0)===row.outcome).length;
   const brier=outcomes.length?outcomes.reduce((sum,row)=>sum+(row.probability-row.outcome)**2,0)/outcomes.length:null;
   const suffix=' · Flow '+Math.round(slow.flow*100)+'% · Depth imbalance '+Math.round(depth*100)+'% · Book request '+latency+'ms'+
     (reversal?' · Reversal warning':'')+' · Matched closed trades '+matched.length+
-    (matched.length?' · V6−V5 '+(delta*100).toFixed(1)+'¢':'')+
-    (brier===null?'':' · Brier '+brier.toFixed(3)+' (n='+outcomes.length+')');
+    (matched.length?' · V5 '+summarizeNet(pairedV5)+' · V6 '+summarizeNet(pairedV6):'')+
+    (brier===null?'':' · Spot direction '+correct+'/'+outcomes.length+' · Brier '+brier.toFixed(3));
   const show=text=>{challenger.textContent='V6 SHADOW · '+text+suffix};
   if(v6Position&&v6Position.ticker!==ticker)closeV6Unresolved(current);
   if(v6Position){
