@@ -81,8 +81,9 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
  const rounds=new Map(),conflicts=new Set();
  for(const r of records){
   if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
-   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0)continue;
+   typeof r.roundId!=='string'||!r.roundId)continue;
   const key=JSON.stringify([r.marketTicker,r.roundId]);
+  if(!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0){conflicts.add(key);continue;}
   const scores=new Map();
   let valid=Array.isArray(r.scores)&&r.scores.length>0;
   if(valid)for(const score of r.scores){
