@@ -84,3 +84,58 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
   promoted:false,ordersAuthorized:false,
   notice:'Research-only holdout comparison. Overlapping or correlated rounds and repeated selection can overstate performance; independent forward validation is still required.'};
 }
+
+/**
+ * Prospective shadow champion selection: choose using only rounds strictly
+ * earlier than the evaluation round. This avoids choosing a model using the
+ * outcome it is being evaluated on. Never routes orders.
+ */
+export function walkForwardChampionAudit(records=[],{minimumHistory=30,minimumImprovement=.01}={}){
+ if(!Number.isSafeInteger(minimumHistory)||minimumHistory<2||
+  !Number.isFinite(minimumImprovement)||minimumImprovement<0||minimumImprovement>1)
+  return {status:'INVALID_POLICY',evaluated:0,ordersAuthorized:false};
+ const keys=new Set(),conflicts=new Set(),valid=[];
+ for(const r of records){
+  if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
+   typeof r.roundId!=='string'||!r.roundId||!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0)continue;
+  const key=JSON.stringify([r.marketTicker,r.roundId]);
+  if(keys.has(key)){conflicts.add(key);continue;}
+  keys.add(key);
+  const scores=new Map();
+  for(const s of r.scores||[]){
+   if(typeof s.provider!=='string'||!s.provider||!Number.isFinite(s.brier)||s.brier<0||s.brier>1||scores.has(s.provider)){
+    scores.clear();break;
+   }
+   scores.set(s.provider,s.brier);
+  }
+  if(scores.has('kalshi_baseline'))valid.push({key,at:r.predictedAtMs,scores});
+ }
+ valid.sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
+ const clean=valid.filter(x=>!conflicts.has(x.key)),decisions=[];
+ for(let i=minimumHistory;i<clean.length;i++){
+  const current=clean[i],past=clean.slice(0,i).filter(x=>x.at<current.at);
+  if(past.length<minimumHistory)continue;
+  const providers=new Set(past.flatMap(x=>[...x.scores.keys()].filter(p=>p!=='kalshi_baseline'));
+  const ranked=[];
+  for(const provider of providers){
+   const paired=past.filter(x=>x.scores.has(provider));
+   if(paired.length<minimumHistory)continue;
+   const gain=paired.reduce((sum,x)=>sum+x.scores.get('kalshi_baseline')-x.scores.get(provider),0)/paired.length;
+   if(gain>=minimumImprovement)ranked.push({provider,gain});
+  }
+  ranked.sort((a,b)=>b.gain-a.gain||a.provider.localeCompare(b.provider));
+  const selected=ranked.find(x=>current.scores.has(x.provider));
+  if(!selected)continue;
+  decisions.push({marketTicker:JSON.parse(current.key)[0],roundId:JSON.parse(current.key)[1],
+   provider:selected.provider,modelBrier:current.scores.get(selected.provider),
+   baselineBrier:current.scores.get('kalshi_baseline')});
+ }
+ const count=decisions.length,mean=key=>count?decisions.reduce((sum,x)=>sum+x[key],0)/count:null;
+ const modelBrier=mean('modelBrier'),baselineBrier=mean('baselineBrier');
+ return {status:count?'FORWARD_SHADOW_EVALUATED':'INSUFFICIENT_FORWARD_EVIDENCE',
+  evaluated:count,modelBrier,baselineBrier,improvement:count?baselineBrier-modelBrier:null,
+  selected:decisions.slice(-20).map(x=>({marketTicker:x.marketTicker,roundId:x.roundId,provider:x.provider})),
+  beatsMarketBaseline:count>=20&&modelBrier<baselineBrier,
+  originalPrimalComparison:'NOT_VERIFIED',promoted:false,ordersAuthorized:false,
+  notice:'Strict past-only model selection; observed performance is not a guarantee. Original Primal requires paired independently logged predictions.'};
+}
