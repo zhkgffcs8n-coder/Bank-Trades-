@@ -14,7 +14,9 @@ export function omegaPaperSignal(research,quote){
   !quote||quote.ticker!==fusion?.marketTicker||fusion?.roundId!==quote.ticker)
   return null;
  const validAsk=p=>typeof p==='number'&&Number.isFinite(p)&&p>0&&p<1;
- if(!validAsk(quote.yesAskDollars)||!validAsk(quote.noAskDollars))return null;
+ if(!validAsk(quote.yesAskDollars)||!validAsk(quote.noAskDollars)||
+  ![quote.yesBidDollars,quote.noBidDollars].every(p=>typeof p==='number'&&Number.isFinite(p)&&p>=0&&p<1)||
+  quote.yesBidDollars>quote.yesAskDollars||quote.noBidDollars>quote.noAskDollars)return null;
  const costs=.01+.05,minimumNetEdge=.10;
  const upEdge=mean-quote.yesAskDollars-costs;
  const downEdge=(1-mean)-quote.noAskDollars-costs;
@@ -53,12 +55,19 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
   if(!response.ok)return null;
   const {market}=await response.json();
   if(market?.ticker!==ticker||market.status!=='active')return null;
+  // An active status alone is not proof that the contract still accepts orders.
+  // Fail closed when an explicit close time has passed or cannot be parsed.
+  if(market.close_time!=null){
+   const closesAt=Date.parse(market.close_time);
+   if(!Number.isFinite(closesAt)||closesAt<=nowMs)return null;
+  }
   const parse=(d,c)=>{const v=d===undefined?Number(c)/100:Number(d);return Number.isFinite(v)&&v>0&&v<1?v:NaN};
   const quote={ticker,asOfMs:nowMs,yesAskDollars:parse(market.yes_ask_dollars,market.yes_ask),
    noAskDollars:parse(market.no_ask_dollars,market.no_ask),
    yesBidDollars:parse(market.yes_bid_dollars,market.yes_bid),
    noBidDollars:parse(market.no_bid_dollars,market.no_bid)};
-  return Object.values(quote).slice(2).every(Number.isFinite)?quote:null;
+  return Object.values(quote).slice(2).every(Number.isFinite)&&
+   quote.yesBidDollars<=quote.yesAskDollars&&quote.noBidDollars<=quote.noAskDollars?quote:null;
  }catch{return null;}
 }
 
