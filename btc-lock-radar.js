@@ -78,6 +78,27 @@ const challenger=document.createElement('p');
 challenger.style.cssText=shadow.style.cssText;
 challenger.textContent='V6 SHADOW · Waiting for a shared market snapshot';
 scalper.append(challenger);
+const titan=document.createElement('p');
+titan.style.cssText=shadow.style.cssText;
+titan.textContent='🤖 TITAN V7 · Waiting for server research';
+scalper.append(titan);
+async function refreshTitan(){
+  if(document.hidden)return;
+  try{
+    const response=await fetch('/.netlify/functions/omega-live-health',{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw Error('Research report unavailable');
+    const {titanShadow:report}=await response.json();
+    if(!report){titan.textContent='🤖 TITAN V7 · Waiting for a fresh server report';return}
+    const latest=report.latest;
+    titan.textContent='🤖 TITAN V7 SHADOW · '+(latest?latest.decision+' · '+latest.reason.replaceAll('_',' ').toLowerCase():'Collecting qualified BTC observations')+
+      ' · '+report.scored+' officially scored rounds · '+report.trades+' simulated trades'+
+      (report.scored?' · Titan / market Brier '+report.brier.toFixed(3)+' / '+report.marketBrier.toFixed(3):'')+
+      (report.trades?' · Simulated net '+(report.simulatedNetPnl*100).toFixed(1)+'¢':'');
+  }catch{titan.textContent='🤖 TITAN V7 · Server research unavailable'}
+}
+refreshTitan();
+setInterval(refreshTitan,60000);
+
 const v6Key='banktrades:btc-v6-forward-v1';
 const horizons=[5,15,30,60,180];
 let v6Log=[],pending=[],priorBook=null,v6Position=null,lastForecast=0;
