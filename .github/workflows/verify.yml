@@ -33,6 +33,19 @@ jobs:
           test -s dist/account-client.js
           test ! -e dist/dashboard.html
           test ! -e dist/private
+      - name: Summarize failed tests in GitHub job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f ci-evidence/npm-test.log ]; then
+            echo '### BANK TRADES regression summary' >> "$GITHUB_STEP_SUMMARY"
+            grep -E '^# (tests|pass|fail|cancelled|skipped) ' ci-evidence/npm-test.log | tail -n 6 >> "$GITHUB_STEP_SUMMARY" || true
+            if grep -q '^not ok ' ci-evidence/npm-test.log; then
+              echo '### Failed test names' >> "$GITHUB_STEP_SUMMARY"
+              grep '^not ok ' ci-evidence/npm-test.log >> "$GITHUB_STEP_SUMMARY" || true
+              grep -A 18 '^not ok ' ci-evidence/npm-test.log > ci-evidence/failed-tests.txt || true
+            fi
+          fi
       - name: Record build and regression evidence
         if: always()
         shell: bash
