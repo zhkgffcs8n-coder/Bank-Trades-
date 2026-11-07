@@ -249,7 +249,7 @@ export default async()=>{
     const official=await db.get('outcomes/'+row.ticker,{type:'json'});
     if(!trustedStoredFinalizedOutcome(official,row.ticker))return;
     const scored=scoreFrozenForecast(row,official.result,now);
-    if(scored)await db.setJSON(item.key,scored);
+    if(scored)await db.setJSON(item.key,{...scored,outcomeVerification:SETTLEMENT_VERIFICATION});
    });
   }catch(e){researchFailure('forecast-settlement-scoring',e)}
   // Bounded verified forecast report. Never imply complete history if paginated.
