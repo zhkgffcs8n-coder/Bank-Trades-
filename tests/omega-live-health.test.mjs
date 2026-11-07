@@ -42,3 +42,15 @@ test('last-run learning and paper PnL diagnostics never masquerade as lifetime t
  assert.equal(absent.paperLastActionAtMs,null);
  assert.equal(absent.realOrdersAuthorized,false);
 });
+
+test('forecast research health exposes only fresh bounded verified hypothetical counts',()=>{
+ const report={version:2,mode:'SHADOW_ONLY',at:now-30000,n:7,wins:4,losses:3,scope:'FIRST_PAGE_ONLY',truncated:true,simulatedNetPnl:-1.4,excludedUnverified:2,conflictingTickers:1};
+ const result=omegaLiveHealth(heartbeat,now,null,null,report);
+ assert.equal(result.forecastShadow.status,'BOUNDED_VERIFIED_RESEARCH');
+ assert.equal(result.forecastShadow.verifiedResolved,7);
+ assert.equal(result.forecastShadow.scope,'FIRST_PAGE_ONLY');
+ assert.equal(result.forecastShadow.hypotheticalNetDollars,-1.4);
+ assert.equal(result.realOrdersAuthorized,false);
+ assert.equal(omegaLiveHealth(heartbeat,now,null,null,{...report,at:now-300000}).forecastShadow.status,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth(heartbeat,now,null,null,{...report,wins:8}).forecastShadow.status,'INVALID_REPORT');
+});
