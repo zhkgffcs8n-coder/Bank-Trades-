@@ -22,6 +22,71 @@ const store=()=>getStore({name:'bank-trades-market-history',consistency:'strong'
 const price=parseCollectorPrice;
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}finally{clearTimeout(t)}}
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
+const TITAN='titan/v7/';
+const titanDay=at=>new Date(at).toISOString().slice(0,10);
+const titanCost=ask=>Math.ceil(7*ask*(1-ask))/100+.01;
+
+// A frozen BTC settlement challenger built from causal, same-contract quotes.
+export function freezeTitan(record,history){
+ const {ticker,observedAt:at,expiresAt,yesBid,yesAsk,noBid,noAsk}=record;
+ if(record.asset!=='BTC'||!/^KXBTC15M-/.test(ticker)||![at,expiresAt,yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||
+    expiresAt-at<90000||expiresAt-at>900000||yesBid<=0||noBid<=0||yesAsk>=1||noAsk>=1||yesBid>yesAsk||noBid>noAsk)return null;
+ const byMinute=new Map(history.filter(row=>row.ticker===ticker&&Number.isFinite(row.t)&&
+    Number.isFinite(row.observedAt)&&row.observedAt<at&&at-row.observedAt<=240000&&
+    Number.isFinite(row.yesMid)&&row.yesMid>0&&row.yesMid<1).map(row=>[row.t,row]));
+ const prior=[...byMinute.values()].sort((a,b)=>a.observedAt-b.observedAt);
+ if(prior.length<2)return null;
+ const baseline=(yesBid+yesAsk+2-noBid-noAsk)/4;
+ const last=prior.at(-1).yesMid,first=prior[0].yesMid;
+ if(Math.abs((yesBid+yesAsk)/2-(1-(noBid+noAsk)/2))>.03)return null;
+ const momentum=(baseline-first)*.6+(baseline-last)*.4;
+ const swing=Math.max(...prior.map(r=>r.yesMid),baseline)-Math.min(...prior.map(r=>r.yesMid),baseline);
+ const uncertainty=Math.min(.04,swing*.15);
+ const probability=Math.max(.01,Math.min(.99,baseline+Math.max(-.12,Math.min(.12,momentum*.45))));
+ const upEdge=probability-yesAsk-titanCost(yesAsk)-uncertainty;
+ const downEdge=1-probability-noAsk-titanCost(noAsk)-uncertainty;
+ const edge=Math.max(upEdge,downEdge),spread=Math.max(yesAsk-yesBid,noAsk-noBid);
+ const decision=spread>.030001||edge<.02?'SKIP':upEdge>=downEdge?'UP':'DOWN';
+ const ask=decision==='UP'?yesAsk:decision==='DOWN'?noAsk:null;
+ return {ticker,at,expiresAt,baseline,probability,uncertainty,spread,edge,decision,ask,cost:ask===null?null:titanCost(ask),
+  reason:spread>.030001?'WIDE_SPREAD':edge<.02?'INSUFFICIENT_COST_ADJUSTED_EDGE':'QUALIFIED_SHADOW',status:'PENDING'};
+}
+export function scoreTitan(row,official,now){
+ if(row?.status!=='PENDING'||!trustedStoredFinalizedOutcome(official,row.ticker)||
+    ![now,row.at,row.expiresAt,row.baseline,row.probability].every(Number.isFinite)||
+    row.at>=row.expiresAt||now<row.expiresAt||!['UP','DOWN','SKIP'].includes(row.decision)||
+    (row.decision!=='SKIP'&&![row.ask,row.cost].every(Number.isFinite)))return null;
+ const labeledAt=official.labeledAt,settledAt=Date.parse(official.settledAt);
+ if(!Number.isFinite(labeledAt)||labeledAt<row.expiresAt||labeledAt>now||
+    (Number.isFinite(settledAt)&&(settledAt<row.expiresAt||settledAt>now)))return null;
+ const outcome=official.result==='yes'?1:0;
+ const traded=row.decision!=='SKIP';
+ const won=traded?(row.decision==='UP')===Boolean(outcome):null;
+ return {...row,status:'SCORED',resolvedAt:now,outcome,won,verification:SETTLEMENT_VERIFICATION,
+  baselineBrier:(row.baseline-outcome)**2,brier:(row.probability-outcome)**2,
+  simulatedNetPnl:traded?Number(((won?1:0)-row.ask-row.cost).toFixed(6)):0};
+}
+function titanReport(rows,now,truncated){
+ const scored=rows.filter(row=>row.status==='SCORED'&&row.verification===SETTLEMENT_VERIFICATION)
+  .sort((a,b)=>a.at-b.at);
+ const trades=scored.filter(row=>row.decision!=='SKIP');
+ let net=0,peak=0,drawdown=0,grossWin=0,grossLoss=0;
+ for(const row of trades){
+  const pnl=row.simulatedNetPnl;
+  net+=pnl;peak=Math.max(peak,net);drawdown=Math.max(drawdown,peak-net);
+  grossWin+=Math.max(0,pnl);grossLoss+=Math.max(0,-pnl);
+ }
+ const n=scored.length,wins=trades.filter(row=>row.simulatedNetPnl>0).length;
+ return {at:now,mode:'SETTLEMENT_SHADOW',observed:rows.length,scored:n,pending:rows.length-n,truncated,
+  trades:trades.length,skipped:n-trades.length,wins,winRate:trades.length?wins/trades.length:null,
+  simulatedNetPnl:net,maxDrawdown:drawdown,profitFactor:grossLoss?grossWin/grossLoss:null,
+  averageNet:trades.length?net/trades.length:null,
+  brier:n?scored.reduce((sum,r)=>sum+r.brier,0)/n:null,
+  marketBrier:n?scored.reduce((sum,r)=>sum+r.baselineBrier,0)/n:null,
+  latest:rows.reduce((latest,row)=>!latest||row.at>latest.at?row:latest,null),promoted:false,
+  note:'UTC today and yesterday, paired versus frozen market probability. One hypothetical contract held to settlement. Estimated costs and quote-based entries; no exchange fills.'};
+}
+
 export default async()=>{
  const db=store(),now=Date.now(),bucket=Math.floor(now/60000)*60000;
  const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0,researchFailures:0,researchErrors:[]};
@@ -58,6 +123,12 @@ export default async()=>{
   }catch(e){researchFailure('recent-snapshot',e,asset);console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
+  if(asset==='BTC'&&!existing){
+   try{
+    const titan=freezeTitan(record,recent);
+    if(titan)await db.setJSON(TITAN+titanDay(titan.at)+'/'+m.ticker,titan,{onlyIfNew:true});
+   }catch(e){researchFailure('titan-freeze',e,asset)}
+  }
   // Freeze the first forecast before settlement. Never overwrite on later flips.
   try{
    const key='forecast-shadow/v1/'+m.ticker;
@@ -257,7 +328,25 @@ export default async()=>{
   try{
    const page=await blobWindow(db,{prefix:'forecast-shadow/v1/',limit:40});
    const rows=(await Promise.all(page.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-   await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor})});
+   let titan=null;
+   try{
+    titan=await db.get(TITAN+'report',{type:'json'});
+    if(!titan||now-titan.at>=300000){
+    const pages=await Promise.all([now,now-86400000].map(at=>blobWindow(db,{prefix:TITAN+titanDay(at)+'/',limit:100})));
+    const titanRows=(await Promise.all(pages.flatMap(page=>page.blobs).map(async blob=>{
+     const row=await db.get(blob.key,{type:'json'});
+     if(row?.status!=='PENDING'||now<row.expiresAt+60000)return row;
+     const official=await db.get('outcomes/'+row.ticker,{type:'json'});
+     const scored=scoreTitan(row,official,now);
+     if(!scored)return row;
+     await db.setJSON(blob.key,scored);
+     return scored;
+    }))).filter(Boolean);
+     titan=titanReport(titanRows,now,pages.some(page=>!!page.cursor));
+     await db.setJSON(TITAN+'report',titan);
+    }
+   }catch(e){researchFailure('titan-report',e,'BTC')}
+   await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor}),titan});
   }catch(e){researchFailure('forecast-summary',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
