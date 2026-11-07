@@ -73,11 +73,140 @@ function bestBid(book,side){
 // One-contract research estimate. Reserve a cent per leg for slippage.
 function estimatedCost(price){return Math.ceil(7*price*(1-price))/100+.01}
 const cents=value=>Math.round(value*100)+'¢ / '+Math.round(value*100)+'%';
+// V6 consumes the same timestamped book and trade tape as V5.
+const challenger=document.createElement('p');
+challenger.style.cssText=shadow.style.cssText;
+challenger.textContent='V6 SHADOW · Waiting for a shared market snapshot';
+scalper.append(challenger);
+const v6Key='banktrades:btc-v6-forward-v1';
+const horizons=[5,15,30,60,180];
+let v6Log=[],pending=[],priorBook=null,v6Position=null,lastForecast=0;
+try{
+  const saved=JSON.parse(localStorage.getItem(v6Key)||'[]');
+  if(Array.isArray(saved))v6Log=saved.filter(row=>row&&typeof row==='object').slice(-1200);
+}catch{}
+const v6Entries=new Set(v6Log.filter(row=>row.event==='ENTRY').map(row=>row.ticker));
+const v6Finished=new Set(v6Log.filter(row=>['EXIT','UNRESOLVED'].includes(row.event)).map(row=>row.ticker));
+function saveV6(rows){
+  if(!rows.length)return;
+  v6Log=v6Log.concat(rows).slice(-1200);
+  try{localStorage.setItem(v6Key,JSON.stringify(v6Log))}catch{}
+}
+saveV6(v6Log.filter(row=>row.event==='ENTRY'&&!v6Finished.has(row.ticker))
+  .map(row=>({event:'UNRESOLVED',ticker:row.ticker,at:Date.now(),reason:'Browser session interrupted'})));
+const bounded=value=>Math.max(-1,Math.min(1,value));
+function tapeStats(rows){
+  const volume=rows.reduce((sum,t)=>sum+Math.abs(t.flow),0);
+  return {
+    flow:volume?rows.reduce((sum,t)=>sum+t.flow,0)/volume:0,
+    move:rows.length>1?rows.at(-1).price-rows[0].price:0
+  };
+}
+function scoreOutcomes(now){
+  const settled=[];
+  pending=pending.filter(forecast=>{
+    const trade=trades.find(row=>row.time>=forecast.due);
+    if(trade&&trade.time<=forecast.due+2000){
+      const outcome=trade.price>forecast.spot?1:trade.price<forecast.spot?0:null;
+      settled.push({event:'OUTCOME',id:forecast.id,at:now,horizon:forecast.horizon,outcome,
+        observedAt:trade.time,price:trade.price,probability:forecast.probability});
+      return false;
+    }
+    if(now>forecast.due+2000){
+      settled.push({event:'MISSED_OUTCOME',id:forecast.id,at:now,horizon:forecast.horizon});
+      return false;
+    }
+    return true;
+  });
+  saveV6(settled);
+}
+function updateV6({market,yes,no,spread,current,remaining,latency}){
+  const ticker=market.ticker,latest=trades.at(-1);
+  const rows=trades.filter(t=>t.time>=current-15000);
+  const ready=rows.length>=10&&latest.time-rows[0].time>=5000&&current-latest.time<=5000;
+  const slow=tapeStats(rows),fast=tapeStats(rows.filter(t=>t.time>=current-5000));
+  const depth=(yes.size-no.size)/(yes.size+no.size);
+  const previous=priorBook?.ticker===ticker&&current-priorBook.at<=12000?priorBook:null;
+  const implied=(yes.price+1-no.price)/2;
+  const drift=previous?implied-previous.implied:0;
+  const thinning=previous&&(yes.size+no.size)<previous.size*.5;
+  const widening=previous&&spread>previous.spread+.015;
+  priorBook={ticker,at:current,implied,size:yes.size+no.size,spread};
+  const scale=Math.max(5,...rows.map(t=>Math.abs(t.price-(latest?.price??0))));
+  const momentum=bounded(slow.move/scale);
+  const acceleration=bounded(fast.flow-slow.flow);
+  const tapeScore=bounded(.55*slow.flow+.25*momentum+.20*acceleration);
+  const bookScore=bounded(.55*depth+.45*bounded(drift/.025));
+  const signal=.75*tapeScore+.25*bookScore;
+  const reversal=Math.abs(slow.flow)>=.25&&fast.flow*slow.flow<-.10;
+  if(ready&&current-lastForecast>=30000){
+    lastForecast=current;
+    const forecasts=horizons.map(horizon=>({
+      event:'FORECAST',id:ticker+'|'+current+'|'+horizon,ticker,at:current,horizon,
+      due:current+horizon*1000,observedAt:latest.time,spot:latest.price,probability:.5+.38*signal/Math.sqrt(1+horizon/30)
+    }));
+    pending.push(...forecasts);
+    saveV6(forecasts);
+  }
+  const exits=v6Log.filter(row=>row.event==='EXIT'&&Number.isFinite(row.pnl));
+  const v5Exits=new Map(journal.filter(row=>row.event==='EXIT'&&Number.isFinite(row.pnl)).map(row=>[row.ticker,row.pnl]));
+  const matched=exits.filter(row=>v5Exits.has(row.ticker));
+  const delta=matched.reduce((sum,row)=>sum+row.pnl-v5Exits.get(row.ticker),0);
+  const outcomes=v6Log.filter(row=>row.event==='OUTCOME'&&row.outcome!==null);
+  const brier=outcomes.length?outcomes.reduce((sum,row)=>sum+(row.probability-row.outcome)**2,0)/outcomes.length:null;
+  const suffix=' · Flow '+Math.round(slow.flow*100)+'% · Depth imbalance '+Math.round(depth*100)+'% · Book request '+latency+'ms'+
+    (reversal?' · Reversal warning':'')+' · Matched closed trades '+matched.length+
+    (matched.length?' · V6−V5 '+(delta*100).toFixed(1)+'¢':'')+
+    (brier===null?'':' · Brier '+brier.toFixed(3)+' (n='+outcomes.length+')');
+  const show=text=>{challenger.textContent='V6 SHADOW · '+text+suffix};
+  if(v6Position&&v6Position.ticker!==ticker)closeV6Unresolved(current);
+  if(v6Position){
+    const position=v6Position;
+    const bid=position.side==='UP'?yes.price:no.price;
+    const pnl=bid-position.ask-position.cost-estimatedCost(bid);
+    position.peak=Math.max(position.peak,pnl);
+    const adverse=position.side==='UP'?signal<-.35:signal>.35;
+    const reason=remaining<=30?'TIME EXIT':bid-position.entryBid<=-.049999||(ready&&adverse&&reversal)?'SELL FAST':
+      pnl>=.08?'TAKE PROFIT':position.peak>=.04&&position.peak-pnl>=.025?'TRAIL PROFIT':'';
+    if(reason){
+      saveV6([{event:'EXIT',ticker,at:current,side:position.side,bid,pnl,reason}]);
+      v6Position=null;
+    }
+    show((reason||'HOLD '+position.side)+' · '+cents(bid)+' · Est. net '+(pnl*100).toFixed(1)+'¢');
+    return;
+  }
+  if(v6Entries.has(ticker)){show('ROUND LOGGED');return}
+  const strike=Number(market.floor_strike);
+  if(!ready||!Number.isFinite(strike)||strike<=0){show('WAIT · Fresh tape or threshold unavailable');return}
+  if(remaining<75){show('SKIP ROUND · Closing window');return}
+  if(!previous||widening||thinning||spread>.03001||reversal){
+    show('WAIT · Book or reversal risk');return;
+  }
+  const side=signal>.28?'UP':signal<-.28?'DOWN':null;
+  const thresholdScore=bounded((latest.price-strike)/Math.max(10,scale*Math.sqrt(remaining/15)));
+  const upValue=Math.max(.04,Math.min(.96,.5+.32*thresholdScore+.14*signal));
+  const ask=1-(side==='UP'?no.price:yes.price),cost=estimatedCost(ask);
+  const edge=(side==='UP'?upValue:1-upValue)-ask-cost-.025;
+  if(!side||edge<.05||ask<.10||ask>.88){show('WAIT FOR BETTER PRICE · No qualifying edge');return}
+  v6Position={ticker,side,ask,cost,entryBid:side==='UP'?yes.price:no.price,peak:-Infinity};
+  v6Entries.add(ticker);
+  saveV6([{event:'ENTRY',at:current,ticker,side,ask,cost,edge,signal,depth,spread,latency}]);
+  show('ENTER NOW '+side+' · '+cents(ask)+' · Est. settlement edge '+(edge*100).toFixed(1)+'¢');
+}
+function closeV6Unresolved(at){
+  if(!v6Position)return;
+  saveV6([{event:'UNRESOLVED',ticker:v6Position.ticker,at,reason:'No fresh exit before rollover'}]);
+  v6Position=null;
+}
+
 async function scanShadow(){
   if(document.hidden||bookBusy)return;
   connectTrades();
   const market=shadowMarket,now=Date.now();
   const left=(Date.parse(market?.close_time)-now)/1000;
+  scoreOutcomes(now);
+  if(v6Position&&(v6Position.ticker!==market?.ticker||left<=0))closeV6Unresolved(now);
+  challenger.textContent='V6 SHADOW · Waiting for a fresh shared snapshot';
   if(lastRound&&Date.parse(lastRound.close)<=now){
     if(!evaluated.has(lastRound.ticker))record({event:'SKIP',ticker:lastRound.ticker,reason:lastRound.reason});
     lastRound=null;
@@ -99,7 +228,7 @@ async function scanShadow(){
   if(!market||!(left>0&&left<=900)){set('Waiting for an open BTC round');return}
   const latest=trades.at(-1),recent=trades.filter(t=>t.time>=now-15000);
   const tapeReady=latest&&now-latest.time<=5000&&recent.length>=10&&latest.time-recent[0].time>=5000;
-  if(!tapeReady&&!shadowPosition){set('Waiting for fresh Coinbase trade flow');return}
+  if(!tapeReady&&!shadowPosition&&!v6Position){set('Waiting for fresh Coinbase trade flow');return}
   bookBusy=true;
   try{
     const start=performance.now();
@@ -113,6 +242,8 @@ async function scanShadow(){
     const yes=bestBid(book,'yes'),no=bestBid(book,'no');
     if(!yes||!no||yes.price+no.price>=1){set('Waiting for a valid two-sided book');return}
     const spread=1-yes.price-no.price,latency=Math.round(performance.now()-start);
+    try{updateV6({market,yes,no,spread,current,remaining,latency})}
+    catch{challenger.textContent='V6 SHADOW · Snapshot evaluation failed'}
     const position=shadowPosition;
     if(position){
       const bid=position.side==='UP'?yes.price:no.price;
