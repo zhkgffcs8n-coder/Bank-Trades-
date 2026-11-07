@@ -19,6 +19,9 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   omegaProviderCheckedAt:omegaHeartbeat?.lastProviderCheckAt||null,
   omegaProviderStatus:Array.isArray(omegaHeartbeat?.providerStatus)?omegaHeartbeat.providerStatus.map(x=>({provider:x.provider,status:x.status,...(x.checkedAt?{checkedAt:x.checkedAt}:{}),...(Number.isInteger(x.httpStatus)?{httpStatus:x.httpStatus}:{}),...(x.errorCode?{errorCode:x.errorCode}:{})})):[],
   omegaProvidersConfigured:omegaHeartbeat?.providersConfigured??0,
+  omegaPaperMonitoring:Object.fromEntries(['open','exits','holds','settled','unpriced','backfilled'].map(k=>
+   [k,Number.isSafeInteger(omegaHeartbeat?.paperMonitoring?.[k])&&omegaHeartbeat.paperMonitoring[k]>=0?
+    omegaHeartbeat.paperMonitoring[k]:null])),
   paperLastAction:paperHeartbeat?.action||'NONE_VERIFIED',paperLastActionAtMs:paperHeartbeat?.updatedAtMs??null,
   realOrdersAuthorized:false,
   notice:'Fresh collector observations do not prove OMEGA external provider integration or verified trading accuracy.'};
