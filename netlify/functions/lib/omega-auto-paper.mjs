@@ -1,6 +1,7 @@
 // Automatic paper-only position monitoring for OMEGA. Never sends Kalshi orders.
 // Requires fresh independently fetched side-specific Kalshi bid/ask quotes.
 import {advanceOmegaPaper} from '../../../src/omega-paper-coordinator.mjs';
+import {validCollectorQuote} from '../../../src/collector-quote.mjs';
 import {trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 export function omegaPaperSignal(research,quote){
  const fusion=research?.fusion;
@@ -16,7 +17,9 @@ export function omegaPaperSignal(research,quote){
  const validAsk=p=>typeof p==='number'&&Number.isFinite(p)&&p>0&&p<1;
  if(!validAsk(quote.yesAskDollars)||!validAsk(quote.noAskDollars)||
   ![quote.yesBidDollars,quote.noBidDollars].every(p=>typeof p==='number'&&Number.isFinite(p)&&p>=0&&p<1)||
-  quote.yesBidDollars>quote.yesAskDollars||quote.noBidDollars>quote.noAskDollars)return null;
+  quote.yesBidDollars>quote.yesAskDollars||quote.noBidDollars>quote.noAskDollars||
+  !validCollectorQuote({yesBid:quote.yesBidDollars,yesAsk:quote.yesAskDollars,
+   noBid:quote.noBidDollars,noAsk:quote.noAskDollars}))return null;
  const costs=.01+.05,minimumNetEdge=.10;
  const upEdge=mean-quote.yesAskDollars-costs;
  const downEdge=(1-mean)-quote.noAskDollars-costs;
@@ -75,8 +78,8 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
    noAskDollars:parse(market.no_ask_dollars,market.no_ask),
    yesBidDollars:parse(market.yes_bid_dollars,market.yes_bid,true),
    noBidDollars:parse(market.no_bid_dollars,market.no_bid,true)};
-  return Object.values(quote).slice(2).every(Number.isFinite)&&
-   quote.yesBidDollars<=quote.yesAskDollars&&quote.noBidDollars<=quote.noAskDollars?quote:null;
+  return validCollectorQuote({yesBid:quote.yesBidDollars,yesAsk:quote.yesAskDollars,
+   noBid:quote.noBidDollars,noAsk:quote.noAskDollars})?quote:null;
  }catch{return null;}
 }
 
