@@ -26,6 +26,16 @@ test('collector rejects missing, malformed, crossed and out-of-range quote field
  assert.equal(validCollectorQuote(null),false);
 });
 
+test('binary collector quote rejects contradictory complementary books but allows zero bids',()=>{
+ const base={yesBid:.44,yesAsk:.45,noBid:.54,noAsk:.55};
+ assert.equal(validCollectorQuote(base),true);
+ assert.equal(validCollectorQuote({...base,yesBid:0,noBid:0}),true);
+ assert.equal(validCollectorQuote({...base,yesBid:.60,noBid:.50,yesAsk:.61,noAsk:.51}),false,
+  'YES and NO bids cannot exceed the full binary payout');
+ assert.equal(validCollectorQuote({...base,yesBid:.10,noBid:.10,yesAsk:.20,noAsk:.20}),false,
+  'YES and NO asks cannot both be below the full binary payout');
+});
+
 test('scheduled collector selects only strictly validated contracts before archiving or coverage',()=>{
  const collector=readFileSync(new URL('../netlify/functions/market-collector.mjs',import.meta.url),'utf8');
  const selector=readFileSync(new URL('../src/select-eligible-round.mjs',import.meta.url),'utf8');
