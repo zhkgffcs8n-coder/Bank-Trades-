@@ -4,14 +4,26 @@ import {omegaPaperSignal,advanceOmegaPaperStored,fetchOmegaLiveQuote} from '../n
 const now=100000;
 const research={status:'SHADOW_RESEARCH',fusion:{marketTicker:'BTC-ROUND',roundId:'BTC-ROUND',modelMinusMarket:.2,modelMean:.7,modelDisagreement:.04}};
 const quote={ticker:'BTC-ROUND',asOfMs:now,yesAskDollars:.45,noAskDollars:.55,yesBidDollars:.44,noBidDollars:.54};
-test('no entry without strong model edge',()=>{
- assert.equal(omegaPaperSignal({...research,fusion:{...research.fusion,modelMinusMarket:.03}}),null);
- assert.equal(omegaPaperSignal(research).forecast.consensus,'UP');
+test('no entry without a fresh executable-side edge',()=>{
+ assert.equal(omegaPaperSignal(research),null);
+ assert.equal(omegaPaperSignal(research,{...quote,ticker:'OTHER'}),null);
+ assert.equal(omegaPaperSignal(research,{...quote,yesAskDollars:.91,noAskDollars:.49}),null);
+ assert.equal(omegaPaperSignal(research,quote).forecast.consensus,'UP');
+});
+test('paper direction follows net ask edge, not probability majority or absolute midpoint difference',()=>{
+ const down={...research,fusion:{...research.fusion,modelMean:.55,modelMinusMarket:-.20}};
+ const downQuote={...quote,yesAskDollars:.90,noAskDollars:.20};
+ assert.equal(omegaPaperSignal(down,downQuote).forecast.consensus,'DOWN');
+ const up={...research,fusion:{...research.fusion,modelMean:.45,modelMinusMarket:.20}};
+ const upQuote={...quote,yesAskDollars:.20,noAskDollars:.90};
+ assert.equal(omegaPaperSignal(up,upQuote).forecast.consensus,'UP');
+ const overpriced={...quote,yesAskDollars:.75,noAskDollars:.35};
+ assert.equal(omegaPaperSignal(research,overpriced),null);
 });
 test('automatically enters and exits paper without a second entry',async()=>{
  const values=new Map();
  const db={get:async k=>values.get(k)||null,setJSON:async(k,v)=>values.set(k,v)};
- const signal=omegaPaperSignal(research);
+ const signal=omegaPaperSignal(research,quote);
  const a=await advanceOmegaPaperStored({db,ticker:quote.ticker,roundId:quote.ticker,signal,quote,nowMs:now});
  assert.equal(a.status,'PAPER_ENTRY');
  const b=await advanceOmegaPaperStored({db,ticker:quote.ticker,roundId:quote.ticker,signal,quote:{...quote,asOfMs:now+1000,yesBidDollars:.7},nowMs:now+1000});
