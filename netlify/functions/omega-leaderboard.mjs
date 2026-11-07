@@ -9,12 +9,19 @@ export async function omegaLeaderboard(db,{limit=250}={}){
   const record=await db.get(entry.key,{type:'json'});
   if(record?.status==='VERIFIED_SHADOW_SCORE')records.push(record);
  }
+ const truncated=Boolean(page.cursor);
  const selection=evaluateResearchChampions(records);
  const walkForward=walkForwardChampionAudit(records);
- return {status:selection.status,observedRecords:records.length,historyTruncated:Boolean(page.cursor),
-  scores:summarizeVerifiedScores(records),...selection,walkForward,selectedForTrading:false,realOrdersAuthorized:false,
+ // A bounded lexicographic prefix is NOT a complete chronological sample.
+ // Do not identify a champion or claim forward improvement from truncated history.
+ const safeSelection=truncated?{...selection,status:'INCOMPLETE_HISTORY',champion:null,
+  leaderboard:selection.leaderboard.map(x=>({...x,eligible:false}))}:selection;
+ const safeForward=truncated?{...walkForward,status:'INCOMPLETE_HISTORY',beatsMarketBaseline:false,
+  selected:[]}:walkForward;
+ return {status:safeSelection.status,observedRecords:records.length,historyTruncated:truncated,
+  scores:summarizeVerifiedScores(records),...safeSelection,walkForward:safeForward,selectedForTrading:false,realOrdersAuthorized:false,
   originalPrimalComparison:'NOT_VERIFIED',
-  notice:'Verified OMEGA scores only. No independent paired Original Primal predictions are available in this report; no outperformance claim.'};
+  notice:'Verified OMEGA scores only. Truncated history is not eligible for champion selection. No independently paired Original Primal predictions; no outperformance claim.'};
 }
 export default async req=>{
  if(req.method!=='GET')return new Response(JSON.stringify({error:'GET only'}),{status:405,headers:{'content-type':'application/json'}});
