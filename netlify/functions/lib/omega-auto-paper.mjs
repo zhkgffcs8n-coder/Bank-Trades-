@@ -94,7 +94,7 @@ export async function settleOmegaPaperStored({db,ticker,nowMs=Date.now()}={}){
  const position=prior?.state?.positions?.[ticker];
  if(position?.status!=='OPEN'||position.ticker!==ticker||position.roundId!==ticker||
   !['UP','DOWN'].includes(position.side)||!Number.isSafeInteger(position.quantity)||position.quantity<=0||
-  !Number.isFinite(position.entryCostDollars)||position.entryCostDollars<=0||
+  !Number.isFinite(position.entryCostDollars)||position.entryCostDollars<=0||position.entryCostDollars>5.00011||
   !Number.isSafeInteger(position.openedAtMs)||position.openedAtMs<=0)
   return {status:'BLOCKED',reason:'No valid open position',realOrdersAuthorized:false};
  const outcome=trustedStoredFinalizedOutcome(label,ticker);
