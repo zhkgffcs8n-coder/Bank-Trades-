@@ -96,7 +96,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
   if(quote){
    const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,
-    signal:omegaPaperSignal(result),quote,nowMs});
+    signal:omegaPaperSignal(result,quote),quote,nowMs});
    report.paperStatus=paper.status;
   }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
   // Append-only round snapshot: do not overwrite a forecast after settlement.
