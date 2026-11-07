@@ -132,3 +132,28 @@ test('OMEGA archived score rejects provider lookahead relative to frozen forecas
  await scoreOmegaArchive(db);
  assert.equal(data.has('omega/verified-scores/v1/'+ticker),false);
 });
+
+test('OMEGA research holdout excludes training labels unavailable before holdout predictions',()=>{
+ const make=(i,settledAtMs=1100+i*1000)=>({
+  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'T'+i,
+  predictedAtMs:1000+i*1000,settledAtMs,
+  scores:[{provider:'gpt',brier:.04},{provider:'kalshi_baseline',brier:.3}]
+ });
+ const policy={minimumTrain:3,minimumHoldout:1,minimumImprovement:.01};
+ const records=[0,1,2,3].map(i=>make(i));
+ assert.equal(evaluateResearchChampions(records,policy).champion,'gpt');
+ const leaked=[records[0],make(1,5000),records[2],records[3]];
+ const blocked=evaluateResearchChampions(leaked,policy);
+ assert.equal(blocked.champion,null);
+ assert.equal(blocked.status,'INSUFFICIENT_VERIFIED_HISTORY');
+ assert.equal(blocked.ordersAuthorized,false);
+ // Invalid settlement chronology must never count as an eligible label.
+ assert.equal(evaluateResearchChampions([make(0,900),...records.slice(1)],policy).champion,null);
+ // With enough genuinely available labels, the late one is excluded,
+ // not silently counted as a training success.
+ const safe=evaluateResearchChampions([...leaked,make(4)],policy);
+ assert.equal(safe.champion,'gpt');
+ assert.equal(safe.leaderboard[0].trainingRounds,3);
+ assert.equal(safe.leaderboard[0].holdoutRounds,1);
+ assert.equal(safe.promoted,false);
+});
