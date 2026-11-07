@@ -7,9 +7,9 @@ const base={signal,quote:q,roundId:'R1',feesDollars:0,nowMs:101000};
 test('paper opens, holds, exits and never reenters same round',()=>{
  const open=advanceOmegaPaper(base);
  assert.equal(open.status,'PAPER_ENTRY');assert.equal(open.realOrdersAuthorized,false);
- const hold=advanceOmegaPaper({...base,state:open.state,nowMs:101001,exitAtProfitDollars:.6});
+ const hold=advanceOmegaPaper({...base,state:open.state,nowMs:101001,quote:{...q,asOfMs:101001},exitAtProfitDollars:.6});
  assert.equal(hold.status,'PAPER_HOLD');
- const exit=advanceOmegaPaper({...base,state:hold.state,nowMs:101002,exitAtProfitDollars:.4});
+ const exit=advanceOmegaPaper({...base,state:hold.state,nowMs:101002,quote:{...q,asOfMs:101002},exitAtProfitDollars:.4});
  assert.equal(exit.status,'PAPER_EXIT');
  const again=advanceOmegaPaper({...base,state:exit.state,nowMs:101003});
  assert.equal(again.status,'BLOCKED');
@@ -26,10 +26,10 @@ test('position cannot silently roll into new round',()=>{
 test('paper trailing profit exit protects a previously observed peak',()=>{
  const opened=advanceOmegaPaper({...base,exitAtProfitDollars:2});
  assert.equal(opened.status,'PAPER_ENTRY');
- const rising=advanceOmegaPaper({...base,state:opened.state,nowMs:101001,quote:{...q,yesBidDollars:.58},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
+ const rising=advanceOmegaPaper({...base,state:opened.state,nowMs:101001,quote:{...q,yesBidDollars:.58,asOfMs:101001},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
  assert.equal(rising.status,'PAPER_HOLD');
  assert.ok(rising.peakNetDollars>=.5);
- const falling=advanceOmegaPaper({...base,state:rising.state,nowMs:101002,quote:{...q,yesBidDollars:.54},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
+ const falling=advanceOmegaPaper({...base,state:rising.state,nowMs:101002,quote:{...q,yesBidDollars:.54,asOfMs:101002},exitAtProfitDollars:2,trailingArmDollars:.5,trailingGivebackDollars:.25});
  assert.equal(falling.status,'PAPER_EXIT');
  assert.equal(falling.state.positions['BTC-R1'].exitReason,'TRAILING_PROFIT');
  assert.equal(falling.realOrdersAuthorized,false);
@@ -44,7 +44,7 @@ test('paper trailing peak is not updated on stale quotes',()=>{
 test('terminal paper positions cannot reenter when a legacy entry marker is missing',()=>{
  const opened=advanceOmegaPaper(base);
  assert.equal(opened.status,'PAPER_ENTRY');
- const closed=advanceOmegaPaper({...base,state:opened.state,nowMs:101002,exitAtProfitDollars:.4});
+ const closed=advanceOmegaPaper({...base,state:opened.state,nowMs:101002,quote:{...q,asOfMs:101002},exitAtProfitDollars:.4});
  assert.equal(closed.status,'PAPER_EXIT');
  for(const terminal of ['CLOSED','SETTLED']){
   const state={positions:{'BTC-R1':{...closed.state.positions['BTC-R1'],status:terminal}},entered:{}};
