@@ -34,3 +34,28 @@ test('conflicting verified settlement records cannot inflate shadow accuracy',as
  assert.equal(duplicate.verifiedRounds,2);
  assert.equal(duplicate.verifiedScores[0].verifiedRounds,1);
 });
+
+test('research champion requires verified chronological holdout improvement',async()=>{
+ const {evaluateResearchChampions}=await import('../src/omega-learning.mjs');
+ const make=(i,model,baseline)=>({status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'R'+i,
+  predictedAtMs:1000+i,scores:[{provider:'gpt',brier:model},{provider:'kalshi_baseline',brier:baseline}]});
+ const records=Array.from({length:6},(_,i)=>make(i,.1,.3));
+ const insufficient=evaluateResearchChampions(records.slice(0,4),{minimumTrain:3,minimumHoldout:2});
+ assert.equal(insufficient.champion,null);
+ const eligible=evaluateResearchChampions(records,{minimumTrain:3,minimumHoldout:2,minimumImprovement:.05});
+ assert.equal(eligible.champion,'gpt');assert.equal(eligible.promoted,false);assert.equal(eligible.ordersAuthorized,false);
+ const degraded=evaluateResearchChampions([...records.slice(0,4),make(4,.5,.3),make(5,.5,.3)],
+  {minimumTrain:3,minimumHoldout:2,minimumImprovement:.05});
+ assert.equal(degraded.champion,null);
+ const duplicate=evaluateResearchChampions([...records,make(5,0,.9)],{minimumTrain:3,minimumHoldout:2});
+ assert.equal(duplicate.leaderboard[0].trainingRounds,3);
+ assert.equal(duplicate.leaderboard[0].holdoutRounds,2);
+});
+test('verified scoring records the latest forecast timestamp for holdout ordering',async()=>{
+ const {scoreVerifiedRound}=await import('../src/omega-learning.mjs');
+ const fusion={status:'SHADOW_RESEARCH',marketTicker:'BTC',roundId:'R',accepted:[
+  {provider:'gpt',upProbability:.7,observedAtMs:1000},
+  {provider:'claude',upProbability:.6,observedAtMs:1100}],marketBaseline:.5};
+ const score=scoreVerifiedRound(fusion,{marketTicker:'BTC',roundId:'R',verified:true,upOutcome:1,settledAtMs:2000});
+ assert.equal(score.predictedAtMs,1100);
+});
