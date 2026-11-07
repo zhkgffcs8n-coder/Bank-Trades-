@@ -30,3 +30,17 @@ test('scheduled archive scores strict settlements once and excludes late forecas
  assert.equal(data.get('omega/verified-scores/v1/BTC').scores.find(x=>x.provider==='omega_consensus').correct,true);
  assert.equal(data.has('omega/verified-scores/v1/ETH'),false);
 });
+
+test('OMEGA archived score rejects provider lookahead relative to frozen forecast, even before settlement',async()=>{
+ const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const ticker='BTC-LOOKAHEAD',data=new Map([
+  ['omega/predictions/v1/'+ticker+'/1',{ticker,status:'SHADOW_RESEARCH',recordedAtMs:95000,
+   accepted:[{provider:'gpt',upProbability:.9,observedAtMs:96000},{provider:'gemini',upProbability:.8,observedAtMs:94000}],baseline:.5}],
+  ['outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()}]
+ ]);
+ const db={async get(key){return data.get(key)||null},async setJSON(key,value){data.set(key,value)},
+  async *list({prefix}){yield {blobs:[...data.keys()].filter(key=>key.startsWith(prefix)).map(key=>({key}))}}};
+ await scoreOmegaArchive(db);
+ assert.equal(data.has('omega/verified-scores/v1/'+ticker),false);
+});
