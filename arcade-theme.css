@@ -26,3 +26,20 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--arc-gold)!important
 .bt-arcade-muted *{animation:none!important;transition:none!important}
 @media(max-width:700px){#btArcadeCrew{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.bt-bot{padding:6px 2px}.bt-bot svg{height:53px;width:42px}.bt-bot strong{font-size:9px;overflow-wrap:anywhere}.bt-bot small{font-size:9px}#btArcadeControls{justify-content:flex-start}}
 @media(prefers-reduced-motion:reduce){.bt-bot *,.bt-bot,button,.coin{animation:none!important;transition:none!important}}
+
+/* Market battle arena: purely event-reactive visual layer. */
+#btBattleArena{margin:8px 0 18px;border:2px solid #596ce0;border-radius:24px;overflow:hidden;background:radial-gradient(ellipse at 50% 85%,#253477,#0c102a 70%);box-shadow:inset 0 0 34px #475dff44,0 10px 28px #0008}
+.bt-arena-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:12px 16px;background:#070c22c9;color:#e4eaff;font-size:12px}
+#btArenaStatus{color:#8edcff}
+.bt-arena-field{height:126px;display:flex;align-items:center;justify-content:space-around;position:relative;isolation:isolate}
+.bt-arena-hero,.bt-arena-foe{font-size:clamp(42px,7vw,75px);filter:drop-shadow(0 4px 12px #000);transition:transform .25s ease}
+.bt-arena-beam{width:22%;height:8px;border-radius:99px;background:linear-gradient(90deg,#4cf5bd,#54b9ff);box-shadow:0 0 20px #54b9ff;opacity:.18;transform:scaleX(.3)}
+#btBattleArena[data-mode=entry] .bt-arena-beam{animation:btArenaBeam .7s ease 2}
+#btBattleArena[data-mode=risk] .bt-arena-hero,#btBattleArena[data-mode=exit] .bt-arena-hero{filter:drop-shadow(0 0 15px #ff526a)}
+#btBattleArena[data-mode=flip] .bt-arena-foe{animation:btArenaDodge .7s ease 2}
+#btArenaNarrative{padding:10px 16px;color:#b8cafa;font-size:12px;border-top:1px solid #5261a34a}
+@keyframes btArenaBeam{50%{opacity:1;transform:scaleX(1)}}
+@keyframes btArenaDodge{50%{transform:translateX(20px) rotate(12deg)}}
+@media(max-width:700px){.bt-arena-field{height:92px}.bt-arena-top{font-size:11px}}
+@media(prefers-reduced-motion:reduce){#btBattleArena *{animation:none!important;transition:none!important}}
+.bt-arcade-muted #btBattleArena *{animation:none!important;transition:none!important}
