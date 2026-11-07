@@ -12,6 +12,24 @@ test('shared verified outcome scores all providers without placing orders',()=>{
 test('unverified outcomes blocked',()=>assert.equal(scoreVerifiedRound(omegaStudyRound(args).fusion,{marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:false,settledAtMs:110000}).status,'BLOCKED'));
 test('wrong round blocked',()=>assert.equal(scoreVerifiedRound(omegaStudyRound(args).fusion,{marketTicker:'BTC',roundId:'r2',upOutcome:1,verified:true,settledAtMs:110000}).status,'BLOCKED'));
 test('future predictions blocked',()=>assert.equal(scoreVerifiedRound(omegaStudyRound(args).fusion,{marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:true,settledAtMs:89000}).status,'BLOCKED'));
+test('verified OMEGA scoring rejects malformed, duplicate and post-settlement provider evidence',()=>{
+ const settlement={marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:true,settledAtMs:110000};
+ const valid={status:'SHADOW_RESEARCH',marketTicker:'BTC',roundId:'r1',
+  accepted:forecasts,marketBaseline:.5};
+ assert.equal(scoreVerifiedRound(valid,settlement).status,'VERIFIED_SHADOW_SCORE');
+ for(const accepted of [
+  undefined,[],[forecasts[0]], 
+  [{...forecasts[0],upProbability:NaN},forecasts[1]],
+  [{...forecasts[0],upProbability:1.2},forecasts[1]],
+  [{...forecasts[0],upProbability:null},forecasts[1]],
+  [{...forecasts[0],observedAtMs:110000},forecasts[1]],
+  [{...forecasts[0],observedAtMs:0},forecasts[1]],
+  [forecasts[0],{...forecasts[1],provider:forecasts[0].provider}]
+ ])assert.equal(scoreVerifiedRound({...valid,accepted},settlement).status,'BLOCKED');
+ for(const marketBaseline of [NaN,-.01,1.01,'0.5'])
+  assert.equal(scoreVerifiedRound({...valid,marketBaseline},settlement).status,'BLOCKED');
+ assert.equal(scoreVerifiedRound({...valid,marketBaseline:null},settlement).status,'VERIFIED_SHADOW_SCORE');
+});
 test('duplicate rounds not counted twice',()=>{const record=omegaStudyRound({...args,settlement:{marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:true,settledAtMs:110000}}).verification;assert.equal(summarizeVerifiedScores([record,record])[0].verifiedRounds,1)});
 test('OMEGA public Brier summary quarantines conflicting duplicate rounds independent of record order',()=>{
  const base={status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'same-round',
