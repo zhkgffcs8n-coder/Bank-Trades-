@@ -83,7 +83,8 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
   if(r?.status!=='VERIFIED_SHADOW_SCORE'||typeof r.marketTicker!=='string'||!r.marketTicker||
    typeof r.roundId!=='string'||!r.roundId)continue;
   const key=JSON.stringify([r.marketTicker,r.roundId]);
-  if(!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0){conflicts.add(key);continue;}
+  if(!Number.isSafeInteger(r.predictedAtMs)||r.predictedAtMs<=0||
+   !Number.isSafeInteger(r.settledAtMs)||r.settledAtMs<=r.predictedAtMs){conflicts.add(key);continue;}
   const scores=new Map();
   let valid=Array.isArray(r.scores)&&r.scores.length>0;
   if(valid)for(const score of r.scores){
@@ -95,7 +96,7 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
   // remains eligible to choose a research champion.
   if(!valid||!scores.has('kalshi_baseline')){conflicts.add(key);continue;}
   if(rounds.has(key)){conflicts.add(key);continue;}
-  rounds.set(key,{key,at:r.predictedAtMs,scores});
+  rounds.set(key,{key,at:r.predictedAtMs,settledAtMs:r.settledAtMs,scores});
  }
  const ordered=[...rounds.values()].filter(r=>!conflicts.has(r.key))
   .sort((a,b)=>a.at-b.at||a.key.localeCompare(b.key));
@@ -105,9 +106,15 @@ export function evaluateResearchChampions(records=[],{minimumTrain=30,minimumHol
   const paired=ordered.filter(r=>r.scores.has(provider));
   if(paired.length<minimumTrain+minimumHoldout)continue;
   const holdout=paired.slice(-minimumHoldout);
+  // A training label was unavailable at decision time if its official
+  // settlement arrived after the first holdout forecast. Never let such
+  // future outcomes influence research champion selection.
+  const training=paired.slice(0,-minimumHoldout)
+   .filter(r=>r.settledAtMs<holdout[0].at);
+  if(training.length<minimumTrain)continue;
   const mean=p=>holdout.reduce((sum,r)=>sum+r.scores.get(p),0)/holdout.length;
   const baselineBrier=mean('kalshi_baseline'),modelBrier=mean(provider);
-  leaderboard.push({provider,trainingRounds:paired.length-holdout.length,holdoutRounds:holdout.length,
+  leaderboard.push({provider,trainingRounds:training.length,holdoutRounds:holdout.length,
    modelBrier,baselineBrier,improvement:baselineBrier-modelBrier,
    eligible:baselineBrier-modelBrier>=minimumImprovement});
  }
