@@ -638,6 +638,10 @@ setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data
     line(entry.provider+' · holdout '+entry.holdoutRounds+' · Brier '+entry.modelBrier.toFixed(4)+
      ' vs market '+entry.baselineBrier.toFixed(4)+' · '+(entry.eligible?'Research candidate':'No validated edge'));
    }
+   if(data.walkForward){const w=data.walkForward;
+    line('Walk-forward AI selection: '+w.evaluated+' strictly forward rounds · '+(w.beatsMarketBaseline?'Observed baseline improvement':'Improvement not established'));
+    if(w.modelBrier!==null&&w.baselineBrier!==null)line('Selected engine Brier '+w.modelBrier.toFixed(4)+' vs Kalshi '+w.baselineBrier.toFixed(4));
+   }
    line('Research only. No automatic live trading or model promotion.');
   }catch{output.textContent='Verified leaderboard unavailable. No accuracy improvement confirmed.'}
   finally{button.disabled=false}
