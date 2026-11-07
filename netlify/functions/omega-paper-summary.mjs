@@ -23,6 +23,9 @@ export async function summarizeOmegaPaper(db,{limit=80}={}){
   if(!['CLOSED','SETTLED'].includes(p.status)||!validMoney(p.netDollars)){invalid++;continue;}
   const at=p.status==='CLOSED'?p.closedAtMs:p.settledAtMs;
   if(!validTime(at)||at<=p.openedAtMs){invalid++;continue;}
+  // A simulated bid exit cannot return more than $1 per contract before costs.
+  // Treat impossible stored profits as corrupt evidence, never as paper P&L.
+  if(p.status==='CLOSED'&&p.netDollars>p.quantity-p.entryCostDollars+.00011){invalid++;continue;}
   if(p.status==='SETTLED'&&(
    p.settlementVerification!==SETTLEMENT_VERIFICATION||
    !['yes','no'].includes(p.outcome)||!validMoney(p.payoutDollars)||

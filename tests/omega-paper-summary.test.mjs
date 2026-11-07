@@ -46,3 +46,17 @@ test('malformed and unverified settlement records never contribute to reported P
  assert.equal(r.officiallySettledPositions,0);
  assert.equal(r.realizedNetDollars,null);
 });
+
+test('impossible simulated exit profits invalidate the archive instead of inflating net paper PnL',async()=>{
+ const db=store([
+  record('BTC-IMPOSSIBLE',{status:'CLOSED',closedAtMs:2000,quantity:2,entryCostDollars:1.1,netDollars:100}),
+  record('BTC-VALID',{status:'CLOSED',closedAtMs:3000,quantity:2,entryCostDollars:1.1,netDollars:.5})
+ ]);
+ const r=await summarizeOmegaPaper(db);
+ assert.equal(r.invalidPositions,1);
+ assert.equal(r.simulatedBidExits,1);
+ assert.equal(r.status,'INCOMPLETE_PAPER_HISTORY');
+ assert.equal(r.realizedNetDollars,null);
+ assert.equal(r.maxRealizedDrawdownDollars,null);
+ assert.equal(r.ordersAuthorized,false);
+});
