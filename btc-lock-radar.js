@@ -15,7 +15,10 @@ function mountScalper(){
   const row=document.createElement('div');
   row.style.position='relative';
   feed.before(row);
-  row.append(feed,scalper);
+  const backdrop=document.createElement('div');
+  backdrop.setAttribute('aria-hidden','true');
+  backdrop.style.cssText='position:absolute;right:1px;background:#101e30;border-radius:0 11px 11px 0;pointer-events:none';
+  row.append(feed,backdrop,scalper);
 
   function layout(){
     const feedBounds=feed.getBoundingClientRect();
@@ -28,6 +31,12 @@ function mountScalper(){
     const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor(feedBounds.right-textRight-36));
     if(width>=340)scalper.style.width=width+'px';
     const inline=width>=340&&feedBounds.height>=scalper.offsetHeight+24;
+    backdrop.hidden=!inline;
+    if(inline){
+      backdrop.style.top=(feed.offsetTop+1)+'px';
+      backdrop.style.height=(feed.offsetHeight-2)+'px';
+      backdrop.style.width=(width+23)+'px';
+    }
     scalper.style.position=inline?'absolute':'';
     scalper.style.right=inline?'12px':'';
     scalper.style.top=inline?feed.offsetTop+'px':'';
