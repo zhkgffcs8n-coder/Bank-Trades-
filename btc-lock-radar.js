@@ -10,7 +10,10 @@ box.before(scalper);
 const shadow=document.createElement('p');
 shadow.style.cssText='padding:10px;border:1px solid #526aaf;border-radius:9px;font-size:14px;line-height:1.5';
 shadow.textContent='V5 SHADOW · Waiting for BTC trades and executable depth';
-scalper.append(shadow);
+const researchReadouts=document.createElement('div');
+researchReadouts.style.cssText='min-height:0;overflow:auto;overscroll-behavior:contain';
+researchReadouts.append(shadow);
+scalper.append(researchReadouts);
 const journalKey='banktrades:btc-v5-shadow-v1';
 let journal=[],shadowPosition=null,shadowMarket=null,bookBusy=false,lastRound=null;
 try{
@@ -77,11 +80,11 @@ const cents=value=>Math.round(value*100)+'¢ / '+Math.round(value*100)+'%';
 const challenger=document.createElement('p');
 challenger.style.cssText=shadow.style.cssText;
 challenger.textContent='V6 SHADOW · Waiting for a shared market snapshot';
-scalper.append(challenger);
+researchReadouts.append(challenger);
 const titan=document.createElement('p');
 titan.style.cssText=shadow.style.cssText;
 titan.textContent='🤖 TITAN V7 · Waiting for server research';
-scalper.append(titan);
+researchReadouts.append(titan);
 async function refreshTitan(){
   if(document.hidden)return;
   try{
@@ -346,8 +349,11 @@ function mountScalper(){
       textRight=Math.max(textRight,range.getBoundingClientRect().right);
     }
     const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor(feedBounds.right-textRight-36));
-    if(width>=340)scalper.style.width=width+'px';
-    const inline=width>=340&&feedBounds.height>=scalper.offsetHeight+24;
+    const inline=width>=340&&feedBounds.height>=160;
+    scalper.style.maxHeight=inline?(feed.offsetHeight-24)+'px':'';
+    scalper.style.display=inline?'flex':'';
+    scalper.style.flexDirection=inline?'column':'';
+    scalper.style.overflow=inline?'auto':'';
     backdrop.hidden=!inline;
     if(inline){
       backdrop.style.top=(feed.offsetTop+1)+'px';
