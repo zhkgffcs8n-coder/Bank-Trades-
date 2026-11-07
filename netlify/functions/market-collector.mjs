@@ -1,4 +1,5 @@
 import {blobWindow} from '../../src/blob-window.mjs';
+import {selectEligibleRound} from '../../src/select-eligible-round.mjs';
 import {freezeForecast,scoreFrozenForecast,summarizeForecastResearch} from '../../src/forecast-shadow-learning.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
@@ -33,9 +34,9 @@ export default async()=>{
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
-  const m=markets[0];if(!m){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:'No verified open contract'});return;}
-  const yesBid=price(m,'yes_bid'),yesAsk=price(m,'yes_ask'),noBid=price(m,'no_bid'),noAsk=price(m,'no_ask');
-  if(typeof m.ticker!=='string'||!m.ticker.trim()||!validCollectorQuote({yesBid,yesAsk,noBid,noAsk})){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,ticker:m.ticker||null,valid:false,error:'Missing contract ticker or invalid binary bid/ask quote'});return;}
+  const selection=selectEligibleRound(markets,now);
+  if(!selection){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:markets.length?'No eligible contract with executable binary quote':'No verified open contract'});return;}
+  const {market:m,yesBid,yesAsk,noBid,noAsk}=selection;
   const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   // Include the contract ticker in the immutable sample key. Two contracts
   // observed in the same minute must not silently share one training sample.
