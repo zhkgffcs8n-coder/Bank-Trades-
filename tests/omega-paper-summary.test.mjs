@@ -77,3 +77,26 @@ test('OMEGA paper archive rejects entries above the $5 execution cap before repo
  assert.equal(r.maxRealizedDrawdownDollars,null);
  assert.equal(r.ordersAuthorized,false);
 });
+
+test('impossible negative simulated exits cannot inflate paper drawdown or losses',async()=>{
+ const db=store([
+  record('BTC-NEGATIVE-IMPOSSIBLE',{status:'CLOSED',closedAtMs:2000,quantity:2,entryCostDollars:1.1,netDollars:-100}),
+  record('BTC-VALID-EXIT',{status:'CLOSED',closedAtMs:3000,quantity:2,entryCostDollars:1.1,netDollars:-1.15})
+ ]);
+ const r=await summarizeOmegaPaper(db);
+ assert.equal(r.invalidPositions,1);
+ assert.equal(r.simulatedBidExits,1);
+ assert.equal(r.status,'INCOMPLETE_PAPER_HISTORY');
+ assert.equal(r.realizedNetDollars,null);
+ assert.equal(r.maxRealizedDrawdownDollars,null);
+ assert.equal(r.ordersAuthorized,false);
+});
+test('a valid zero-proceeds paper exit includes its fixed exit fee',async()=>{
+ const db=store([record('BTC-ZERO-PROCEEDS',{status:'CLOSED',closedAtMs:2000,
+  quantity:2,entryCostDollars:1.1,netDollars:-1.15})]);
+ const r=await summarizeOmegaPaper(db);
+ assert.equal(r.invalidPositions,0);
+ assert.equal(r.status,'COMPLETE_INSPECTED_ARCHIVE');
+ assert.equal(r.realizedNetDollars,-1.15);
+ assert.equal(r.maxRealizedDrawdownDollars,1.15);
+});
