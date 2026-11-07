@@ -611,7 +611,40 @@ setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data
 <strong style="font-size:16px">🧠 PRIMAL OMEGA ULTRA · Research &amp; Paper Only</strong>
 <p style="margin:8px 0">Provider and paper-research status comes from the scheduled OMEGA worker.</p>
 <div id="omegaUltraReadout" role="status">Checking research module…</div>
+<div style="margin-top:14px;padding-top:12px;border-top:1px solid #41506c">
+ <div class="between"><strong>Verified AI Engine Leaderboard</strong><button id="omegaLeaderboardRefresh" type="button">REFRESH</button></div>
+ <p>Official-settlement research scores and chronological holdout evaluation. No claims of guaranteed accuracy.</p>
+ <div id="omegaLeaderboardReadout" role="status">Checking verified outcome history…</div>
+</div>
 </section>
+
+<script>
+(()=>{
+ const output=document.getElementById('omegaLeaderboardReadout');
+ const button=document.getElementById('omegaLeaderboardRefresh');
+ if(!output||!button)return;
+ async function refresh(){
+  button.disabled=true;
+  try{
+   const response=await fetch('/.netlify/functions/omega-leaderboard',{cache:'no-store',credentials:'same-origin'});
+   if(!response.ok)throw Error('Leaderboard unavailable');
+   const data=await response.json();
+   output.replaceChildren();
+   const line=text=>{const p=document.createElement('p');p.textContent=text;output.append(p);};
+   line('Verified records inspected: '+(data.observedRecords??0)+(data.historyTruncated?' (partial history)':''));
+   line('Research champion: '+(data.champion||'Not validated')+' · Original Primal comparison: '+(data.originalPrimalComparison||'NOT VERIFIED'));
+   if(!Array.isArray(data.leaderboard)||!data.leaderboard.length)line('Not enough verified forward outcomes yet. Minimum 30 training + 20 holdout observations per model.');
+   else for(const entry of data.leaderboard.slice(0,12)){
+    line(entry.provider+' · holdout '+entry.holdoutRounds+' · Brier '+entry.modelBrier.toFixed(4)+
+     ' vs market '+entry.baselineBrier.toFixed(4)+' · '+(entry.eligible?'Research candidate':'No validated edge'));
+   }
+   line('Research only. No automatic live trading or model promotion.');
+  }catch{output.textContent='Verified leaderboard unavailable. No accuracy improvement confirmed.'}
+  finally{button.disabled=false}
+ }
+ button.addEventListener('click',refresh);refresh();
+})();
+</script>
 <script src="/omega-status.js?v=provider-check-2" defer></script>
 <script>
 (()=>{const button=document.getElementById('kalshiConnectionRefresh'),status=document.getElementById('kalshiConnectionStatus');
