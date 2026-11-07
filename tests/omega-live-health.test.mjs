@@ -14,3 +14,16 @@ test('stale or incomplete collection cannot be called healthy',()=>{
 });
 
 test('collector numeric timestamp',()=>{assert.equal(omegaLiveHealth({...heartbeat,completedAt:now-60000},now).status,'COLLECTOR_FRESH');});
+
+test('paper monitoring counters are read-only, bounded and not fabricated',()=>{
+ const omega={checkedAt:new Date(now-1000).toISOString(),status:'NO_FRESH_MARKET_OBSERVATION',
+  paperMonitoring:{open:2,settled:1,unpriced:3,exits:-1,holds:'7'}};
+ const result=omegaLiveHealth(heartbeat,now,omega,{action:'PAPER_SETTLED',updatedAtMs:now-1000});
+ assert.equal(result.omegaPaperMonitoring.open,2);
+ assert.equal(result.omegaPaperMonitoring.settled,1);
+ assert.equal(result.omegaPaperMonitoring.exits,null);
+ assert.equal(result.omegaPaperMonitoring.holds,null);
+ assert.equal(result.paperLastAction,'PAPER_SETTLED');
+ assert.equal(result.omegaExternalProvidersRunning,false);
+ assert.equal(result.realOrdersAuthorized,false);
+});
