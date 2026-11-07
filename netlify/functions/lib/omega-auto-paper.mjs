@@ -36,7 +36,7 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
  if(!/^[A-Z0-9-]{3,100}$/.test(ticker||''))return null;
  try{
   const response=await fetchImpl('https://api.elections.kalshi.com/trade-api/v2/markets/'+encodeURIComponent(ticker),{
-   headers:{accept:'application/json'},signal:AbortSignal.timeout(5000)});
+   headers:{accept:'application/json'},signal:AbortSignal.timeout(1500)});
   if(!response.ok)return null;
   const {market}=await response.json();
   if(market?.ticker!==ticker||market.status!=='active')return null;
