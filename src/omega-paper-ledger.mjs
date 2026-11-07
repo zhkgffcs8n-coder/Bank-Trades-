@@ -21,7 +21,9 @@ export function paperExit({position,quote,feesDollars,slippageDollars=0,nowMs}={
  const reasons=[];
  if(position?.status!=='OPEN'||!Number.isSafeInteger(position?.quantity)||position.quantity<=0)reasons.push('No valid open paper position');
  if(quote?.ticker!==position?.ticker)reasons.push('Ticker mismatch');
- if(!good(position?.entryCostDollars)||position.entryCostDollars<=0)reasons.push('Invalid entry cost');
+ // Persisted OPEN records can be corrupted independently of the entry gate.
+ // Refuse to realize paper exits from an entry exceeding the $5 cap.
+ if(!good(position?.entryCostDollars)||position.entryCostDollars<=0||position.entryCostDollars>5.00011)reasons.push('Invalid or over-cap entry cost');
  // A delayed or reordered paper-monitor invocation must never realize an exit
  // using a quote captured before the simulated position existed. Legacy records
  // without openedAtMs remain readable, but malformed present timestamps fail closed.
