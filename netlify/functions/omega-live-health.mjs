@@ -13,6 +13,12 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
  return {status:healthy?'COLLECTOR_FRESH':'NOT_VERIFIED',collectorStatus:heartbeat?.status||'UNKNOWN',
   collectorAgeSeconds:ageSeconds,sampledAssetCount:sampled.length,sampledAssets:sampled,
   trainingSucceeded:heartbeat?.trainingSucceeded===true,expectedIntervalSeconds:60,
+  // These are counts for the LAST collector invocation, never lifetime totals.
+  collectorLastRunCounts:Object.fromEntries([
+   ['newPendingPredictions','newPendingPredictions'],['trained','trainedThisRun'],
+   ['trainingReviews','trainingReviewCount'],['settlementFailures','settlementFailures'],
+   ['researchFailures','researchFailures']
+  ].map(([label,key])=>[label,Number.isSafeInteger(heartbeat?.[key])&&heartbeat[key]>=0?heartbeat[key]:null])),
   omegaExternalProvidersRunning:omegaRunning,omegaLiveResearchRunning:omegaRunning,
   omegaStatus:omegaHeartbeat?.status||'NOT_VERIFIED',omegaAgeSeconds,
   omegaReasons:Array.isArray(omegaHeartbeat?.reasons)?omegaHeartbeat.reasons:[],
@@ -22,7 +28,10 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   omegaPaperMonitoring:Object.fromEntries(['open','exits','holds','settled','unpriced','backfilled'].map(k=>
    [k,Number.isSafeInteger(omegaHeartbeat?.paperMonitoring?.[k])&&omegaHeartbeat.paperMonitoring[k]>=0?
     omegaHeartbeat.paperMonitoring[k]:null])),
-  paperLastAction:paperHeartbeat?.action||'NONE_VERIFIED',paperLastActionAtMs:paperHeartbeat?.updatedAtMs??null,
+  paperLastAction:paperHeartbeat?.action||'NONE_VERIFIED',
+  paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs?paperHeartbeat.updatedAtMs:null,
+  // One completed action, not cumulative net P&L or a verified exchange fill.
+  paperLastActionNetDollars:Number.isFinite(paperHeartbeat?.netDollars)?paperHeartbeat.netDollars:null,
   realOrdersAuthorized:false,
   notice:'Fresh collector observations do not prove OMEGA external provider integration or verified trading accuracy.'};
 }
