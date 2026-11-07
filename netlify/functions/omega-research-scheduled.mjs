@@ -59,7 +59,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
     const stored=await db.get(key,{type:'json'});
     if(stored?.state?.positions?.[ticker]?.status!=='OPEN')return;
     const marker='omega/paper/open/v1/'+ticker;
-    if(!await db.get(marker,{type:'json')){
+    if(!await db.get(marker,{type:'json'})){
      await db.setJSON(marker,{ticker,backfilledAtMs:nowMs,realOrdersAuthorized:false});
      paperMonitoring.backfilled++;
     }
