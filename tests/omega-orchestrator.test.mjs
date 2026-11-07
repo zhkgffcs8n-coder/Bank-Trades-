@@ -89,5 +89,5 @@ test('walk-forward champion never selects from the future or claims unverified P
  assert.equal(result.ordersAuthorized,false);
  assert.equal(result.originalPrimalComparison,'NOT_VERIFIED');
  const conflict=walkForwardChampionAudit([...history,make(0,.9,.1)],{minimumHistory:5,minimumImprovement:.05});
- assert.equal(conflict.evaluated,4);
+ assert.equal(conflict.evaluated,3); // Conflicted early training round removes another eligible forward step.
 });
