@@ -24,3 +24,13 @@ test('arena never claims an order or profit from signal-table changes',()=>{
  assert.match(js,/if\(!prior\.has\(asset\)\)/);
  assert.match(js,/state!==priorPaperStatus&&running/);
 });
+
+test('entry battle animation matches the actual qualified signal cell label order',()=>{
+ const js=read('arcade-crew.js');
+ const match=js.match(/\/BUY \(UP\|DOWN\).*?\/\.test\(label\)/);
+ assert.ok(match,'entry detection regex must be present');
+ const re=new RegExp(match[0].slice(1,match[0].indexOf('/.test(label)')));
+ assert.ok(re.test('🟢 BUY UP · QUALIFIED PAPER SIGNAL'));
+ assert.ok(re.test('🔴 BUY DOWN · QUALIFIED PAPER SIGNAL'));
+ assert.equal(re.test('BUY UP · UNQUALIFIED FORECAST'),false);
+});
