@@ -664,8 +664,22 @@ setInterval(()=>{for(const td of document.querySelectorAll('#premiumRows tr[data
    if(!response.ok)throw Error('unavailable');
    const data=await response.json();
    if(data.status==='UNAVAILABLE')throw Error('unavailable');
-   const totals=Number.isFinite(data.realizedNetDollars)?
-    'Modeled realized net after recorded costs: 
+   const complete=Number.isFinite(data.realizedNetDollars)&&Number.isFinite(data.maxRealizedDrawdownDollars);
+   const totals=complete?
+    'Modeled realized net after costs: USD '+data.realizedNetDollars.toFixed(2)+
+    ' · Realized drawdown: USD '+data.maxRealizedDrawdownDollars.toFixed(2):
+    'Total PnL and drawdown unavailable: incomplete or invalid history';
+   output.textContent='Inspected '+data.inspectedPositions+' paper positions · open '+data.openPositions+
+    ' · simulated exits '+data.simulatedBidExits+' · officially settled '+data.officiallySettledPositions+
+    ' · invalid '+data.invalidPositions+(data.historyTruncated?' · archive truncated':'')+'. '+totals+
+    '. No real orders or guaranteed fills.';
+  }catch{output.textContent='Paper accounting unavailable; no net PnL confirmed.'}
+ }
+ if(refresh)refresh.addEventListener('click',update);
+ update();
+})();
+</script>
+<script src="/omega-status.js?v=provider-check-2" defer></script>
 <script>
 (()=>{const button=document.getElementById('kalshiConnectionRefresh'),status=document.getElementById('kalshiConnectionStatus');
 if(!button||!status)return;
