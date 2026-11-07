@@ -13,6 +13,20 @@ test('unverified outcomes blocked',()=>assert.equal(scoreVerifiedRound(omegaStud
 test('wrong round blocked',()=>assert.equal(scoreVerifiedRound(omegaStudyRound(args).fusion,{marketTicker:'BTC',roundId:'r2',upOutcome:1,verified:true,settledAtMs:110000}).status,'BLOCKED'));
 test('future predictions blocked',()=>assert.equal(scoreVerifiedRound(omegaStudyRound(args).fusion,{marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:true,settledAtMs:89000}).status,'BLOCKED'));
 test('duplicate rounds not counted twice',()=>{const record=omegaStudyRound({...args,settlement:{marketTicker:'BTC',roundId:'r1',upOutcome:1,verified:true,settledAtMs:110000}}).verification;assert.equal(summarizeVerifiedScores([record,record])[0].verifiedRounds,1)});
+test('OMEGA public Brier summary quarantines conflicting duplicate rounds independent of record order',()=>{
+ const base={status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'same-round',
+  scores:[{provider:'omega_consensus',brier:.04},{provider:'kalshi_baseline',brier:.25}]};
+ const conflicting={...base,scores:[{provider:'kalshi_baseline',brier:.25},{provider:'omega_consensus',brier:.81}]};
+ const independent={...base,roundId:'other-round',scores:[{provider:'omega_consensus',brier:.16},{provider:'kalshi_baseline',brier:.36}]};
+ for(const input of [[base,conflicting,independent],[conflicting,base,independent]]){
+  const scores=summarizeVerifiedScores(input);
+  assert.equal(scores.find(x=>x.provider==='omega_consensus').verifiedRounds,1);
+  assert.equal(scores.find(x=>x.provider==='omega_consensus').meanBrier,.16);
+  assert.equal(scores.find(x=>x.provider==='kalshi_baseline').meanBrier,.36);
+ }
+ assert.equal(summarizeVerifiedScores([base,{...base,scores:[...base.scores].reverse()}])[0].verifiedRounds,1);
+ assert.deepEqual(summarizeVerifiedScores([base,conflicting]),[]);
+});
 test('scheduled archive scores strict settlements once and excludes late forecasts',async()=>{
  const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
  const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
