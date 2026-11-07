@@ -8,10 +8,9 @@ scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 box.before(scalper);
 const shadow=document.createElement('p');
-shadow.style.cssText='padding:10px;border:1px solid #526aaf;border-radius:9px;font-size:14px;line-height:1.5';
+shadow.style.cssText='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
 shadow.textContent='V5 SHADOW · Waiting for BTC trades and executable depth';
 const researchReadouts=document.createElement('div');
-researchReadouts.style.cssText='min-height:0;overflow:auto;overscroll-behavior:contain';
 researchReadouts.append(shadow);
 scalper.append(researchReadouts);
 const journalKey='banktrades:btc-v5-shadow-v1';
@@ -372,21 +371,19 @@ function mountScalper(){
       textRight=Math.max(textRight,range.getBoundingClientRect().right);
     }
     const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor(feedBounds.right-textRight-36));
-    const inline=width>=340&&feedBounds.height>=160;
-    scalper.style.maxHeight=inline?(feed.offsetHeight-24)+'px':'';
-    scalper.style.display=inline?'flex':'';
-    scalper.style.flexDirection=inline?'column':'';
-    scalper.style.overflow=inline?'auto':'';
-    backdrop.hidden=!inline;
-    if(inline){
-      backdrop.style.top=(feed.offsetTop+1)+'px';
-      backdrop.style.height=(feed.offsetHeight-2)+'px';
-      backdrop.style.width=(width+23)+'px';
-    }
+    const inline=width>=340;
     scalper.style.position=inline?'absolute':'';
     scalper.style.right=inline?'12px':'';
     scalper.style.top=inline?feed.offsetTop+'px':'';
     scalper.style.width=inline?width+'px':'';
+    const panelHeight=inline?scalper.offsetHeight+24:0;
+    row.style.minHeight=inline&&panelHeight>feed.offsetHeight?(feed.offsetTop+panelHeight)+'px':'';
+    backdrop.hidden=!inline;
+    if(inline){
+      backdrop.style.top=(feed.offsetTop+1)+'px';
+      backdrop.style.height=(Math.max(feed.offsetHeight,panelHeight)-2)+'px';
+      backdrop.style.width=(width+23)+'px';
+    }
   }
 
   const observer=new ResizeObserver(layout);
