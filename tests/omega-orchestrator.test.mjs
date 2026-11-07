@@ -31,8 +31,23 @@ test('conflicting verified settlement records cannot inflate shadow accuracy',as
  assert.equal(result.verifiedRounds,0);
  assert.deepEqual(result.verifiedScores,[]);
  const duplicate=evaluateOmegaVerifiedBatch({rounds:[r,r],settlements:[official,{...official}]});
- assert.equal(duplicate.verifiedRounds,2);
+ assert.equal(duplicate.verifiedRounds,1);
+ assert.equal(duplicate.duplicateForecastsExcluded,1);
  assert.equal(duplicate.verifiedScores[0].verifiedRounds,1);
+});
+
+test('conflicting frozen OMEGA predictions quarantine a round rather than selecting a convenient forecast',async()=>{
+ const r=await runOmegaResearchRound({...base,providers:['gpt','deepseek'],env:{OPENAI_API_KEY:'a',DEEPSEEK_API_KEY:'b'},
+  fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})})});
+ const changed=structuredClone(r);
+ changed.fusion.accepted[0].upProbability=.95;
+ const settlement={marketTicker:'BTC',roundId:'R1',verified:true,upOutcome:1,settledAtMs:120000};
+ const result=evaluateOmegaVerifiedBatch({rounds:[r,changed,r],settlements:[settlement]});
+ assert.equal(result.verifiedRounds,0);
+ assert.equal(result.conflictingForecastRoundsExcluded,1);
+ assert.equal(result.duplicateForecastsExcluded,2);
+ assert.deepEqual(result.verifiedScores,[]);
+ assert.equal(result.ordersAuthorized,false);
 });
 
 test('research champion requires verified chronological holdout improvement',async()=>{
