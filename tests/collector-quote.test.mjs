@@ -26,14 +26,18 @@ test('collector rejects missing, malformed, crossed and out-of-range quote field
  assert.equal(validCollectorQuote(null),false);
 });
 
-test('scheduled collector validates ticker and binary quotes before immutable archive or sampled coverage',()=>{
+test('scheduled collector selects only strictly validated contracts before archiving or coverage',()=>{
  const collector=readFileSync(new URL('../netlify/functions/market-collector.mjs',import.meta.url),'utf8');
- assert.match(collector,/import \{validCollectorQuote,parseCollectorPrice\} from '\.\.\/\.\.\/src\/collector-quote\.mjs'/);
- const validation=collector.indexOf("!validCollectorQuote({yesBid,yesAsk,noBid,noAsk})");
+ const selector=readFileSync(new URL('../src/select-eligible-round.mjs',import.meta.url),'utf8');
+ assert.match(collector,/import \{selectEligibleRound\} from '\.\.\/\.\.\/src\/select-eligible-round\.mjs'/);
+ assert.match(selector,/import \{validCollectorQuote,parseCollectorPrice\} from '\.\/collector-quote\.mjs'/);
+ assert.match(selector,/validCollectorQuote\(\{yesBid,yesAsk,noBid,noAsk\}\)/);
+ assert.match(selector,/typeof m\.ticker==='string'&&m\.ticker\.trim\(\)/);
+ const validation=collector.indexOf('const selection=selectEligibleRound(markets,now)');
+ const noSelection=collector.indexOf('if(!selection)');
  const archive=collector.indexOf("const sampleKey='samples/'");
- const coverage=collector.indexOf("collection.sampled.add(asset)");
- assert.ok(validation>0&&archive>validation&&coverage>archive);
- assert.match(collector,/typeof m\.ticker!=='string'\|\|!m\.ticker\.trim\(\)/);
+ const coverage=collector.indexOf('collection.sampled.add(asset)');
+ assert.ok(validation>0&&noSelection>validation&&archive>noSelection&&coverage>archive);
 });
 
 test('quote parser rejects blank and malformed dollar prices instead of coercing zero',()=>{
