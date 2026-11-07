@@ -92,3 +92,22 @@ test('live Kalshi quote parser rejects crossed books and expired or malformed cl
  assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,close_time:new Date(now-1).toISOString()})}),null);
  assert.equal(await fetchOmegaLiveQuote({ticker:quote.ticker,nowMs:now,fetchImpl:fetchMarket({...market,close_time:'not-a-time'})}),null);
 });
+
+test('zero Kalshi bids are valid observations but never invented executable exit fills',async()=>{
+ const market={ticker:'BTC-ROUND',status:'active',yes_ask_dollars:'0.45',no_ask_dollars:'0.55',yes_bid_dollars:'0',no_bid_dollars:'0.54'};
+ const fetchImpl=async()=>({ok:true,json:async()=>({market})});
+ const observed=await fetchOmegaLiveQuote({ticker:'BTC-ROUND',nowMs:now,fetchImpl});
+ assert.ok(observed);assert.equal(observed.yesBidDollars,0);
+ const data=new Map([['omega/paper/v1/BTC-ROUND',{state:{positions:{'BTC-ROUND':{status:'OPEN',ticker:'BTC-ROUND',roundId:'BTC-ROUND',side:'UP',quantity:2,entryCostDollars:.9,openedAtMs:now-1000}},entered:{}}}]]);
+ const db={get:async k=>data.get(k)||null,setJSON:async(k,v)=>data.set(k,v)};
+ const result=await advanceOmegaPaperStored({db,ticker:'BTC-ROUND',roundId:'BTC-ROUND',signal:null,quote:observed,nowMs:now});
+ assert.equal(result.status,'BLOCKED');assert.equal(data.get('omega/paper/v1/BTC-ROUND').state.positions['BTC-ROUND'].status,'OPEN');
+ assert.equal(data.has('omega/paper/latest'),false);
+});
+test('zero bid parser rejects missing or coercible fake zero prices',async()=>{
+ const base={ticker:'BTC-ROUND',status:'active',yes_ask_dollars:'0.45',no_ask_dollars:'0.55',no_bid_dollars:'0.54'};
+ const read=async market=>fetchOmegaLiveQuote({ticker:'BTC-ROUND',nowMs:now,fetchImpl:async()=>({ok:true,json:async()=>({market})})});
+ for(const bad of [null,'',false,'  ', '0x0'])assert.equal(await read({...base,yes_bid_dollars:bad}),null);
+ assert.equal(await read(base),null);
+ assert.equal((await read({...base,yes_bid_dollars:'0'})).yesBidDollars,0);
+});
