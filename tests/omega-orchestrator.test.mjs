@@ -21,3 +21,16 @@ test('unverified outcomes cannot create accuracy statistics',async()=>{
  const report=evaluateOmegaVerifiedBatch({rounds:[r],settlements:[{marketTicker:'BTC',roundId:'R1',verified:false,upOutcome:1,settledAtMs:120000}]});
  assert.equal(report.verifiedRounds,0);
 });
+
+test('conflicting verified settlement records cannot inflate shadow accuracy',async()=>{
+ const r=await runOmegaResearchRound({...base,providers:['gpt','deepseek'],env:{OPENAI_API_KEY:'a',DEEPSEEK_API_KEY:'b'},
+ fetchImpl:async()=>({ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})})});
+ const official={marketTicker:'BTC',roundId:'R1',verified:true,upOutcome:1,settledAtMs:120000};
+ const conflicting={...official,upOutcome:0};
+ const result=evaluateOmegaVerifiedBatch({rounds:[r],settlements:[official,conflicting]});
+ assert.equal(result.verifiedRounds,0);
+ assert.deepEqual(result.verifiedScores,[]);
+ const duplicate=evaluateOmegaVerifiedBatch({rounds:[r,r],settlements:[official,{...official}]});
+ assert.equal(duplicate.verifiedRounds,2);
+ assert.equal(duplicate.verifiedScores[0].verifiedRounds,1);
+});
