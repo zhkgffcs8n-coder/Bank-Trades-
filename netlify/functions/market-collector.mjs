@@ -1,4 +1,5 @@
 import {blobWindow} from '../../src/blob-window.mjs';
+import {freezeForecast,scoreFrozenForecast} from '../../src/forecast-shadow-learning.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {analyzeBrain} from '../../src/primal-shadow-brain.mjs';
 import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
@@ -56,6 +57,14 @@ export default async()=>{
   }catch(e){researchFailure('recent-snapshot',e,asset);console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
+  // Freeze the first forecast before settlement. Never overwrite on later flips.
+  try{
+   const key='forecast-shadow/v1/'+m.ticker;
+   if(!await db.get(key,{type:'json'})){
+    const frozen=freezeForecast({ticker:m.ticker,asset,at:record.observedAt,expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk});
+    if(frozen)await db.setJSON(key,frozen);
+   }
+  }catch(e){researchFailure('forecast-freeze',e,asset)}
   // One immutable late-window observation per contract, scored independently
   // by A and B on the same fetched quote. Research only, never an order.
   try{
@@ -232,6 +241,17 @@ export default async()=>{
     }
    }catch(e){collection.settlementFailures++;console.warn('Pending settlement lookup unavailable',rec.ticker,String(e))}
   });
+  // Resolve frozen forecasts only against officially verified finalized outcomes.
+  try{
+   await scanBlobPage(db,{prefix:'forecast-shadow/v1/',cursorKey:'scan-cursors/forecast-shadow-v1',limit:8},async item=>{
+    const row=await db.get(item.key,{type:'json'});
+    if(row?.status!=='PENDING'||row.expiresAt>now-60000)return;
+    const official=await db.get('outcomes/'+row.ticker,{type:'json'});
+    if(!trustedStoredFinalizedOutcome(official,row.ticker))return;
+    const scored=scoreFrozenForecast(row,official.result,now);
+    if(scored)await db.setJSON(item.key,scored);
+   });
+  }catch(e){researchFailure('forecast-settlement-scoring',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
