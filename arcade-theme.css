@@ -1,0 +1,28 @@
+/* Original BANK TRADES PRO arcade skin: visual-only, no order hooks. */
+:root{--arc-cyan:#38d9ff;--arc-violet:#b778ff;--arc-gold:#ffdb72;--arc-green:#42f7a2;--arc-red:#ff5579}
+body{background:radial-gradient(ellipse at 78% 0%,#182a65 0,transparent 42%),radial-gradient(ellipse at 0% 50%,#33135b 0,transparent 45%),#050714!important}
+header,.card,.premium-panel,.premium-hero,.terminal-sidebar,.metric,.coin{border-radius:19px!important}
+.card,.premium-panel,.premium-hero{border:1px solid #4e5b91!important;box-shadow:inset 0 1px #ffffff17,0 14px 38px #0008,0 0 19px #5c36ff12!important;background:linear-gradient(145deg,#172346f2,#0a1026f5)!important}
+h1,h2,.brand{letter-spacing:.015em;text-shadow:0 2px 12px #31a9ff28}
+button,.coin,.terminal-nav a{transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+button:hover,.coin:hover{transform:translateY(-1px);box-shadow:0 0 18px #5f72ff44}
+button:focus-visible,a:focus-visible{outline:3px solid var(--arc-gold)!important;outline-offset:3px}
+#btArcadeCrew{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin:10px 0 18px}
+.bt-bot{position:relative;min-width:0;padding:11px 6px 9px;border:2px solid #42527b;border-radius:17px;text-align:center;background:linear-gradient(160deg,#1e2d59,#0a1024);box-shadow:inset 0 2px #ffffff17}
+.bt-bot[data-mode=entry]{border-color:var(--arc-green);box-shadow:0 0 17px #42f7a244}
+.bt-bot[data-mode=danger]{border-color:var(--arc-red);box-shadow:0 0 17px #ff557944}
+.bt-bot[data-mode=flip]{border-color:var(--arc-gold);box-shadow:0 0 17px #ffdb7244}
+.bt-bot svg{width:clamp(48px,8vw,83px);height:76px;overflow:visible;filter:drop-shadow(0 5px 3px #0008)}
+.bt-bot strong{display:block;font-size:clamp(10px,1.5vw,13px);color:white}
+.bt-bot small{display:block;font-size:10px;color:#b8c8ee}
+.bt-bot .bt-eyes{fill:var(--arc-cyan)}
+.bt-bot[data-mode=entry] .bt-eyes{fill:var(--arc-green)}
+.bt-bot[data-mode=danger] .bt-eyes{fill:var(--arc-red)}
+.bt-bot[data-mode=flip] .bt-eyes{fill:var(--arc-gold)}
+.bt-bot[data-mode=entry] svg,.bt-bot[data-mode=danger] svg,.bt-bot[data-mode=flip] svg{animation:bt-bot-bounce .55s ease-in-out 2}
+@keyframes bt-bot-bounce{50%{transform:translateY(-6px) scale(1.04)}}
+#btArcadeControls{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:10px}
+#btArcadeControls button{font-size:12px;padding:8px 12px;min-height:38px}
+.bt-arcade-muted *{animation:none!important;transition:none!important}
+@media(max-width:700px){#btArcadeCrew{grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}.bt-bot{padding:6px 2px}.bt-bot svg{height:53px;width:42px}.bt-bot strong{font-size:9px;overflow-wrap:anywhere}.bt-bot small{font-size:9px}#btArcadeControls{justify-content:flex-start}}
+@media(prefers-reduced-motion:reduce){.bt-bot *,.bt-bot,button,.coin{animation:none!important;transition:none!important}}
