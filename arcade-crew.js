@@ -56,6 +56,20 @@ const plays={
   EXIT:'OMEGA relays the exit signal → Guardian shields → Primal stands down.',
   RISK:'OMEGA spots risk → Guardian blocks → Primal stands down.'
 };
+const titanActivity=document.createElement('p');
+titanActivity.style.cssText='padding:0 16px;color:#bfdbfe;font-size:12px';
+titanActivity.textContent='🤖 TITAN · Waiting for a fresh server decision';
+arena.append(titanActivity);
+let titanObservedAt=0;
+window.addEventListener('banktrades:titan-observation',({detail})=>{
+  if(!Number.isFinite(detail?.at)||detail.at<titanObservedAt||!['UP','DOWN','SKIP'].includes(detail.decision))return;
+  const isNew=detail.at>titanObservedAt;
+  titanObservedAt=detail.at;
+  titanActivity.textContent='🤖 TITAN SHADOW · '+detail.decision+' · '+detail.ticker+
+    ' · '+detail.scored+' officially scored rounds · '+detail.trades+' simulated trades';
+  if(isNew)animate(titanActivity,[{transform:'none'},{transform:'translateX(8px)',filter:'brightness(1.5)'},{transform:'none'}],
+    {duration:650,easing:'ease-in-out'});
+});
 let prior=new Map();let priorPaperStatus='';const activate=(id,mode)=>{const node=root.querySelector('[data-bot="'+id+'"]');if(!node)return;node.dataset.mode=mode;clearTimeout(node._reset);node._reset=setTimeout(()=>{node.dataset.mode='idle'},1700)};
 function scan(){if(document.hidden)return;
  for(const tr of document.querySelectorAll('#premiumRows tr')){const asset=tr.dataset.asset||tr.dataset.fallbackAsset||'',label=tr.children[3]?.textContent||'';if(!asset)continue;
