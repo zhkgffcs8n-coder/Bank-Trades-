@@ -1,6 +1,7 @@
 // Automatic paper-only position monitoring for OMEGA. Never sends Kalshi orders.
 // Requires fresh independently fetched side-specific Kalshi bid/ask quotes.
 import {advanceOmegaPaper} from '../../../src/omega-paper-coordinator.mjs';
+import {trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 export function omegaPaperSignal(research){
  const edge=research?.fusion?.modelMinusMarket;
  const mean=research?.fusion?.modelMean;
@@ -47,4 +48,36 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
    noBidDollars:parse(market.no_bid_dollars,market.no_bid)};
   return Object.values(quote).slice(2).every(Number.isFinite)?quote:null;
  }catch{return null;}
+}
+
+/** Close an OPEN shadow position only against a previously persisted, strictly
+ * verified official Kalshi finalization. No synthetic bid, exit fill or live order.
+ */
+export async function settleOmegaPaperStored({db,ticker,nowMs=Date.now()}={}){
+ if(typeof ticker!=='string'||!/^[A-Z0-9-]{3,100}$/.test(ticker)||!Number.isSafeInteger(nowMs))
+  return {status:'BLOCKED',reason:'Invalid settlement request',realOrdersAuthorized:false};
+ const key='omega/paper/v1/'+ticker;
+ const [prior,label]=await Promise.all([db.get(key,{type:'json'}),db.get('outcomes/'+ticker,{type:'json'})]);
+ const position=prior?.state?.positions?.[ticker];
+ if(position?.status!=='OPEN'||position.ticker!==ticker||position.roundId!==ticker||
+  !['UP','DOWN'].includes(position.side)||!Number.isSafeInteger(position.quantity)||position.quantity<=0||
+  !Number.isFinite(position.entryCostDollars)||position.entryCostDollars<=0||
+  !Number.isSafeInteger(position.openedAtMs)||position.openedAtMs<=0)
+  return {status:'BLOCKED',reason:'No valid open position',realOrdersAuthorized:false};
+ const outcome=trustedStoredFinalizedOutcome(label,ticker);
+ const settledAtMs=Date.parse(label?.settledAt||'');
+ if(!outcome||label.verification!==SETTLEMENT_VERIFICATION||
+  !Number.isSafeInteger(settledAtMs)||settledAtMs<=position.openedAtMs||settledAtMs>nowMs)
+  return {status:'WAITING_FOR_VERIFIED_SETTLEMENT',realOrdersAuthorized:false};
+ const wins=(position.side==='UP'&&outcome==='yes')||(position.side==='DOWN'&&outcome==='no');
+ const payoutDollars=wins?position.quantity:0;
+ const netDollars=Math.round((payoutDollars-position.entryCostDollars)*10000)/10000;
+ const closed={...position,status:'SETTLED',settledAtMs,outcome,netDollars,exitReason:'OFFICIAL_SETTLEMENT',
+  payoutDollars,settlementVerification:SETTLEMENT_VERIFICATION};
+ await db.setJSON(key,{...prior,state:{...prior.state,positions:{...prior.state.positions,[ticker]:closed}},
+  updatedAtMs:nowMs,lastAction:'PAPER_SETTLED'});
+ if(typeof db.delete==='function')await db.delete('omega/paper/open/v1/'+ticker);
+ await db.setJSON('omega/paper/latest',{ticker,roundId:ticker,action:'PAPER_SETTLED',updatedAtMs:nowMs,
+  netDollars,officiallySettled:true,realOrdersAuthorized:false});
+ return {status:'PAPER_SETTLED',netDollars,realOrdersAuthorized:false};
 }
