@@ -44,6 +44,9 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
     conflictingTickers:Number.isSafeInteger(forecastResearch.conflictingTickers)?forecastResearch.conflictingTickers:null,
     notice:'Frozen hypothetical research with assumed costs, not actual fills or proven model improvement'};
   })(),
+  titanShadow:forecastResearch?.titan?.mode==='SETTLEMENT_SHADOW'&&
+   Number.isSafeInteger(forecastResearch.titan.at)&&forecastResearch.titan.at<=nowMs&&nowMs-forecastResearch.titan.at<=420000
+   ?forecastResearch.titan:null,
   realOrdersAuthorized:false,
   notice:'Fresh collector observations do not prove OMEGA external provider integration or verified trading accuracy.'};
 }
