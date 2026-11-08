@@ -5,11 +5,11 @@ const priceFor=(book,side)=>side==='UP'?book.yes:book.no;
 const askFor=(book,side)=>1-priceFor(book,side==='UP'?'DOWN':'UP').price;
 const netAt=(entry,bid)=>bid-entry-cost(entry)-cost(bid);
 
-export function predatorObservation({ticker,now,bookAt,remaining,yes,no,trades}){
+export function predatorObservation({ticker,now,bookAt,remaining,yes,no,trades,monitoring=false}){
  if(!ticker?.startsWith('KXBTC15M-')||!(now-bookAt>=0&&now-bookAt<=4000)||remaining<=0||
   ![yes,no].every(level=>level&&level.price>0&&level.price<1&&level.size>=1))return null;
  const spread=1-yes.price-no.price;
- if(!(spread>0&&spread<=.050001))return null;
+ if(!(spread>0&&(monitoring||spread<=.050001)))return null;
  const book={ticker,now,bookAt,remaining,yes,no};
  const rows=trades.filter(row=>row.time<=now&&row.time>=now-12000);
  if(rows.length<12||now-rows.at(-1).time>2500)return book;
@@ -47,13 +47,32 @@ export function openPredatorWatch(observation){
 export function advancePredatorWatch(watch,observation){
  if(!observation||observation.ticker!==watch.ticker||observation.now<=watch.at)return watch;
  const {now,remaining}=observation;
- if(now>watch.deadline+6000)return {...watch,reason:'UNSCORED_GAP',closedAt:now};
+ if(watch.warningMs===undefined&&now>watch.deadline+6000)return {...watch,reason:'UNSCORED_GAP',closedAt:now};
  const bid=priceFor(observation,watch.side).price;
  const net=netAt(watch.ask,bid),peakNet=Math.max(watch.peakNet,net);
  const baseline=watch.baseline??(observation.baselineSide===watch.side&&now<=watch.deadline
   ?{at:now,ask:askFor(observation,watch.side)}:null);
+ const weakening=watch.warningMs!==undefined&&net>0&&(
+  1-observation.yes.price-observation.no.price>.050001||
+  observation.sourceEventAt&&observation.side!==watch.side&&Math.abs(observation.flow)>=.45);
  const reason=bid>=watch.target?'TAKE PROFIT':net<=-.07?'SELL FAST':
-  peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
+  weakening||peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
  return {...watch,peakNet,baseline,bid,net,...(reason?{reason,closedAt:now,
   baselineNet:baseline?netAt(baseline.ask,bid):null,leadMs:baseline?baseline.at-watch.at:null}:{})};
+}
+
+// A watch is a prediction. A later fresh observation supplies the modeled fill.
+export function confirmPredatorEntry(watch, observation){
+ if(!watch||!observation||watch.ticker!==observation.ticker||
+    observation.now<=watch.at||observation.now-watch.at>10000||
+    observation.sourceEventAt<=watch.sourceEventAt||!observation.sourceEventAt||
+    observation.remaining<35||observation.side!==watch.side)return null;
+ const sign=watch.side==='UP'?1:-1;
+ const ask=askFor(observation,watch.side);
+ if(ask<.15-1e-9||ask>.95+1e-9||ask-watch.ask>.020001||
+    Math.abs(observation.flow)<.45||sign*observation.imbalance<.12||
+    sign*observation.acceleration<=0||netAt(ask,watch.target)<.015)return null;
+ return {...watch,ask,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,
+  warningMs:observation.now-watch.at,deadline:observation.now+30000,
+  entryCost:cost(ask),estimatedNet:netAt(ask,watch.target)};
 }

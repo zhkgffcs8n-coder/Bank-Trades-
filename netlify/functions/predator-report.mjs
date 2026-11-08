@@ -4,6 +4,11 @@ import {blobWindow} from '../../src/blob-window.mjs';
 export default async req=>{
  if(req.method!=='GET')return new Response(null,{status:405});
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
+ if(new URL(req.url).searchParams.get('mode')==='worker'){
+  const worker=await db.get('predator-v13/health',{type:'json'});
+  return Response.json({worker:worker?{...worker,fresh:Date.now()-worker.at>=0&&Date.now()-worker.at<=45000}:null},
+   {headers:{'cache-control':'no-store'}});
+ }
  const [samples,results,latest,stream,streamSamples,streamResults,worker]=await Promise.all([
   blobWindow(db,{prefix:'predator-v11/samples/',limit:60}),
   blobWindow(db,{prefix:'predator-v11/results/',limit:60}),

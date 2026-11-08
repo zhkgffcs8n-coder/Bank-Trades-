@@ -7,7 +7,7 @@ import {openPredatorTape} from '../src/predator-stream.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
 import {parseDepthV8} from '../src/scalper-v8.mjs';
 import {verifiedFinalizedBinaryOutcome} from '../src/official-settlement.mjs';
-import {predatorObservation,openPredatorWatch,advancePredatorWatch} from '../src/btc-predator.mjs';
+import {predatorObservation,openPredatorWatch,advancePredatorWatch,confirmPredatorEntry} from '../src/btc-predator.mjs';
 
 const env=process.env,dir=env.PREDATOR_STATE_DIR;
 if(!dir)throw Error('PREDATOR_STATE_DIR must point to a persistent writable directory');
@@ -121,33 +121,61 @@ async function run(){
    const observation=book?.ticker===market.ticker&&
     (!Number.isFinite(book.eventAt)||decisionAt-book.eventAt>=0&&decisionAt-book.eventAt<=4000)?
     predatorObservation({ticker:market.ticker,now:decisionAt,bookAt:book.receivedAt,
-     remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades:spot.tape}):null;
+     remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades:spot.tape,monitoring:Number.isFinite(state.positions[market.ticker]?.warningMs)}):null;
+   latest.quoteFresh=Boolean(observation);
+   const round=state.rounds[market.ticker];
    const position=state.positions[market.ticker];
-   if(position&&observation){
-    const next=advancePredatorWatch(position,observation);
-    if(next.closedAt&&next.reason!=='UNSCORED_GAP'){closePosition(position,next);await persist();}
-    else if(!next.closedAt){state.positions[market.ticker]=next;dirty=true;}
+   if(round?.v15Filled&&!position&&state.closed.at(-1)?.ticker===market.ticker)latest.position=state.closed.at(-1);
+   if(position){
+    latest.position=position;
+    if(observation){
+     const next=advancePredatorWatch(position,observation);
+     if(next.closedAt&&next.reason!=='UNSCORED_GAP'){
+      closePosition(position,next);latest.position=next;lastPublish=0;await persist();
+     }else if(!next.closedAt){
+      state.positions[market.ticker]=next;latest.position=next;dirty=true;
+     }
+    }
    }else if(!observation)reject('STALE_OR_INVALID_BOOK');
    else if(!observation.sourceEventAt)reject('INSUFFICIENT_OR_STALE_TAPE');
-   else if(!observation.early)reject('NO_EARLY_SETUP');
-   else{
-    const candidate=openPredatorWatch(observation);
-    if(!candidate)reject('NET_EDGE_OR_PRICE_GATE');
-    else if(state.rounds[market.ticker]&&!state.rounds[market.ticker].watch){
-     state.rounds[market.ticker].watch={...candidate,mode:'EXPERIMENTAL_SHADOW'};
-     latest.reason='EXPERIMENTAL_EARLY_WATCH';
-     if(env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
-      state.positions[market.ticker]={...candidate,expiresAt};
-     }
+   else if(round&&!round.v15Filled){
+    if(round.v15Watch&&decisionAt-round.v15Watch.at>10000){
+     round.v15Expired=(round.v15Expired||0)+1;
+     delete round.v15Watch;dirty=true;
+    }
+    const candidate=confirmPredatorEntry(round.v15Watch,observation);
+    if(candidate&&env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
+     const bid=(candidate.side==='UP'?observation.yes:observation.no).price;
+     state.positions[market.ticker]={...candidate,expiresAt,bid,
+      net:bid-candidate.ask-candidate.entryCost-(Math.ceil(7*bid*(1-bid))/100+.01)};
+     round.v15Filled=true;
+     latest.position=state.positions[market.ticker];
+     latest.reason='VOLT_PAPER_FILL';lastPublish=0;
      dirty=true;await persist();
+    }else{
+     if(!round.v15Watch&&observation.early){
+      const watch=openPredatorWatch(observation);
+      if(watch){round.v15Watch=watch;lastPublish=0;dirty=true;await persist();}
+     }
+     latest.watch=round.v15Watch??null;
+     if(latest.watch)latest.reason='VOLT_WATCH';
+     else reject('NO_QUALIFIED_EARLY_WATCH');
     }
    }
   }
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
   if(dirty&&now-lastPersist>=3000)await persist();
-  if(now-lastPublish>=15000){
+  if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
    lastPublish=now;
-   const health={mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
+   const health={version:15,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
+    voltV15:state.closed.filter(row=>Number.isFinite(row.warningMs)).reduce((stats,row)=>{
+     stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
+     stats.net+=row.net;stats.warningMs+=row.warningMs;stats.entryTotal+=row.ask;
+     stats.fees+=row.entryCost+(row.reason==='OFFICIAL_SETTLEMENT'?0:Math.ceil(7*row.bid*(1-row.bid))/100+.01);
+     stats.peak=Math.max(stats.peak,stats.net);
+     stats.drawdown=Math.max(stats.drawdown,stats.peak-stats.net);
+     return stats;
+    },{trades:0,wins:0,losses:0,net:0,warningMs:0,entryTotal:0,fees:0,peak:0,drawdown:0}),
     paperEnabled:env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true',ordersAuthorized:false,
     open:Object.keys(state.positions).length,closed:state.totalClosed,
     wins:state.closed.filter(row=>row.net>0).length,losses:state.closed.filter(row=>row.net<0).length,

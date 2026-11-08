@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {predatorObservation,openPredatorWatch,advancePredatorWatch} from '../src/btc-predator.mjs';
+import {predatorObservation,openPredatorWatch,advancePredatorWatch,confirmPredatorEntry} from '../src/btc-predator.mjs';
 
 const now=12000;
 const ticker='KXBTC15M-TEST';
@@ -32,4 +32,19 @@ test('records a later paired baseline and only closes from executable same-round
  assert.equal(closed.leadMs,3000);
  assert.ok(closed.net>0);
  assert.equal(advancePredatorWatch(watch,{...snapshot,now:now+37000}).reason,'UNSCORED_GAP');
+});
+
+test('VOLT waits for fresh confirmation, rejects repricing, and tracks a later executable exit',()=>{
+ const observation=predatorObservation(snapshot);
+ const watch=openPredatorWatch(observation);
+ assert.equal(confirmPredatorEntry(watch,observation),null);
+ const next={...observation,now:now+1000,sourceEventAt:now+1000};
+ assert.equal(confirmPredatorEntry(watch,{...next,no:{price:.52,size:10}}),null);
+ assert.equal(confirmPredatorEntry(watch,{...next,side:'DOWN'}),null);
+ const fill=confirmPredatorEntry(watch,next);
+ assert.equal(fill.warningMs,1000);
+ assert.equal(fill.watchAt,watch.at);
+ const exit=predatorObservation({...snapshot,now:now+40000,bookAt:now+40000,
+  yes:{price:.53,size:2},no:{price:.4,size:2},trades:[],monitoring:true});
+ assert.equal(advancePredatorWatch(fill,exit).reason,'TRAIL EXIT');
 });

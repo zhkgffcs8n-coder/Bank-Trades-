@@ -26,19 +26,38 @@ predatorServerStatus.textContent='OMEGA PREDATOR · Waiting for server research'
 v8Scoreboard.after(predatorServerStatus);
 let predatorReportBusy=false;
 async function refreshPredatorReport(){
- if(predatorReportBusy||document.hidden)return;
+ if(predatorReportBusy||document.hidden||selectedCoin!=='BTC')return;
  predatorReportBusy=true;
  try{
-  const response=await fetch('/.netlify/functions/predator-report',{signal:AbortSignal.timeout(10000)});
+  const response=await fetch('/.netlify/functions/predator-report?mode=worker',{signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('Predator report unavailable');
   const report=await response.json();
-  const age=report.latest?Math.max(0,Math.round((Date.now()-report.latest.at)/1000)):null;
-  predatorServerStatus.textContent='OMEGA PREDATOR · Server shadow · '+report.sampleRecords+
-   ' observations · '+report.scoredRecords+' scored horizons'+
-   (age===null?'':' · latest '+age+'s old · '+report.latest.stage.replaceAll('_',' '));
-  const stream=report.streaming;
-  if(stream?.completedAt)predatorServerStatus.textContent+=' · V12 stream burst '+stream.stage.replaceAll('_',' ')+
-   ' · '+Math.max(0,Math.round((Date.now()-stream.completedAt)/1000))+'s ago · '+stream.sampleRecords+' sampled books';
+  predatorServerStatus.textContent='BTC PREDATOR · Waiting for a V15 worker heartbeat';
+  const worker=report.worker;
+  if(worker?.version===15){
+   const stats=worker.voltV15;
+   const position=worker.latest?.position;
+   const watch=worker.latest?.watch;
+   predatorServerStatus.textContent='V15 BTC PREDATOR ULTRA · VOLT B · '+
+    (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale');
+   if(worker.fresh&&position){
+    const age=Date.now()-worker.latest.decisionAt;
+    const action=position.closedAt?(position.reason==='TAKE PROFIT'?'TAKE PROFIT ':'SELL FAST '):
+     worker.latest.decisionAt-position.at<15000?'BUY ':'HOLD ';
+    predatorServerStatus.textContent+=' · '+action+position.side+' · PAPER · Entry '+
+     (position.ask*100).toFixed(1)+'%';
+    if(Number.isFinite(position.bid)&&Number.isFinite(position.net)&&
+       (position.closedAt||age<=20000&&worker.latest.quoteFresh)){
+     predatorServerStatus.textContent+=' · '+(position.closedAt?'Exit ':'Last executable bid ')+
+      (position.bid*100).toFixed(1)+'% · modeled net '+(position.net*100).toFixed(1)+'¢';
+    }else predatorServerStatus.textContent+=' · Waiting for fresh exit bid';
+    if(Number.isFinite(position.warningMs))predatorServerStatus.textContent+=' · Watch lead '+
+     (position.warningMs/1000).toFixed(2)+'s';
+   }else if(worker.fresh&&watch&&Date.now()-watch.at<=10000){
+    predatorServerStatus.textContent+=' · WATCH '+watch.side;
+   }
+   if(stats)predatorServerStatus.textContent+=' · '+stats.wins+'W/'+stats.losses+'L · modeled net $'+stats.net.toFixed(2);
+  }
  }catch{predatorServerStatus.textContent='OMEGA PREDATOR · Server report unavailable'}
  finally{predatorReportBusy=false}
 }
@@ -826,7 +845,7 @@ waitForData('Checking '+selectedCoin+' market and spot feed');
 botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
-refreshPredatorReport();setInterval(refreshPredatorReport,60000);
+refreshPredatorReport();setInterval(refreshPredatorReport,2000);
 setInterval(()=>{if(!document.hidden)paintV8()},15000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
