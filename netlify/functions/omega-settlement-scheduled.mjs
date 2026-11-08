@@ -26,7 +26,7 @@ export async function scoreOmegaArchive(db){
    marketBaseline:forecast.baseline,accepted:forecast.accepted},
   {marketTicker:ticker,roundId:ticker,upOutcome:Number(outcome==='yes'),settledAtMs,verified:true});
   if(score.status!=='VERIFIED_SHADOW_SCORE')return;
-  await db.setJSON(scoreKey,{...score,outcome,settledAtMs,forecastKey:key,recordedAtMs:forecast.recordedAtMs},{onlyIfNew:true});
+  // The research decision is not immutable until the scheduled coordinator\n  // durably freezes it. Provider observation times can precede that freeze;\n  // using them as predictedAtMs leaks earlier eligibility into walk-forward\n  // selection and makes the official chronology look better than it was.\n  await db.setJSON(scoreKey,{...score,predictedAtMs:forecast.recordedAtMs,outcome,settledAtMs,\n   forecastKey:key,recordedAtMs:forecast.recordedAtMs},{onlyIfNew:true});
  });
 }
 
