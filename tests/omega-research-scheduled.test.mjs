@@ -264,3 +264,30 @@ test('live quote receipt time remains prospective during provider research',asyn
  assert.equal(forecast.observedAtMs,receiptAt);
  assert.equal(report.ordersAuthorized,false);
 });
+
+test('delayed Kalshi quote can exit paper using post-receipt decision time',async()=>{
+ const ticker='KXBTC15M-DELAYED',receivedAt=now+1200,decisionAt=now+1350;
+ const position={status:'OPEN',ticker,roundId:ticker,side:'UP',quantity:2,
+  entryCostDollars:.5,openedAtMs:now-60000};
+ const db=indexedPaperStore([
+  ['latest/'+asset,sample],
+  ['omega/paper/v1/'+ticker,{state:{positions:{[ticker]:position},entered:{}}}],
+  ['omega/paper/open/v1/'+ticker,{ticker,realOrdersAuthorized:false}]
+ ]);
+ let clockCalls=0;
+ const report=await runOmegaScheduled({nowMs:now,db,env:{},
+  clock:()=>++clockCalls===1?receivedAt:decisionAt,
+  fetchImpl:async()=>({ok:true,json:async()=>({market:{
+   ticker,status:'active',yes_bid_dollars:'0.90',yes_ask_dollars:'0.91',
+   no_bid_dollars:'0.08',no_ask_dollars:'0.09'
+  }})})
+ });
+ const closed=db.values.get('omega/paper/v1/'+ticker).state.positions[ticker];
+ assert.equal(clockCalls,2);
+ assert.equal(report.paperMonitoring.exits,1);
+ assert.equal(report.paperMonitoring.unpriced,0);
+ assert.equal(closed.status,'CLOSED');
+ assert.equal(closed.closedAtMs,decisionAt);
+ assert.equal(db.values.get('omega/paper/latest').updatedAtMs,decisionAt);
+ assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
+});
