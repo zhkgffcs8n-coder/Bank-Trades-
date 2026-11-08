@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {omegaLiveHealth} from '../netlify/functions/omega-live-health.mjs';
 const now=Date.parse('2026-11-05T12:00:00Z');
-const heartbeat={completedAt:new Date(now-60000).toISOString(),status:'COMPLETED',sampledAssets:['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'],trainingSucceeded:true};
+const heartbeat={completedAt:new Date(now-60000).toISOString(),status:'COMPLETED',sampledAssets:['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'],sampledAssetCount:8,failedAssets:[],trainingSucceeded:true};
 test('fresh completed collection is distinguished from OMEGA provider operation',()=>{
  const result=omegaLiveHealth(heartbeat,now);
  assert.equal(result.status,'COLLECTOR_FRESH');assert.equal(result.omegaLiveResearchRunning,false);
@@ -98,4 +98,12 @@ test('malformed persisted provider diagnostics do not crash public OMEGA health'
  assert.equal(result.omegaProviderStatus.length,2);
  assert.deepEqual(result.omegaProviderStatus.map(x=>x.provider),['claude','gpt']);
  assert.equal(result.realOrdersAuthorized,false);
+});
+
+test('public OMEGA collector health rejects extra duplicate samples, inconsistent counts and recorded failures',()=>{
+ assert.equal(omegaLiveHealth({...heartbeat,sampledAssets:[...heartbeat.sampledAssets,'BTC']},now).status,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth({...heartbeat,sampledAssetCount:7},now).status,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth({...heartbeat,failedAssets:['ETH']},now).status,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth({...heartbeat,failedAssets:null},now).status,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth({...heartbeat,sampledAssetCount:8,failedAssets:[]},now).status,'COLLECTOR_FRESH');
 });
