@@ -152,3 +152,15 @@ test('quote that arrives after the exchange close cannot authorize paper executi
   }})})});
  assert.equal(result,null);
 });
+
+test('paper quote timestamps reflect HTTP receipt rather than request initiation',async()=>{
+ const requestedAt=100000,receivedAt=101250;
+ const observed=await fetchOmegaLiveQuote({ticker:'BTC-ROUND',nowMs:requestedAt,clock:()=>receivedAt,
+  fetchImpl:async()=>({ok:true,json:async()=>({market:{
+   ticker:'BTC-ROUND',status:'active',yes_bid_dollars:'0.44',yes_ask_dollars:'0.45',
+   no_bid_dollars:'0.54',no_ask_dollars:'0.55'
+  }})})});
+ assert.ok(observed);
+ assert.equal(observed.asOfMs,receivedAt);
+ assert.notEqual(observed.asOfMs,requestedAt);
+});
