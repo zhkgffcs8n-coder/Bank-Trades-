@@ -76,7 +76,7 @@ export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fet
    const v=d===undefined?Number(raw)/100:Number(raw);
    return Number.isFinite(v)&&v<1&&(allowZero?v>=0:v>0)?v:NaN;
   };
-  const quote={ticker,asOfMs:nowMs,yesAskDollars:parse(market.yes_ask_dollars,market.yes_ask),
+  // The quote becomes observable to the simulator only when the HTTP response\n  // has arrived, not when the request was initiated. This timestamp is a\n  // receipt time, not an exchange-origin market-data timestamp.\n  const quote={ticker,asOfMs:receivedAtMs,yesAskDollars:parse(market.yes_ask_dollars,market.yes_ask),
    noAskDollars:parse(market.no_ask_dollars,market.no_ask),
    yesBidDollars:parse(market.yes_bid_dollars,market.yes_bid,true),
    noBidDollars:parse(market.no_bid_dollars,market.no_bid,true)};
