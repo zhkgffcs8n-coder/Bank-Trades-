@@ -4,6 +4,13 @@ import {blobWindow} from '../../src/blob-window.mjs';
 export default async req=>{
  if(req.method!=='GET')return new Response(null,{status:405});
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
+ const ticker=new URL(req.url).searchParams.get('ticker');
+ if(ticker!==null){
+  if(!/^KX(?:BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)15M-[A-Z0-9-]{1,55}$/.test(ticker))
+   return Response.json({error:'INVALID_TICKER'},{status:400});
+  const audit=await db.get('scalp-hunter/entry-audit/v15/'+ticker,{type:'json'});
+  return Response.json({ticker,audit,mode:'PAPER_ONLY'},{headers:{'cache-control':'no-store'}});
+ }
  const [predictions,outcomes,paper,open,experimental,experimentalOutcomes,diagnostics]=await Promise.all([
   blobWindow(db,{prefix:'scalp-hunter/predictions/',limit:60}),
   blobWindow(db,{prefix:'scalp-hunter/outcomes/',limit:60}),
@@ -34,7 +41,7 @@ export default async req=>{
   }
  }
  for(const engine of Object.values(engines))engine.averageNet=engine.modeledExits?engine.net/engine.modeledExits:null;
- const paperEngines=Object.fromEntries(['A','B','C'].map(name=>[name,{open:0,closed:0,wins:0,losses:0,net:0,totalDurationMs:0,drawdown:0}]));
+ const paperEngines=Object.fromEntries(['A','B','C'].map(name=>[name,{open:0,closed:0,wins:0,losses:0,net:0,totalEntry:0,totalDurationMs:0,drawdown:0}]));
  const completed=[];
  for(let i=0;i<paper.blobs.length;i+=10){
   const rows=await Promise.all(paper.blobs.slice(i,i+10).map(blob=>db.get(blob.key,{type:'json'})));
@@ -43,7 +50,7 @@ export default async req=>{
  const peaks={A:0,B:0,C:0};
  for(const row of completed.sort((a,b)=>a.closedAt-b.closedAt||a.ticker.localeCompare(b.ticker))){
    const engine=paperEngines[row.name];
-   engine.closed++;engine.net+=row.net;
+   engine.closed++;engine.net+=row.net;engine.totalEntry+=row.ask;
    engine.wins+=Number(row.net>0);engine.losses+=Number(row.net<0);
    engine.totalDurationMs+=row.closedAt-row.at;
    peaks[row.name]=Math.max(peaks[row.name],engine.net);
@@ -57,8 +64,11 @@ export default async req=>{
    }
   }
  }
- for(const engine of Object.values(paperEngines))
+ for(const engine of Object.values(paperEngines)){
   engine.averageDurationMs=engine.closed?engine.totalDurationMs/engine.closed:null;
+  engine.averageEntry=engine.closed?engine.totalEntry/engine.closed:null;
+  engine.winRate=engine.closed?engine.wins/engine.closed:null;
+ }
  return Response.json({experimental:{predictionRecords:experimental.blobs.length,outcomeRecords:experimentalOutcomes.blobs.length,
   scope:experimental.cursor||experimentalOutcomes.cursor?'FIRST_PAGE_ONLY':'COMPLETE'},paper:{scope:paper.cursor||open.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines:paperEngines},
   diagnostics:Object.fromEntries(diagnostics),mode:'SHADOW_ONLY',scope:predictions.cursor||outcomes.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines},

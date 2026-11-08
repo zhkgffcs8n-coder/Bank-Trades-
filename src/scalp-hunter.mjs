@@ -8,13 +8,13 @@ const key=(name,side,ask,horizon)=>[name,side,Math.min(9,Math.floor(ask*10)),hor
 const leg=(depth,side)=>side==='UP'?depth.yes:depth.no;
 const opposite=(depth,side)=>side==='UP'?depth.no:depth.yes;
 
-function setup(snapshot,depth,name,side){
+function setup(snapshot,depth,name,side,early=false){
  if(snapshot.spread>.05||snapshot.imbalance===null||snapshot.expiresAt-snapshot.at<90000)return null;
  const sign=side==='UP'?1:-1;
  const ask=1-opposite(depth,side).price;
  const bid=leg(depth,side).price;
  if(ask<.01-1e-9||ask>.99+1e-9||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
- const supported=name==='A'?sign*snapshot.imbalance>=.2&&sign*snapshot.acceleration>=.01:
+ const supported=early?snapshot.early?.[name]?.[side]:name==='A'?sign*snapshot.imbalance>=.2&&sign*snapshot.acceleration>=.01:
   name==='B'?sign*snapshot.velocity>=.02&&sign*snapshot.breakout>0:
   snapshot.radar===side+' FLIP WATCH';
  return supported?ask:null;
@@ -23,10 +23,10 @@ function setup(snapshot,depth,name,side){
 export function observeScalpHunter(tape,snapshot,depth,ideas={},experimental={}){
  if(!snapshot||!depth?.yes||!depth?.no||snapshot.at!==depth.at||snapshot.imbalance===null)return tape;
  if(tape.some(row=>row.at===snapshot.at&&row.ticker===snapshot.ticker))return tape;
- const setups=names.flatMap(name=>sides.flatMap(side=>{
-  const ask=setup(snapshot,depth,name,side);
-  return ask===null?[]:[{name,side,ask}];
- }));
+ const setups=names.flatMap(name=>sides.flatMap(side=>[false,true].flatMap(early=>{
+  const ask=setup(snapshot,depth,name,side,early);
+  return ask===null?[]:[{name:early?name+'-early':name,side,ask}];
+ })));
  return [...tape,{ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
   yes:depth.yes,no:depth.no,setups,ideas,experimental}].slice(-1440);
 }
@@ -87,12 +87,12 @@ export function forecastScalpHunter(snapshot,depth,profile,diagnostics={},experi
  if(!snapshot||!depth||snapshot.at!==depth.at||snapshot.imbalance===null)return {};
  return Object.fromEntries(names.map(name=>{
   const checks=diagnostics[name]=[];
-  const ideas=sides.flatMap(side=>{
-   const ask=setup(snapshot,depth,name,side);
-   if(ask===null){checks.push({side,reason:'NO_EXECUTABLE_SETUP'});return [];}
+  const ideas=sides.flatMap(side=>[false,true].flatMap(early=>{
+   const ask=setup(snapshot,depth,name,side,early);
+   if(ask===null){checks.push({side,early,reason:'NO_EXECUTABLE_SETUP'});return [];}
    return horizons.flatMap(horizon=>{
-    const sample=profile[key(name,side,ask,horizon)];
-    const evidence={side,ask,horizonSeconds:horizon,sampleSize:sample?.n??0};
+    const sample=profile[key(early?name+'-early':name,side,ask,horizon)];
+    const evidence={side,ask,early,horizonSeconds:horizon,sampleSize:sample?.n??0};
     let reason;
     if(snapshot.expiresAt-snapshot.at<(horizon+30)*1000)reason='INSUFFICIENT_TIME';
     else if(!sample||sample.n<12){
@@ -114,10 +114,10 @@ export function forecastScalpHunter(snapshot,depth,profile,diagnostics={},experi
      checks.push({...evidence,reason:'INSUFFICIENT_NET_TARGET'});return [];
     }
     checks.push({...evidence,reason:'QUALIFIED'});
-    return [{side,ask,target,horizonSeconds:horizon,observedHitRate:sample.wins/sample.n,
+    return [{side,ask,target,early,horizonSeconds:horizon,observedHitRate:sample.wins/sample.n,
      sampleSize:sample.n,estimatedNet:sample.meanNet,mode:'SHADOW_ONLY'}];
    });
-  });
+  }));
   return [name,ideas.sort((a,b)=>b.estimatedNet-a.estimatedNet)[0]??null];
  }));
 }

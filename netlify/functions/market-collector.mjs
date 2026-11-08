@@ -1,3 +1,4 @@
+import {auditScalpEntry,earlyScalpSignals} from '../../src/scalp-entry-audit.mjs';
 import {normalizeCoinbaseTape,freezePredatorSample,scorePredatorSamples} from '../../src/predator-forward.mjs';
 import {hunterEngines,openHunterPaper,monitorHunterPaper,settleHunterPaper} from '../../src/scalp-hunter-paper.mjs';
 import {observeScalpHunter,collectComparableRounds,mergeComparableRounds,profileComparableRounds,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
@@ -170,7 +171,7 @@ export default async()=>{
     const diagnosticsKey='scalp-hunter/diagnostics/'+asset;
     if(!candidate)await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:'WAIT_SAME_ROUND_HISTORY'});
     if(asset==='BTC'||trackExit||candidate||Object.values(open||{}).some(position=>!position.closedAt)){
-     const tapeRead=asset==='BTC'?fetch('https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100',
+     const tapeRead=['BTC','ETH'].includes(asset)?fetch('https://api.exchange.coinbase.com/products/'+asset+'-USD/trades?limit=100',
       {signal:AbortSignal.timeout(1600)}).then(r=>r.ok?r.json():null).catch(()=>null):null;
      let depth=null,depthStatus='ORDERBOOK_UNAVAILABLE';
      try{
@@ -183,9 +184,9 @@ export default async()=>{
       }
      }catch{} // Quotes without depth cannot be used to simulate an early fill.
      const bookQuote=scalperQuoteFromDepth(record,depth);
+     const payload=await tapeRead;
      if(asset==='BTC'){
       try{
-       const payload=await tapeRead;
        const observedAt=Date.now();
        const observation=freezePredatorSample({ticker:m.ticker,now:observedAt,bookAt:depth?.at,
         remaining:(record.expiresAt-observedAt)/1000,expiresAt:record.expiresAt,
@@ -217,6 +218,10 @@ export default async()=>{
      if(candidate&&(!depth||snapshot?.at!==depth.at))
       await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:bookQuote?'WAIT_BOOK_HISTORY':depthStatus});
      if(bookQuote&&snapshot?.imbalance!==null&&snapshot?.at===depth.at){
+      const trades=normalizeCoinbaseTape(payload,snapshot.at).filter(row=>row.time>=snapshot.at-3000);
+      const volume=trades.reduce((sum,row)=>sum+Math.abs(row.flow),0);
+      const flow=trades.length>=4&&volume>0?trades.reduce((sum,row)=>sum+row.flow,0)/volume:null;
+      snapshot.early=earlyScalpSignals(snapshot,flow);
       const tapeKey='scalp-hunter/tape/'+asset;
       const tape=await db.get(tapeKey,{type:'json'})||[];
       const archiveKey='scalp-hunter/comparable-rounds/v1/'+asset;
@@ -254,6 +259,9 @@ export default async()=>{
        await db.setJSON('scalp-hunter/outcomes/'+outcome.ticker+'/'+outcome.entryAt+'/'+outcome.name,
         outcome,{onlyIfNew:true});
       }
+      const auditKey='scalp-hunter/entry-audit/v15/'+m.ticker;
+      const priorAudit=await db.get(auditKey,{type:'json'});
+      await db.setJSON(auditKey,auditScalpEntry(priorAudit,snapshot,depth,checks,positions));
       await db.setJSON(tapeKey,observeScalpHunter(tape,snapshot,depth,ideas,experimental));
       await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas,experimental,positions});
      }
