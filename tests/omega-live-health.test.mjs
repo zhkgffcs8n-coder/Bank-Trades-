@@ -14,6 +14,14 @@ test('stale or incomplete collection cannot be called healthy',()=>{
 });
 
 test('collector numeric timestamp',()=>{assert.equal(omegaLiveHealth({...heartbeat,completedAt:now-60000},now).status,'COLLECTOR_FRESH');});
+test('future collector timestamps never masquerade as zero-second-old data',()=>{
+ for(const completedAt of [now+1,new Date(now+60000).toISOString()]){
+  const result=omegaLiveHealth({...heartbeat,completedAt},now);
+  assert.equal(result.status,'NOT_VERIFIED');
+  assert.equal(result.collectorAgeSeconds,null);
+  assert.equal(result.realOrdersAuthorized,false);
+ }
+});
 test('collector health requires eight distinct expected markets, not repeated or unknown assets',()=>{
  const repeated={...heartbeat,sampledAssets:Array(8).fill('BTC')};
  const repeatedHealth=omegaLiveHealth(repeated,now);
