@@ -4,13 +4,14 @@ import {blobWindow} from '../../src/blob-window.mjs';
 export default async req=>{
  if(req.method!=='GET')return new Response(null,{status:405});
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
- const [samples,results,latest,stream,streamSamples,streamResults]=await Promise.all([
+ const [samples,results,latest,stream,streamSamples,streamResults,worker]=await Promise.all([
   blobWindow(db,{prefix:'predator-v11/samples/',limit:60}),
   blobWindow(db,{prefix:'predator-v11/results/',limit:60}),
   db.get('predator-v11/latest',{type:'json'}),
   db.get('predator-v12/health',{type:'json'}),
   blobWindow(db,{prefix:'predator-v12/samples/',limit:60}),
-  blobWindow(db,{prefix:'predator-v12/results/',limit:60})
+  blobWindow(db,{prefix:'predator-v12/results/',limit:60}),
+  db.get('predator-v13/health',{type:'json'})
  ]);
  const horizons={};
  let skippedProfitable=0;
@@ -31,7 +32,7 @@ export default async req=>{
  }
  return Response.json({mode:'SAMPLED_SHADOW',ordersAuthorized:false,latest,sampleRecords:samples.blobs.length,
   scoredRecords:results.blobs.length,scope:samples.cursor||results.cursor?'FIRST_PAGE_ONLY':'COMPLETE',
-  skippedProfitable,horizons,
+  skippedProfitable,horizons,worker:worker?{...worker,fresh:Date.now()-worker.at>=0&&Date.now()-worker.at<=45000}:null,
   streaming:{...stream,sampleRecords:streamSamples.blobs.length,scoredRecords:streamResults.blobs.length,
    scope:streamSamples.cursor||streamResults.cursor?'FIRST_PAGE_ONLY':'COMPLETE'}},{headers:{'cache-control':'public, max-age=30'}});
 };
