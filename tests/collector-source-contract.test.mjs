@@ -63,18 +63,20 @@ test('gross Primal reports, lesson journal and research gates use only strictly 
 });
 
 test('collector writes training intent before either model and refuses ambiguous replay',()=>{
- assert.match(collector,/import \{pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent\} from/);
+ assert.match(collector,/import \{pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent,claimTrainingIntent\} from/);
  assert.match(collector,/const priorIntent=await db\.get\('training\/intent\/v1\/'\+rec\.ticker/);
  assert.match(collector,/if\(!cached&&!learnedMarker&&!priorIntent&&\(targets\.global\|\|targets\.asset\)\)/);
- const intentWrite=collector.indexOf("await db.setJSON('training/intent/v1/'+rec.ticker,intent);");
+ const intentWrite=collector.indexOf("const claimed=await claimTrainingIntent(db,'training/intent/v1/'+rec.ticker,intent,claimId);");
  assert.match(collector,/const intent=trainingWriteIntent\(rec,result,targets,model,assetModel,now\)/);
+ assert.match(collector,/const claimId=randomUUID\(\)/);
+ assert.match(collector,/if\(!claimed\)return;/);
  const globalWrite=collector.indexOf("await db.setJSON('training/model',model);",intentWrite);
  const assetWrite=collector.indexOf("await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);",intentWrite);
  const learnedWrite=collector.indexOf("await db.setJSON('training/learned/v1/'+rec.ticker",intentWrite);
  assert.ok(intentWrite>0&&globalWrite>intentWrite&&assetWrite>intentWrite&&learnedWrite>globalWrite&&learnedWrite>assetWrite);
  assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,trustedCached,priorIntent\)/);
  assert.match(collector,/validCommittedTrainingMarker\(learnedMarker,rec,result,priorIntent\)/);
- assert.match(collector,/observationDigest:intent\.observationDigest,intentStartedAt:intent\.startedAt/);
+ assert.match(collector,/observationDigest:intent\.observationDigest,intentStartedAt:intent\.startedAt,claimId/);
  assert.match(collector,/priorIntent\?'INTERRUPTED_TRAINING_INTENT'/);
  assert.match(collector,/learnedMarker\?'CONFLICTING_LEARNED_MARKER'/);
 });
