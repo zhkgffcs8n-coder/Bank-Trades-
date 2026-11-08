@@ -59,11 +59,15 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   // paper action. Never surface its net dollars as realized paper profit.
   paperLastAction:(()=>{
    const at=paperHeartbeat?.updatedAtMs;
-   return Number.isSafeInteger(at)&&at>0&&at<=nowMs&&
-    ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.action:'NONE_VERIFIED';
+   if(!Number.isSafeInteger(at)||at<=0||at>nowMs)return 'NONE_VERIFIED';
+   if(['PAPER_ENTRY','PAPER_EXIT'].includes(paperHeartbeat?.action))return paperHeartbeat.action;
+   return paperHeartbeat?.action==='PAPER_SETTLED'?'PAPER_SETTLEMENT_UNVERIFIED':'NONE_VERIFIED';
   })(),
   paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
    ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.updatedAtMs:null,
+  // A self-reported settlement heartbeat is diagnostic only; expose it as
+  // unverified even when it carries an officiallySettled flag. The read-only
+  // paper summary must independently reconcile the persisted official outcome.
   // A standalone PAPER_SETTLED heartbeat is not independent official
   // settlement evidence: the position and the separate outcomes/ticker
   // record must agree before realized settlement P&L is reported. Only

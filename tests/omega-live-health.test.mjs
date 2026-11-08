@@ -41,7 +41,7 @@ test('paper monitoring counters are read-only, bounded and not fabricated',()=>{
  assert.equal(result.omegaPaperMonitoring.settled,1);
  assert.equal(result.omegaPaperMonitoring.exits,null);
  assert.equal(result.omegaPaperMonitoring.holds,null);
- assert.equal(result.paperLastAction,'PAPER_SETTLED');
+ assert.equal(result.paperLastAction,'PAPER_SETTLEMENT_UNVERIFIED');
  assert.equal(result.omegaExternalProvidersRunning,false);
  assert.equal(result.realOrdersAuthorized,false);
 });
@@ -144,11 +144,24 @@ test('settlement heartbeat alone never publishes independently unverified paper 
  const settled={action:'PAPER_SETTLED',updatedAtMs:now-1000,netDollars:12.34,
   ticker:'KXBTC15M-UNRECONCILED',officiallySettled:true,realOrdersAuthorized:false};
  const result=omegaLiveHealth(heartbeat,now,null,settled);
- assert.equal(result.paperLastAction,'PAPER_SETTLED');
+ assert.equal(result.paperLastAction,'PAPER_SETTLEMENT_UNVERIFIED');
  assert.equal(result.paperLastActionAtMs,now-1000);
  assert.equal(result.paperLastActionNetDollars,null,
   'a self-reported settlement marker is not independent official outcome evidence');
  const simulatedExit=omegaLiveHealth(heartbeat,now,null,{...settled,action:'PAPER_EXIT',netDollars:-.42});
  assert.equal(simulatedExit.paperLastActionNetDollars,-.42);
  assert.equal(result.realOrdersAuthorized,false);
+});
+
+
+test('self-reported settlement flags cannot turn a heartbeat into verified official paper settlement',()=>{
+ for(const claimed of [undefined,false,true]){
+  const action={action:'PAPER_SETTLED',updatedAtMs:now-500,
+   netDollars:99,officiallySettled:claimed,ticker:'KXBTC15M-NO-INDEPENDENT-OUTCOME'};
+  const health=omegaLiveHealth(heartbeat,now,null,action);
+  assert.equal(health.paperLastAction,'PAPER_SETTLEMENT_UNVERIFIED');
+  assert.equal(health.paperLastActionAtMs,now-500);
+  assert.equal(health.paperLastActionNetDollars,null);
+  assert.equal(health.realOrdersAuthorized,false);
+ }
 });
