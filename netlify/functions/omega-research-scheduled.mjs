@@ -93,15 +93,18 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  let observation=selectOmegaObservation({latest,nowMs,asset});
  let freshQuote=null;
  if(observation&&configured.length>=2&&selectedProviders.length){
-  freshQuote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
-  observation=freshQuote?selectOmegaObservation({asset,nowMs,latest:{...latest,observedAt:freshQuote.asOfMs,yesBid:freshQuote.yesBidDollars,yesAsk:freshQuote.yesAskDollars,noBid:freshQuote.noBidDollars,noAsk:freshQuote.noAskDollars}}):null;
+  // Check expiry against the clock AFTER the network read. A response that
+  // arrives after close must not trigger paid provider calls or research.
+  freshQuote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl,clock});
+  const observationAtMs=clock();
+  observation=freshQuote?selectOmegaObservation({asset,nowMs:observationAtMs,latest:{...latest,observedAt:freshQuote.asOfMs,yesBid:freshQuote.yesBidDollars,yesAsk:freshQuote.yesAskDollars,noBid:freshQuote.noBidDollars,noAsk:freshQuote.noAskDollars}}):null;
  }
  let report;
  if(!observation)report={status:'NO_FRESH_MARKET_OBSERVATION',asset,providersConfigured:configured.length,ordersAuthorized:false};
  else if(configured.length<2)report={status:'PROVIDERS_UNCONFIGURED',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
  else if(!selectedProviders.length)report={status:'PROVIDERS_COOLING_DOWN',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
  else{
-  const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:selectedProviders});
+  const result=await runOmegaResearchRound({...observation,nowMs:clock(),env,fetchImpl,providers:selectedProviders});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
    providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
    disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,
