@@ -106,7 +106,7 @@ test('scheduled archive scores strict settlements once and excludes late forecas
  const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
  const data=new Map();
  for(const [ticker,recordedAtMs] of [['BTC',95000],['ETH',110001]]){
-  data.set('omega/predictions/v1/'+ticker+'/1',{ticker,recordedAtMs,status:'SHADOW_RESEARCH',accepted:forecasts,baseline:.5});
+  data.set('omega/predictions/v1/'+ticker+'/1',{ticker,recordedAtMs,expiresAtMs:100000,status:'SHADOW_RESEARCH',accepted:forecasts,baseline:.5});
   data.set('outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()});
  }
  const db={get:async key=>data.get(key),setJSON:async(key,value,options)=>{
@@ -123,7 +123,7 @@ test('OMEGA archived score rejects provider lookahead relative to frozen forecas
  const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
  const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
  const ticker='BTC-LOOKAHEAD',data=new Map([
-  ['omega/predictions/v1/'+ticker+'/1',{ticker,status:'SHADOW_RESEARCH',recordedAtMs:95000,
+  ['omega/predictions/v1/'+ticker+'/1',{ticker,status:'SHADOW_RESEARCH',recordedAtMs:95000,expiresAtMs:100000,
    accepted:[{provider:'gpt',upProbability:.9,observedAtMs:96000},{provider:'gemini',upProbability:.8,observedAtMs:94000}],baseline:.5}],
   ['outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()}]
  ]);
@@ -156,4 +156,33 @@ test('OMEGA research holdout excludes training labels unavailable before holdout
  assert.equal(safe.leaderboard[0].trainingRounds,3);
  assert.equal(safe.leaderboard[0].holdoutRounds,1);
  assert.equal(safe.promoted,false);
+});
+
+test('OMEGA official settlement cannot validate post-expiry or unproven forecast timing',async()=>{
+ const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const cases=[
+  {ticker:'POST-EXPIRY',recordedAtMs:105000,expiresAtMs:100000},
+  {ticker:'MISSING-EXPIRY',recordedAtMs:95000},
+  {ticker:'SETTLED-BEFORE-EXPIRY',recordedAtMs:95000,expiresAtMs:120000},
+  {ticker:'VALID-PRE-EXPIRY',recordedAtMs:95000,expiresAtMs:100000}
+ ];
+ const data=new Map();
+ for(const item of cases){
+  data.set('omega/predictions/v1/'+item.ticker+'/1',{...item,status:'SHADOW_RESEARCH',
+   accepted:forecasts,baseline:.5});
+  data.set('outcomes/'+item.ticker,{ticker:item.ticker,result:'yes',
+   verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()});
+ }
+ const db={
+  async get(key){return data.get(key)||null},
+  async setJSON(key,value){data.set(key,value)},
+  async *list({prefix}){yield {blobs:[...data.keys()].filter(key=>key.startsWith(prefix))
+   .sort().map(key=>({key}))}}
+ };
+ await scoreOmegaArchive(db);
+ for(const item of cases){
+  assert.equal(data.has('omega/verified-scores/v1/'+item.ticker),
+   item.ticker==='VALID-PRE-EXPIRY',item.ticker);
+ }
 });
