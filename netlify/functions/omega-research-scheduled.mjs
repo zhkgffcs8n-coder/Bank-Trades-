@@ -104,7 +104,10 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:selectedProviders});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
    providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
-   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:clock(),ordersAuthorized:false};
+   disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,
+   // Freeze the contract expiry alongside the prediction so a settlement
+   // scorer can reject forecasts recorded after the market already closed.
+   expiresAtMs:latest.expiresAt,recordedAtMs:clock(),ordersAuthorized:false};
   // Persist the prospective forecast before attempting simulated execution.
   if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>report.recordedAtMs){
    const key='omega/predictions/v1/'+observation.marketTicker+'/'+minute;
