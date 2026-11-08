@@ -115,8 +115,21 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    // Freeze the contract expiry alongside the prediction so a settlement
    // scorer can reject forecasts recorded after the market already closed.
    expiresAtMs:latest.expiresAt,recordedAtMs:clock(),ordersAuthorized:false};
+  // Provider responses may arrive long after research began. The fusion
+  // validator checked freshness against the earlier request clock, so check
+  // every accepted observation again at the durable forecast freeze time.
+  // Never archive or paper-enter a forecast that aged out during API latency.
+  const freshAtFreeze=result.status==='SHADOW_RESEARCH'&&
+   Array.isArray(result.fusion?.accepted)&&result.fusion.accepted.length>=2&&
+   result.fusion.accepted.every(entry=>Number.isSafeInteger(entry.observedAtMs)&&
+    entry.observedAtMs>0&&entry.observedAtMs<=report.recordedAtMs&&
+    report.recordedAtMs-entry.observedAtMs<=15000);
+  if(result.status==='SHADOW_RESEARCH'&&!freshAtFreeze){
+   report.status='STALE_PROVIDER_RESEARCH';
+   report.paperStatus='FORECAST_STALE_BEFORE_FREEZE';
+  }
   // Persist the prospective forecast before attempting simulated execution.
-  if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>report.recordedAtMs){
+  if(freshAtFreeze&&latest.expiresAt>report.recordedAtMs){
    const key='omega/predictions/v1/'+observation.marketTicker+'/'+minute;
    // The immutable prospective forecast must be durably visible before paper
    // execution. A duplicate scheduled invocation must not trade against its
