@@ -5,8 +5,14 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
  const completed=typeof raw==='number'?raw:typeof raw==='string'?Date.parse(raw):NaN;
  const ageSeconds=Number.isFinite(completed)?Math.max(0,Math.floor((nowMs-completed)/1000)):null;
  const sampled=Array.isArray(heartbeat?.sampledAssets)?heartbeat.sampledAssets:[];
+ // Eight samples are not eight markets if a corrupted heartbeat repeats one
+ // asset. Require the actual collector's complete distinct market coverage.
+ const expectedAssets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
+ const distinctSampled=new Set(sampled.filter(asset=>typeof asset==='string'));
+ const fullCoverage=distinctSampled.size===expectedAssets.length&&
+  expectedAssets.every(asset=>distinctSampled.has(asset));
  const fresh=ageSeconds!==null&&completed<=nowMs&&ageSeconds<=150;
- const healthy=fresh&&heartbeat?.status==='COMPLETED'&&sampled.length>=8&&heartbeat?.trainingSucceeded===true;
+ const healthy=fresh&&heartbeat?.status==='COMPLETED'&&fullCoverage&&heartbeat?.trainingSucceeded===true;
  const omegaAt=Date.parse(omegaHeartbeat?.checkedAt||'');
  const omegaAgeSeconds=Number.isFinite(omegaAt)&&omegaAt<=nowMs?Math.floor((nowMs-omegaAt)/1000):null;
  const omegaRunning=omegaAgeSeconds!==null&&omegaAgeSeconds<=150&&omegaHeartbeat?.status==='SHADOW_RESEARCH';
@@ -24,7 +30,7 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   Number.isSafeInteger(omegaHeartbeat?.providersConfigured)&&omegaHeartbeat.providersConfigured>=2&&
   activeProviders.size>=2;
  return {status:healthy?'COLLECTOR_FRESH':'NOT_VERIFIED',collectorStatus:heartbeat?.status||'UNKNOWN',
-  collectorAgeSeconds:ageSeconds,sampledAssetCount:sampled.length,sampledAssets:sampled,
+  collectorAgeSeconds:ageSeconds,sampledAssetCount:distinctSampled.size,sampledAssets:sampled,
   trainingSucceeded:heartbeat?.trainingSucceeded===true,expectedIntervalSeconds:60,
   // These are counts for the LAST collector invocation, never lifetime totals.
   collectorLastRunCounts:Object.fromEntries([
