@@ -9,8 +9,9 @@ const validTime=x=>Number.isSafeInteger(x)&&x>0;
 // The OMEGA paper coordinator caps each entry at $5 including modeled costs.
 // A larger stored entry is not a valid position for this paper-only ledger.
 const MAX_PAPER_ENTRY_DOLLARS=5;
-export async function summarizeOmegaPaper(db,{limit=80}={}){
+export async function summarizeOmegaPaper(db,{limit=80,nowMs=Date.now()}={}){
  if(!Number.isSafeInteger(limit)||limit<1||limit>250)throw Error('Invalid paper scan limit');
+ if(!Number.isSafeInteger(nowMs)||nowMs<=0)throw Error('Invalid paper accounting time');
  const page=await blobWindow(db,{prefix:'omega/paper/v1/',limit});
  const events=[];
  let open=0,closed=0,officiallySettled=0,invalid=0;
@@ -21,11 +22,14 @@ export async function summarizeOmegaPaper(db,{limit=80}={}){
   const p=stored?.state?.positions?.[ticker];
   if(!p||p.ticker!==ticker||p.roundId!==ticker||!['UP','DOWN'].includes(p.side)||
    !Number.isSafeInteger(p.quantity)||p.quantity<=0||!validMoney(p.entryCostDollars)||
-   (p.entryCostDollars<=0||p.entryCostDollars>MAX_PAPER_ENTRY_DOLLARS+.00011)||!validTime(p.openedAtMs)){invalid++;continue;}
+   (p.entryCostDollars<=0||p.entryCostDollars>MAX_PAPER_ENTRY_DOLLARS+.00011)||
+   !validTime(p.openedAtMs)||p.openedAtMs>nowMs){invalid++;continue;}
   if(p.status==='OPEN'){open++;continue;}
   if(!['CLOSED','SETTLED'].includes(p.status)||!validMoney(p.netDollars)){invalid++;continue;}
   const at=p.status==='CLOSED'?p.closedAtMs:p.settledAtMs;
-  if(!validTime(at)||at<=p.openedAtMs){invalid++;continue;}
+  // A future-dated close or official settlement cannot be realized paper P&L
+  // at the time this read-only report is generated.
+  if(!validTime(at)||at<=p.openedAtMs||at>nowMs){invalid++;continue;}
   // A simulated bid exit cannot return more than $1 per contract before costs.
   // Treat impossible stored profits as corrupt evidence, never as paper P&L.
   // The production simulator models a fixed $0.05 exit fee and nonnegative
