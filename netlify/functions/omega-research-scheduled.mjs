@@ -23,8 +23,14 @@ export function selectOmegaObservation({latest,nowMs,asset}){
 export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch,clock=()=>nowMs}={}){
  const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
  const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider);
- const offset=minute%Math.max(1,configured.length);
- const selectedProviders=[...configured.slice(offset),...configured.slice(0,offset)].slice(0,2);
+ const previous=await db.get('omega/heartbeat',{type:'json'});
+ const checks=new Map((previous?.providerStatus||[]).map(entry=>[entry.provider,entry]));
+ const available=configured.filter(provider=>{
+  const retryAt=checks.get(provider)?.retryAtMs;
+  return !Number.isSafeInteger(retryAt)||retryAt<=nowMs;
+ });
+ const offset=minute%Math.max(1,available.length);
+ const selectedProviders=[...available.slice(offset),...available.slice(0,offset)].slice(0,2);
  // Monitor already-open paper positions independently of provider availability and asset rotation.
  // Only active contracts with independently fetched executable quotes can be exited.
  const paperMonitoring={open:0,exits:0,holds:0,settled:0,unpriced:0,backfilled:0};
@@ -81,36 +87,41 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  const latest=await db.get('latest/'+asset,{type:'json'});
  let observation=selectOmegaObservation({latest,nowMs,asset});
  let freshQuote=null;
- if(observation&&configured.length>=2){
+ if(observation&&configured.length>=2&&selectedProviders.length){
   freshQuote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
   observation=freshQuote?selectOmegaObservation({asset,nowMs,latest:{...latest,observedAt:freshQuote.asOfMs,yesBid:freshQuote.yesBidDollars,yesAsk:freshQuote.yesAskDollars,noBid:freshQuote.noBidDollars,noAsk:freshQuote.noAskDollars}}):null;
  }
  let report;
  if(!observation)report={status:'NO_FRESH_MARKET_OBSERVATION',asset,providersConfigured:configured.length,ordersAuthorized:false};
  else if(configured.length<2)report={status:'PROVIDERS_UNCONFIGURED',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
+ else if(!selectedProviders.length)report={status:'PROVIDERS_COOLING_DOWN',asset,ticker:observation.marketTicker,providersConfigured:configured.length,ordersAuthorized:false};
  else{
   const result=await runOmegaResearchRound({...observation,nowMs,env,fetchImpl,providers:selectedProviders});
   report={status:result.status,asset,ticker:observation.marketTicker,providersConfigured:configured.length,
    providerStatus:result.providerStatus,reasons:result.fusion?.reasons||[],accepted:result.fusion?.accepted||[],baseline:result.fusion?.marketBaseline??null,
    disagreement:result.fusion?.modelDisagreement??null,observedAtMs:observation.marketSnapshot.observedAt,recordedAtMs:clock(),ordersAuthorized:false};
-  // Paper execution is separate from research. Never submit real orders.
-  const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl});
-  if(quote){
-   const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,
-    signal:omegaPaperSignal(result,quote),quote,nowMs});
-   report.paperStatus=paper.status;
-  }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
-  // Append-only round snapshot: do not overwrite a forecast after settlement.
+  // Persist the prospective forecast before attempting simulated execution.
   if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>report.recordedAtMs){
    const key='omega/predictions/v1/'+observation.marketTicker+'/'+minute;
    await db.setJSON(key,report,{onlyIfNew:true});
+   const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs:clock(),fetchImpl});
+   const executionAtMs=clock();
+   if(quote&&executionAtMs<latest.expiresAt){
+    const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,
+     signal:omegaPaperSignal(result,quote),quote,nowMs:executionAtMs});
+    report.paperStatus=paper.status;
+   }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
   }
  }
  // Keep the last actual provider check visible on runs that skip forecasts.
- const previous=await db.get('omega/heartbeat',{type:'json'});
  const checkedAt=new Date(nowMs).toISOString(), checked=report.providerStatus||[];
- const checks=new Map((previous?.providerStatus||[]).map(entry=>[entry.provider,entry]));
- for(const entry of checked)checks.set(entry.provider,{...entry,checkedAt});
+ for(const entry of checked){
+  const permanentFailure=entry.status==='INVALID_KEY_FORMAT'||[401,403].includes(entry.httpStatus)||
+   ['insufficient_quota','API_KEY_INVALID','BILLING_DISABLED'].includes(entry.errorCode);
+  const cooldown=permanentFailure?15*60000:2*60000;
+  const retry=entry.status==='RESEARCH_FORECAST'?{}:{retryAtMs:nowMs+cooldown};
+  checks.set(entry.provider,{...entry,checkedAt,...retry});
+ }
  report.lastProviderCheckAt=checked.length?checkedAt:previous?.lastProviderCheckAt||null;
  report.providerStatus=configured.map(provider=>checks.get(provider)||{provider,status:'AWAITING_CHECK'});
  report.paperMonitoring=paperMonitoring;

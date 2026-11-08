@@ -122,3 +122,27 @@ test('legacy older-round positions are backfilled without a duplicate entry',asy
  assert.equal(db.values.get('omega/paper/open/v1/'+ticker).realOrdersAuthorized,false);
  assert.equal([...db.values.keys()].filter(k=>k==='omega/paper/v1/'+ticker).length,1);
 });
+
+test('provider circuit opens on quota exhaustion and probes again after cooldown',async()=>{
+ const data=new Map([['latest/'+asset,sample]]);
+ const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>data.set(key,value)};
+ const env={OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'};
+ let gptCalls=0;
+ const fetchImpl=async url=>{
+  if(url.includes('/markets/'))return {ok:true,json:async()=>({market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}})};
+  if(url.includes('openai')&&++gptCalls===1)return {ok:false,status:429,json:async()=>({error:{type:'insufficient_quota'}})};
+  return {ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})};
+ };
+ const initial=await runOmegaScheduled({nowMs:now,db,env,fetchImpl});
+ assert.equal(initial.providerStatus.find(x=>x.provider==='gpt').retryAtMs,now+900000);
+ const rotated=await runOmegaScheduled({nowMs:now,db,env,fetchImpl});
+ assert.equal(gptCalls,1);
+ assert.equal(rotated.status,'INSUFFICIENT_DATA');
+ assert.equal([...data.keys()].some(key=>key.startsWith('omega/predictions/')),false);
+ const later=now+16*60000;
+ data.set('latest/'+asset,{...sample,observedAt:later,expiresAt:later+500000});
+ const recovered=await runOmegaScheduled({nowMs:later,db,env,fetchImpl});
+ assert.equal(gptCalls,2);
+ assert.equal(recovered.status,'SHADOW_RESEARCH');
+ assert.equal(recovered.providerStatus.find(x=>x.provider==='gpt').retryAtMs,undefined);
+});
