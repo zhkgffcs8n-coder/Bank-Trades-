@@ -25,7 +25,11 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
  const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider);
  const previous=await db.get('omega/heartbeat',{type:'json'});
- const checks=new Map((previous?.providerStatus||[]).map(entry=>[entry.provider,entry]));
+ // A malformed persisted heartbeat must not prevent monitoring open paper positions.
+ // Ignore invalid provider diagnostics rather than crashing the scheduled run.
+ const priorChecks=Array.isArray(previous?.providerStatus)?previous.providerStatus:[];
+ const checks=new Map(priorChecks.filter(entry=>entry&&typeof entry.provider==='string'&&
+  configured.includes(entry.provider)).map(entry=>[entry.provider,entry]));
  const available=configured.filter(provider=>{
   const retryAt=checks.get(provider)?.retryAtMs;
   return !Number.isSafeInteger(retryAt)||retryAt<=nowMs;
