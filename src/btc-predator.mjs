@@ -55,7 +55,8 @@ export function advancePredatorWatch(watch,observation){
  const weakening=watch.warningMs!==undefined&&net>0&&(
   1-observation.yes.price-observation.no.price>.050001||
   observation.sourceEventAt&&observation.side!==watch.side&&Math.abs(observation.flow)>=.45);
- const reason=bid>=watch.target?'TAKE PROFIT':net<=-.07?'SELL FAST':
+ const stop=Number.isFinite(watch.entryBid)?bid-watch.entryBid<=-.07+1e-9:net<=-.07;
+ const reason=bid>=watch.target&&net>(watch.version===16?.01:0)?'TAKE PROFIT':stop?'SELL FAST':
   weakening||peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
  return {...watch,peakNet,baseline,bid,net,...(reason?{reason,closedAt:now,
   baselineNet:baseline?netAt(baseline.ask,bid):null,leadMs:baseline?baseline.at-watch.at:null}:{})};
@@ -72,7 +73,7 @@ export function confirmPredatorEntry(watch, observation){
  if(!(ask>0&&ask<1)||
     Math.abs(observation.flow)<.45||sign*observation.imbalance<.12||
     sign*observation.acceleration<=0||netAt(ask,watch.target)<.025)return null;
- return {...watch,ask,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,
+ return {...watch,ask,entryBid:priceFor(observation,watch.side).price,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,
   warningMs:observation.now-watch.at,deadline:observation.now+30000,
   entryCost:cost(ask),estimatedNet:netAt(ask,watch.target)};
 }

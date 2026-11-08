@@ -252,7 +252,7 @@ export default async()=>{
       const positions=open||{};
       if(Object.values(ideas).some(Boolean)){
        for(const name of hunterEngines){
-        if(ideas[name]?.mode==='SHADOW_ONLY'&&ideas[name].sampleSize>=12&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name]);
+        if(ideas[name]?.mode==='SHADOW_ONLY'&&ideas[name].sampleSize>=12&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name],depth);
        }
        await db.setJSON(paperKey,positions);
        await db.setJSON('scalp-hunter/predictions/'+m.ticker+'/'+bucket,

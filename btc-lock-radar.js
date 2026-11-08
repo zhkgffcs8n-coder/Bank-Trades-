@@ -98,11 +98,11 @@ async function refreshPredatorReport(){
    ' · '+burst.samples+' samples in last burst':'';
   predatorServerStatus.textContent='BTC PREDATOR · Persistent worker heartbeat unavailable'+fallback;
   const worker=report.worker;
-  if(worker?.version===15){
-   const stats=worker.voltV15;
+  if(worker?.version===15||worker?.version===16){
+   const stats=worker.version===16?worker.voltV16:worker.voltV15;
    const position=worker.latest?.position;
    const watch=worker.latest?.watch;
-   predatorServerStatus.textContent='V15 BTC PREDATOR ULTRA · VOLT B · '+
+   predatorServerStatus.textContent='V'+worker.version+' BTC PREDATOR · VOLT B · '+
     (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale'+fallback);
    if(worker.fresh&&position){
     const age=Date.now()-worker.latest.decisionAt;
@@ -172,7 +172,7 @@ function trackShadowEngine(coin,ticker,name,engine,snapshot,now){
   const ask=1-opposite?.price;
   if(book?.ticker===ticker&&book.at>=snapshot.at&&book.at<=now&&now-book.at<=5000&&
      opposite.size>=1&&1-book.yes.price-book.no.price<=.050001&&ask-engine.ask<=.020001){
-   position={ticker,side:engine.decision,ask,referenceAsk:engine.ask,at:book.at,expiresAt:snapshot.expiresAt,peak:0};
+   position={ticker,side:engine.decision,ask,referenceAsk:engine.ask,entryBid:(engine.decision==='UP'?book.yes:book.no).price,at:book.at,expiresAt:snapshot.expiresAt,peak:0};
    round.positions[name]=position;
   }
  }
@@ -182,7 +182,7 @@ function trackShadowEngine(coin,ticker,name,engine,snapshot,now){
  const net=scalpNet(position,bid);
  position.bid=bid;position.net=net;
  position.peak=Math.max(position.peak,net);
- const reason=net>=.08?'TAKE_PROFIT':net<=-.07?'STOP_LOSS':
+ const reason=net>=.08?'TAKE_PROFIT':bid-position.entryBid<=-.07+1e-9?'STOP_LOSS':
   position.peak>=.05&&position.peak-net>=.04?'TRAIL_EXIT':
   position.expiresAt-now<=30000?'TIME_EXIT':null;
  if(reason){position.reason=reason;position.closedAt=now;}
@@ -254,7 +254,7 @@ function paintV8(){
    const liveBid=closed?null:currentScalpBid(selectedCoin,position,now);
    if(closed){
     if(Number.isFinite(position.bid))detail.textContent+=' · exit '+(position.bid*100).toFixed(1)+'%';
-    if(Number.isFinite(position.net))detail.textContent+=' · realized modeled net '+(position.net*100).toFixed(1)+'¢';
+    if(Number.isFinite(position.net))detail.textContent+=' · CLOSED · NET '+(position.net>=0?'PROFIT ':'LOSS ')+trackerNet(position.net);
    }else if(liveBid!==null){
     detail.textContent+=' · bid '+(liveBid*100).toFixed(1)+'% · modeled net '+(scalpNet(position,liveBid)*100).toFixed(1)+'¢';
    }else detail.textContent+=' · waiting for fresh exit bid';

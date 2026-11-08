@@ -1,3 +1,4 @@
+import {observeVoltHorizons,forecastVoltHorizons} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import WebSocket from 'ws';
@@ -95,6 +96,7 @@ async function settle(now){
 }
 async function run(){
  try{state=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error;}
+ state.voltV16Cells??={};
  tape=openPredatorTape();
  while(!stopping){
   const now=Date.now(),spot=tape.snapshot();
@@ -124,7 +126,9 @@ async function run(){
      remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades:spot.tape,monitoring:Number.isFinite(state.positions[market.ticker]?.warningMs)}):null;
    latest.quoteFresh=Boolean(observation);
    const round=state.rounds[market.ticker];
+   if(round&&!round.voltV16Profile){round.voltV16Profile=structuredClone(state.voltV16Cells);dirty=true;}
    const position=state.positions[market.ticker];
+   if(round&&observation&&observeVoltHorizons(round,state.voltV16Cells,observation))dirty=true;
    if(round?.v15Filled&&!position&&state.closed.at(-1)?.ticker===market.ticker)latest.position=state.closed.at(-1);
    if(position){
     latest.position=position;
@@ -144,9 +148,17 @@ async function run(){
      delete round.v15Watch;dirty=true;
     }
     const candidate=confirmPredatorEntry(round.v15Watch,observation);
-    if(candidate&&env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
+    if(candidate){
+     latest.horizons=forecastVoltHorizons(round.voltV16Profile,candidate,observation.remaining);
+     if(!round.voltV16Probe){
+      round.voltV16Probe={ticker:candidate.ticker,side:candidate.side,at:candidate.at,ask:candidate.ask,scored:{}};
+      dirty=true;
+     }
+    }
+    const forecast=latest.horizons?.filter(row=>row.qualified).sort((a,b)=>b.rank-a.rank)[0];
+    if(candidate&&forecast&&env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
      const bid=(candidate.side==='UP'?observation.yes:observation.no).price;
-     state.positions[market.ticker]={...candidate,expiresAt,bid,
+     state.positions[market.ticker]={...candidate,version:16,forecast,target:forecast.bid,deadline:candidate.at+forecast.seconds*1000,expiresAt,bid,
       net:bid-candidate.ask-candidate.entryCost-(Math.ceil(7*bid*(1-bid))/100+.01)};
      round.v15Filled=true;
      latest.position=state.positions[market.ticker];
@@ -167,8 +179,9 @@ async function run(){
   if(dirty&&now-lastPersist>=3000)await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
    lastPublish=now;
-   const health={version:15,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
-    voltV15:state.closed.filter(row=>Number.isFinite(row.warningMs)).reduce((stats,row)=>{
+   const health={version:16,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
+    horizonResearch:state.voltV16Cells,
+    voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
      stats.net+=row.net;stats.warningMs+=row.warningMs;stats.entryTotal+=row.ask;
      stats.fees+=row.entryCost+(row.reason==='OFFICIAL_SETTLEMENT'?0:Math.ceil(7*row.bid*(1-row.bid))/100+.01);
@@ -176,6 +189,14 @@ async function run(){
      stats.drawdown=Math.max(stats.drawdown,stats.peak-stats.net);
      return stats;
     },{trades:0,wins:0,losses:0,net:0,warningMs:0,entryTotal:0,fees:0,peak:0,drawdown:0}),
+    voltV16:state.closed.filter(row=>row.version===16).reduce((stats,row)=>{
+     stats.trades++;stats.wins+=Number(row.net>.01);stats.losses+=Number(row.net<.01);
+     stats.net+=row.net-.01;
+     stats.holdMs+=row.closedAt-row.at;
+     stats.peak=Math.max(stats.peak,stats.net);
+     stats.drawdown=Math.max(stats.drawdown,stats.peak-stats.net);
+     return stats;
+    },{trades:0,wins:0,losses:0,net:0,holdMs:0,peak:0,drawdown:0}),
     paperEnabled:env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true',ordersAuthorized:false,
     open:Object.keys(state.positions).length,closed:state.totalClosed,
     wins:state.closed.filter(row=>row.net>0).length,losses:state.closed.filter(row=>row.net<0).length,
