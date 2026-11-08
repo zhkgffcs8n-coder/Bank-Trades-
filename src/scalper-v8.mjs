@@ -86,5 +86,5 @@ export function parseDepthV8(payload,ticker,at,quote){
  const yes=best(book?.yes_dollars),no=best(book?.no_dollars);
  if(!yes||!no||yes.price+no.price>1||Math.abs(yes.price-quote.yesBid)>.01||
   Math.abs(no.price-quote.noBid)>.01)return null;
- return {ticker,at,imbalance:(yes.size-no.size)/(yes.size+no.size)};
+ return {ticker,at,yes,no,imbalance:(yes.size-no.size)/(yes.size+no.size)};
 }

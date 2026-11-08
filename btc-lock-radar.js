@@ -10,7 +10,28 @@ const v8Readouts=document.createElement('div');
 const v8Radar=document.createElement('p');
 v8Radar.className='premium-foot';
 box.append(v8Radar);
-scalper.append(v8Readouts,researchReadouts);
+const v8Scoreboard=document.createElement('p');
+v8Scoreboard.className='premium-foot';
+v8Scoreboard.textContent='V8 server scoreboard · Loading';
+scalper.append(v8Readouts,v8Scoreboard,researchReadouts);
+let v8ReportBusy=false;
+async function refreshV8Scoreboard(){
+ if(v8ReportBusy||document.hidden)return;
+ v8ReportBusy=true;
+ try{
+  const response=await fetch('/.netlify/functions/scalper-v8-report',{signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error('V8 report unavailable');
+  const report=await response.json();
+  v8Scoreboard.textContent='V8 settlement shadow · '+['A','B','C'].map(name=>{
+   const row=report.engines[name];
+   return name+' '+row.wins+'W/'+row.losses+'L ('+row.sampleSize+' scored)';
+  }).join(' · ')+(report.scope==='COMPLETE'?'':' · Partial archive');
+ }catch{
+  v8Scoreboard.textContent='V8 server scoreboard · Unavailable';
+ }finally{
+  v8ReportBusy=false;
+ }
+}
 let sharedV8=[];
 function paintV8(){
  const snapshot=sharedV8.find(row=>row.asset===selectedCoin)?.v8;
@@ -656,6 +677,7 @@ function assess(coin,market,e,visible){
 waitForData('Checking '+selectedCoin+' market and spot feed');
 botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
+refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
 setInterval(()=>{if(!document.hidden)paintV8()},15000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();

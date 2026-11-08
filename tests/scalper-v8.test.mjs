@@ -50,3 +50,35 @@ test('shared paper signals explain WAIT without relaxing entry protection',async
  assert.equal(paperSignal(closing,[],null,at).action,'WAIT');
  assert.match(paperSignal(closing,[],null,at).reason,/Late entry blocked/);
 });
+
+test('exit replay waits for a subsequent liquid bid and retains settlement fallback',async()=>{
+ const {replayScalperExits}=await import('../src/scalper-v8-exits.mjs');
+ const row={ticker,at,expiresAt:at+300000,regime:'RANGE',engines:{
+  A:{decision:'UP',won:true,ask:.6,cost:.03,net:.37},
+  B:{decision:'DOWN',won:false,ask:.4,cost:.03,net:-.43}
+ }};
+ const quotes=[
+  {ticker,at:at+1000,yes:{price:.8,size:10}},
+  {ticker,at:at+2000,yes:{price:.75,size:.5}},
+  {ticker:'OTHER',at:at+3000,yes:{price:.9,size:10}},
+  {ticker,at:at+4000,yes:{price:.7,size:2}},
+  {ticker,at:row.expiresAt,no:{price:.9,size:10}}
+ ];
+ const result=replayScalperExits(row,quotes);
+ assert.equal(result.A.trigger,'TAKE PROFIT');
+ assert.equal(result.A.at,at+4000);
+ assert.equal(result.A.bid,.7);
+ assert.equal(result.B.method,'SETTLEMENT_FALLBACK');
+ assert.equal(result.B.net,-.43);
+});
+
+test('walk-forward calibration excludes labels received after the forecast',async()=>{
+ const {walkForwardScalperCalibration}=await import('../src/scalper-v8-calibration.mjs');
+ const engines=Object.fromEntries(['A','B','C','Market'].map(name=>[name,{probability:.55}]));
+ const earlier=Array.from({length:10},(_,i)=>({at:i,resolvedAt:100+i,outcome:1,baseline:.5,engines}));
+ const target={at:109,resolvedAt:200,outcome:1,baseline:.5,engines};
+ assert.equal(walkForwardScalperCalibration([...earlier,target]).A.sampleSize,0);
+ const report=walkForwardScalperCalibration([...earlier,{...target,at:110}]);
+ assert.equal(report.A.sampleSize,1);
+ assert.ok(report.A.calibratedBrier<report.A.rawBrier);
+});

@@ -1,3 +1,4 @@
+import {replayScalperExits} from '../../src/scalper-v8-exits.mjs';
 import {evaluateScalperV8,parseDepthV8,scoreScalperV8} from '../../src/scalper-v8.mjs';
 import {blobWindow} from '../../src/blob-window.mjs';
 import {selectEligibleRound} from '../../src/select-eligible-round.mjs';
@@ -156,16 +157,21 @@ export default async()=>{
   if(!existing){
    try{
     const v8Key='scalper-v8/pending/'+m.ticker;
-    if(evaluateScalperV8(record,recent)&&
-       !await db.get(v8Key,{type:'json'})&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'})){
+    const pending=await db.get(v8Key,{type:'json'});
+    const candidate=pending?null:evaluateScalperV8(record,recent);
+    const trackExit=pending&&['A','B','C'].some(name=>pending.engines[name].decision!=='SKIP');
+    if(trackExit||(candidate&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'}))){
      let depth=null;
      try{
       const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
        {signal:AbortSignal.timeout(1600)});
       if(response.ok)depth=parseDepthV8(await response.json(),m.ticker,Date.now(),record);
-     }catch{} // Keep quote-only observations separate via null imbalance.
-     const candidate=evaluateScalperV8(record,recent,depth);
-     await db.setJSON(v8Key,candidate,{onlyIfNew:true});
+     }catch{} // Quotes without depth cannot be used to simulate an early fill.
+     if(candidate){
+      await db.setJSON(v8Key,evaluateScalperV8(record,recent,depth),{onlyIfNew:true});
+     }else if(depth&&depth.at-record.observedAt<=5000&&depth.at<pending.expiresAt){
+      await db.setJSON('scalper-v8/depth/'+m.ticker+'/'+bucket,depth,{onlyIfNew:true});
+     }
     }
    }catch(e){researchFailure('scalper-v8-freeze',e,asset)}
    try{
@@ -404,6 +410,13 @@ export default async()=>{
     if(!row||row.expiresAt>now)return;
     const resolved=scoreScalperV8(row,await db.get('outcomes/'+row.ticker,{type:'json'}),now);
     if(!resolved)return;
+    if(['A','B','C'].some(name=>resolved.engines[name].won!==null)){
+     const page=await blobWindow(db,{prefix:'scalper-v8/depth/'+row.ticker+'/',limit:20});
+     if(!page.cursor){
+      const quotes=await Promise.all(page.blobs.map(blob=>db.get(blob.key,{type:'json'})));
+      resolved.exitReplay=replayScalperExits(resolved,quotes);
+     }
+    }
     await db.setJSON('scalper-v8/resolved/'+row.ticker,resolved,{onlyIfNew:true});
     await db.delete(blob.key);
    });

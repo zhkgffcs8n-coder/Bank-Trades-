@@ -1,3 +1,5 @@
+import {walkForwardScalperCalibration} from '../../src/scalper-v8-calibration.mjs';
+import {summarizeExitReplay} from '../../src/scalper-v8-exits.mjs';
 import {getStore} from '@netlify/blobs';
 import {blobWindow} from '../../src/blob-window.mjs';
 import {summarizeScalperV8} from '../../src/scalper-v8.mjs';
@@ -12,6 +14,7 @@ export default async req=>{
   rows.push(...batch.filter(Boolean));
  }
  return Response.json({mode:'SETTLEMENT_SHADOW',scope:page.cursor?'FIRST_PAGE_ONLY':'COMPLETE',
-  hypothetical:true,ordersAuthorized:false,engines:summarizeScalperV8(rows)},
+  hypothetical:true,ordersAuthorized:false,engines:summarizeScalperV8(rows),exitReplay:summarizeExitReplay(rows),
+  calibration:walkForwardScalperCalibration(rows),promoted:false},
   {headers:{'cache-control':'public, max-age=60'}});
 };
