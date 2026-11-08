@@ -7,9 +7,9 @@ const exitBid=(book,side)=>side==='UP'?book.yes:book.no;
 export function observeVoltHorizons(round, cells, book){
  const entry=round.voltV16Probe;
  if(!entry||entry.ticker!==book.ticker)return false;
- const age=book.now-entry.at;
+ const age=book.bookAt-entry.at;
  const level=exitBid(book,entry.side);
- if(level.size<1||book.bookAt<=entry.at)return false;
+ if(!level||level.size<1||book.bookAt<=entry.at||book.bookAt>book.now||book.now-book.bookAt>1500)return false;
  let changed=false;
  for(const seconds of horizons){
   if(age<seconds*1000||age>seconds*1000+1500||entry.scored[seconds])continue;

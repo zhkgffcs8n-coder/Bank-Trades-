@@ -7,8 +7,9 @@ test('VOLT requires new same-contract depth and counts each prospective horizon 
  const round={voltV16Probe:entry}, cells={};
  const depth={ticker:'BTC',now:13000,bookAt:10000,yes:{price:.64,size:1}};
  assert.equal(observeVoltHorizons(round,cells,depth),false);
- assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:12900}),true);
  assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:12900}),false);
+ assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:13000}),true);
+ assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:13000}),false);
  const report=forecastVoltHorizons(cells,entry,100);
  assert.deepEqual(report.map(row=>row.seconds),[3,6,10,20,30,60]);
  assert.equal(report[0].samples,1);

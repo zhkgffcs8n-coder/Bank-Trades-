@@ -105,6 +105,7 @@ async function refreshPredatorReport(){
    predatorServerStatus.textContent='V'+worker.version+' BTC PREDATOR · VOLT B · '+
     (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale'+fallback);
    if(worker.fresh&&position){
+    const modeledNet=position.net-(position.version===16?.01:0);
     const age=Date.now()-worker.latest.decisionAt;
     const action=position.closedAt?(position.reason==='TAKE PROFIT'?'TAKE PROFIT ':'SELL FAST '):
      worker.latest.decisionAt-position.at<15000?'BUY ':'HOLD ';
@@ -113,8 +114,10 @@ async function refreshPredatorReport(){
     if(Number.isFinite(position.bid)&&Number.isFinite(position.net)&&
        (position.closedAt||age<=20000&&worker.latest.quoteFresh)){
      predatorServerStatus.textContent+=' · '+(position.closedAt?'Exit ':'Last executable bid ')+
-      (position.bid*100).toFixed(1)+'% · modeled net '+(position.net*100).toFixed(1)+'¢';
-    }else predatorServerStatus.textContent+=' · Waiting for fresh exit bid';
+      (position.bid*100).toFixed(1)+'% · modeled net '+(modeledNet*100).toFixed(1)+'¢';
+    }else if(!position.closedAt)predatorServerStatus.textContent+=' · Waiting for fresh exit bid';
+    if(position.closedAt&&Number.isFinite(modeledNet))predatorServerStatus.textContent+=
+     ' · CLOSED · NET '+(modeledNet>=0?'PROFIT ':'LOSS ')+trackerNet(modeledNet);
     if(Number.isFinite(position.warningMs))predatorServerStatus.textContent+=' · Watch lead '+
      (position.warningMs/1000).toFixed(2)+'s';
    }else if(worker.fresh&&watch&&Date.now()-watch.at<=10000){
