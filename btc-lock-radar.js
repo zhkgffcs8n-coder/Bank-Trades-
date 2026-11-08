@@ -379,7 +379,27 @@ function mountScalper(){
   const backdrop=document.createElement('div');
   backdrop.setAttribute('aria-hidden','true');
   backdrop.style.cssText='position:absolute;right:1px;background:#101e30;border-radius:0 11px 11px 0;pointer-events:none';
-  row.append(feed,backdrop,scalper);
+  const panels=document.createElement('div');
+  panels.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';
+  box.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
+  const title=box.querySelector('h2');
+  title.style.cssText='margin:0 0 18px;font-size:clamp(20px,2vw,30px)';
+  const icon=document.createElement('span');
+  icon.setAttribute('aria-hidden','true');
+  icon.textContent='📡';
+  icon.style.display='inline-block';
+  title.replaceChildren(icon,' BTC 15-MIN · LOCK & FLIP RADAR');
+  const radarStatus=box.querySelector('#btcLockState');
+  radarStatus.style.cssText='padding:12px;border:2px solid #67e8f9;border-radius:14px;background:#123354;color:#ecfeff;font-size:clamp(16px,1.6vw,24px);font-weight:800';
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    icon.animate([
+      {transform:'rotate(-12deg) scale(1)'},
+      {transform:'rotate(12deg) scale(1.16)'},
+      {transform:'rotate(-12deg) scale(1)'}
+    ],{duration:1800,iterations:Infinity,easing:'ease-in-out'});
+  }
+  panels.append(box,scalper);
+  row.append(feed,backdrop,panels);
 
   function layout(){
     const feedBounds=feed.getBoundingClientRect();
@@ -389,25 +409,26 @@ function mountScalper(){
       range.selectNodeContents(line);
       textRight=Math.max(textRight,range.getBoundingClientRect().right);
     }
-    const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor(feedBounds.right-textRight-36));
-    const inline=width>=340;
-    scalper.style.position=inline?'absolute':'';
-    scalper.style.right=inline?'12px':'';
-    scalper.style.top=inline?feed.offsetTop+'px':'';
-    scalper.style.width=inline?width+'px':'';
-    const panelHeight=inline?scalper.offsetHeight+24:0;
+    const available=Math.floor(feedBounds.right-textRight-36);
+    const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor((available-12)/2));
+    const inline=width>=260;
+    panels.style.position=inline?'absolute':'';
+    panels.style.right=inline?'12px':'';
+    panels.style.top=inline?feed.offsetTop+'px':'';
+    panels.style.width=inline?(width*2+12)+'px':'';
+    const panelHeight=panels.offsetHeight;
     row.style.minHeight=inline&&panelHeight>feed.offsetHeight?(feed.offsetTop+panelHeight)+'px':'';
     backdrop.hidden=!inline;
     if(inline){
       backdrop.style.top=(feed.offsetTop+1)+'px';
       backdrop.style.height=(Math.max(feed.offsetHeight,panelHeight)-2)+'px';
-      backdrop.style.width=(width+23)+'px';
+      backdrop.style.width=(width*2+35)+'px';
     }
   }
 
   const observer=new ResizeObserver(layout);
   observer.observe(feed);
-  observer.observe(scalper);
+  observer.observe(panels);
   new MutationObserver(layout).observe(feed,{childList:true});
   layout();
   return true;
