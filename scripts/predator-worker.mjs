@@ -1,4 +1,4 @@
-import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons} from '../src/volt-horizons.mjs';
+import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHorizons,forecastPredatorEarly} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import WebSocket from 'ws';
@@ -8,7 +8,7 @@ import {openPredatorTape} from '../src/predator-stream.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
 import {parseDepthV8} from '../src/scalper-v8.mjs';
 import {verifiedFinalizedBinaryOutcome} from '../src/official-settlement.mjs';
-import {predatorObservation,openPredatorWatch,advancePredatorWatch,confirmPredatorEntry} from '../src/btc-predator.mjs';
+import {predatorObservation,openPredatorWatch,advancePredatorWatch,confirmPredatorEntry,predatorEarlyProbe} from '../src/btc-predator.mjs';
 
 const env=process.env,dir=env.PREDATOR_STATE_DIR;
 if(!dir)throw Error('PREDATOR_STATE_DIR must point to a persistent writable directory');
@@ -22,6 +22,7 @@ const credentials=env.PREDATOR_KALSHI_KEY_ID&&env.PREDATOR_KALSHI_PRIVATE_KEY_FI
  {keyId:env.PREDATOR_KALSHI_KEY_ID,privateKeyPem:await readFile(env.PREDATOR_KALSHI_PRIVATE_KEY_FILE,'utf8')}:null;
 const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN}):null;
+let previousEarlyBook=null;
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
 const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0};
 async function persist(){
@@ -112,6 +113,21 @@ function evaluate(trades,trigger,receivedAt){
    latest.quoteFresh=Boolean(observation&&decisionAt-observation.bookAt<=1500);
    const round=state.rounds[market.ticker];
    if(round&&!round.voltV18Profile){round.voltV18Profile=structuredClone(state.voltV18Cells);dirty=true;}
+   if(round&&observation&&bookSource==='KALSHI_WS'){
+    if(!round.predatorEarlyProfile){round.predatorEarlyProfile=structuredClone(state.predatorEarlyCells);dirty=true;}
+    const probes=round.predatorEarlyProbes??={};
+    for(const entry of Object.values(probes)){
+     if(observeVoltHorizons({voltV16Probe:entry},state.predatorEarlyCells,observation,predatorEarlyHorizons))dirty=true;
+    }
+    const probe=predatorEarlyProbe(observation,previousEarlyBook);
+    if(probe&&!probes[probe.side]){
+     probes[probe.side]=probe;dirty=true;
+    }
+    if(observation.bookAt!==previousEarlyBook?.bookAt||observation.ticker!==previousEarlyBook?.ticker)
+     previousEarlyBook={ticker:observation.ticker,bookAt:observation.bookAt,spread:1-observation.yes.price-observation.no.price};
+    latest.earlyResearch=Object.values(probes).map(entry=>({side:entry.side,ask:entry.ask,at:entry.at,reason:entry.reason,
+     horizons:forecastPredatorEarly(round.predatorEarlyProfile,entry,observation.remaining)}));
+   }
    const position=state.positions[market.ticker];
    if(round&&observation&&observeVoltHorizons({voltV16Probe:round.voltV18Probe},state.voltV18Cells,observation,voltV18Horizons))dirty=true;
    if(round?.v15Filled&&!position&&state.closed.at(-1)?.ticker===market.ticker)latest.position=state.closed.at(-1);
@@ -170,6 +186,7 @@ function evaluate(trades,trigger,receivedAt){
 async function run(){
  try{state=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error;}
  state.voltV18Cells??={};
+ state.predatorEarlyCells??={};
  tape=openPredatorTape({onTrades:(trades,at)=>evaluate(trades,'COINBASE_WS',at)});
  while(!stopping){
   const now=Date.now();
@@ -194,7 +211,7 @@ async function run(){
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
    lastPublish=now;
    const health={version:16,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
-    strategyVersion:18,horizonResearch:state.voltV18Cells,
+    strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
      stats.net+=row.net;stats.warningMs+=row.warningMs;stats.entryTotal+=row.ask;

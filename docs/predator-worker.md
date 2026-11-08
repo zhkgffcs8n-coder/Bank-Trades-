@@ -1,4 +1,4 @@
-# Predator V16 worker
+# Predator streaming worker
 
 Run a single Node.js 22.15+ process on a Linux host with outbound HTTPS/WSS and a persistent writable volume. Run `npm ci --omit=dev` from the repository checkout. Configure a service manager to restart on failure, deliver SIGTERM on stop, and run:
 
@@ -23,3 +23,5 @@ A Netlify web deploy installs the scheduled burst collector and health endpoint.
 V16 records at most one prospective probe per BTC contract and evaluates fresh bids at 3, 6, 10, 20, 30 and 60 seconds. Paper entries require the explicit paper flag and qualified prior-round evidence. Old V15 positions and outcomes retain their version and accounting.
 
 The worker uses public Kalshi REST depth when the authenticated book is unavailable and never submits exchange orders. The existing Netlify collectors continue independently. If configured, health appears under worker at /.netlify/functions/predator-report. Confirm that the heartbeat stays fresh across round boundaries, evaluations advance, bookSource is KALSHI_WS, and Coinbase and Kalshi event ages are present before claiming authenticated streaming. REST snapshots have no exchange-event timestamp. A gap invalidates the incremental book until a new snapshot arrives.
+
+V17 early-entry research records one prospective probe per direction per BTC round on Kalshi WebSocket depth. It scores 1, 3, 5, 10, 30 and 60 seconds using later executable bids and publishes sample counts and a lower bound for the historical profitable-exit rate. The V18 paper entry rules remain the baseline. V17 probes cannot create positions.

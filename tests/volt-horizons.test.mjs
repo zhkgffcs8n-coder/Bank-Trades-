@@ -25,3 +25,12 @@ test('V18 rejects a late quote for its one-second horizon',async()=>{
  assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:11200},voltV18Horizons),true);
  assert.equal(cells['UP/1'].count,1);
 });
+
+test('Predator forecasts expose forward uncertainty and require adequate evidence',async()=>{
+ const {forecastPredatorEarly}=await import('../src/volt-horizons.mjs');
+ const rows=forecastPredatorEarly({'UP/1':{count:12,wins:8,move:2.4,downside:.24}},
+  {side:'UP',ask:.5},90);
+ assert.deepEqual(rows.map(row=>row.seconds),[1,3,5,10,30,60]);
+ assert.ok(rows[0].lowerWinRate<.5);
+ assert.equal(rows[0].qualified,false);
+});

@@ -48,3 +48,13 @@ test('VOLT waits for fresh confirmation, rejects repricing, and tracks a later e
   yes:{price:.53,size:2},no:{price:.4,size:2},trades:[],monitoring:true});
  assert.equal(advancePredatorWatch(fill,exit).reason,'TRAIL EXIT');
 });
+
+test('early research freezes an executable ask on same-contract spread compression',async()=>{
+ const {predatorEarlyProbe}=await import('../src/btc-predator.mjs');
+ const book={ticker:'KXBTC15M-X',now:1100,bookAt:1100,remaining:75,side:'DOWN',
+  yes:{price:.68,size:1},no:{price:.30,size:4},sourceEventAt:1050,flow:-.6,imbalance:-.6,acceleration:-.01};
+ const previous={ticker:book.ticker,bookAt:1000,spread:.04};
+ assert.equal(predatorEarlyProbe(book,previous).ask,1-.68);
+ assert.equal(predatorEarlyProbe({...book,now:2700},previous),null);
+ assert.equal(predatorEarlyProbe(book,{...previous,ticker:'OTHER'}),null);
+});

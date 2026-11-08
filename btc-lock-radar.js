@@ -147,6 +147,11 @@ async function refreshPredatorReport(){
      ' · Compute '+timing.computeUs+'µs · Decision age '+elapsed+'ms'+
      (timing.quoteFresh&&age!==null&&age<=1500?' · Fresh book':' · Executability unconfirmed');
    }
+   if(worker.fresh)for(const probe of timing?.earlyResearch??[]){
+    const best=probe.horizons.filter(row=>row.qualified).sort((a,b)=>b.rank-a.rank)[0];
+    predatorServerStatus.textContent+=' · V17 WATCH '+probe.side+' '+trackerPrice(probe.ask)+
+     (best?' · '+best.seconds+'s modeled net '+trackerNet(best.net)+' ('+best.samples+' prior probes)':' · collecting prior-round evidence');
+   }
    if(stats)predatorServerStatus.textContent+=' · '+stats.wins+'W/'+stats.losses+'L · modeled net $'+stats.net.toFixed(2);
   }
  }catch{predatorServerStatus.textContent='OMEGA PREDATOR · Server report unavailable'}

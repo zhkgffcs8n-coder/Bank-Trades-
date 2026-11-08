@@ -62,7 +62,7 @@ export function advancePredatorWatch(watch,observation){
  const stop=Number.isFinite(watch.entryBid)?bid-watch.entryBid<=-.07+1e-9:net<=-.07;
  const reason=bid>=watch.target&&net>(watch.version===16?.01:0)?'TAKE PROFIT':stop?'SELL FAST':
   (weakening&&net>reserve)||protectProfit||!micro&&peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
- return {...watch,peakNet,baseline,bid,net,...(reason?{reason,closedAt:now,
+ return {...watch,peakNet,peakBid:Math.max(watch.peakBid??watch.entryBid??bid,bid),baseline,bid,net,...(reason?{reason,closedAt:now,
   baselineNet:baseline?netAt(baseline.ask,bid):null,leadMs:baseline?baseline.at-watch.at:null}:{})};
 }
 
@@ -80,4 +80,24 @@ export function confirmPredatorEntry(watch, observation){
  return {...watch,ask,entryBid:priceFor(observation,watch.side).price,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,
   warningMs:observation.now-watch.at,deadline:observation.now+30000,
   entryCost:cost(ask),estimatedNet:netAt(ask,watch.target)};
+}
+
+// Freeze the available ask before confirmation, without opening a paper position.
+export function predatorEarlyProbe(observation,previous){
+ if(!observation?.sourceEventAt||observation.now-observation.bookAt>1500||
+    observation.now<observation.bookAt||observation.remaining<8)return null;
+ const {side,yes,no}=observation;
+ const spread=1-yes.price-no.price;
+ const sign=side==='UP'?1:-1;
+ const bookChanged=previous?.ticker===observation.ticker&&
+  observation.bookAt>previous.bookAt&&observation.bookAt-previous.bookAt<=1500;
+ const compression=bookChanged&&previous.spread-spread>=.0099;
+ const supported=compression&&sign*observation.flow>=.45&&
+  sign*observation.imbalance>=.12&&sign*observation.acceleration>0;
+ if(!observation.early&&!supported)return null;
+ const ask=askFor(observation,side);
+ const bid=priceFor(observation,side).price;
+ return {ticker:observation.ticker,at:observation.now,bookAt:observation.bookAt,
+  side,ask,bid,spread,sourceEventAt:observation.sourceEventAt,
+  reason:supported?'SPREAD_COMPRESSION_WITH_FLOW':'EARLY_FLOW_AND_ACCELERATION',scored:{}};
 }
