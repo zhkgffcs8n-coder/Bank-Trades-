@@ -6,7 +6,7 @@ const quote={ticker:'BTC-R1',yesAskDollars:.55,noAskDollars:.48,asOfMs:99000};
 test('paper entry stays within $5 and never authorizes real orders',()=>{
  const r=paperEntry({signal,quote,stakeDollars:5,feesDollars:.1,nowMs:100000});
  assert.equal(r.status,'PAPER_OPEN');assert.equal(r.realOrdersAuthorized,false);assert.ok(r.position.entryCostDollars<=5);
- const e=paperExit({position:r.position,quote:{ticker:'BTC-R1',yesBidDollars:.6,noBidDollars:.4,asOfMs:100000},feesDollars:.1,nowMs:101000});
+ const e=paperExit({position:r.position,quote:{ticker:'BTC-R1',yesBidDollars:.6,noBidDollars:.4,asOfMs:100001},feesDollars:.1,nowMs:101000});
  assert.equal(e.status,'PAPER_CLOSED');assert.equal(e.realOrdersAuthorized,false);
 });
 test('stale quotes and unknown fees block entry',()=>{
@@ -24,7 +24,7 @@ test('DOWN entry and exit use NO quotes, not YES quotes',()=>{
  const down={...signal,forecast:{consensus:'DOWN'}};
  const r=paperEntry({signal:down,quote:{ticker:'BTC-R2',yesAskDollars:.9,noAskDollars:.2,asOfMs:99000},stakeDollars:5,feesDollars:0,nowMs:100000});
  assert.equal(r.status,'PAPER_OPEN');assert.equal(r.position.side,'DOWN');assert.equal(r.position.quantity,25);
- const e=paperExit({position:r.position,quote:{ticker:'BTC-R2',yesBidDollars:.1,noBidDollars:.4,asOfMs:100000},feesDollars:0,nowMs:101000});
+ const e=paperExit({position:r.position,quote:{ticker:'BTC-R2',yesBidDollars:.1,noBidDollars:.4,asOfMs:100001},feesDollars:0,nowMs:101000});
  assert.equal(e.status,'PAPER_CLOSED');assert.equal(e.netDollars,5);
 });
 test('ambiguous side-less quote is blocked',()=>{
@@ -63,6 +63,8 @@ test('paper exits reject reordered execution and pre-entry quote timestamps',()=
  for(const [position,quoted,nowMs] of [
   [opened.position,exitQuote,100000],
   [opened.position,{...exitQuote,asOfMs:99999},100001],
+  // An entry-time snapshot cannot establish an independently later exit bid.
+  [opened.position,{...exitQuote,asOfMs:100000},100001],
   [{...opened.position,openedAtMs:'100000'},exitQuote,100001],
   [{...opened.position,openedAtMs:-1},exitQuote,100001]
  ]){
