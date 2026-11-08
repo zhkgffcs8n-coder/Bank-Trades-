@@ -11,8 +11,14 @@ export async function scoreOmegaArchive(db){
   if(await db.get(scoreKey,{type:'json'}))return;
   const [forecast,label]=await Promise.all([db.get(key,{type:'json'}),db.get('outcomes/'+ticker,{type:'json'})]);
   const outcome=trustedStoredFinalizedOutcome(label,ticker),settledAtMs=Date.parse(label?.settledAt);
+  // An official result may be published after a contract has already expired.
+  // A forecast made in that gap knows the market has closed and is not a
+  // prospective prediction. Older archives without a frozen expiry cannot
+  // prove pre-close timing and must remain unscored.
   if(!outcome||forecast?.ticker!==ticker||!Number.isSafeInteger(forecast.recordedAtMs)||
-   forecast.recordedAtMs>=settledAtMs||!Array.isArray(forecast.accepted)||forecast.accepted.length<2||
+   !Number.isSafeInteger(forecast.expiresAtMs)||forecast.expiresAtMs<=forecast.recordedAtMs||
+   forecast.expiresAtMs>settledAtMs||forecast.recordedAtMs>=settledAtMs||
+   !Array.isArray(forecast.accepted)||forecast.accepted.length<2||
    forecast.accepted.some(x=>!Number.isSafeInteger(x?.observedAtMs)||x.observedAtMs>forecast.recordedAtMs||
     typeof x.upProbability!=='number'||!Number.isFinite(x.upProbability)||x.upProbability<0||x.upProbability>1)||
    new Set(forecast.accepted.map(x=>x.provider)).size!==forecast.accepted.length)return;
