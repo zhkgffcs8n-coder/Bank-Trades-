@@ -241,8 +241,8 @@ export default async()=>{
        matureCells:Object.values(profile).filter(cell=>cell.n>=12).length,qualified:hunterEngines.filter(name=>ideas[name]),checks};
       await db.setJSON(diagnosticsKey,assessment);
       await db.setJSON('scalp-hunter/assessments/'+m.ticker+'/'+bucket,assessment,{onlyIfNew:true});
+      const positions=open||{};
       if(Object.values(ideas).some(Boolean)){
-       const positions=open||{};
        for(const name of hunterEngines){
         if(ideas[name]?.mode==='SHADOW_ONLY'&&ideas[name].sampleSize>=12&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name]);
        }
@@ -255,7 +255,7 @@ export default async()=>{
         outcome,{onlyIfNew:true});
       }
       await db.setJSON(tapeKey,observeScalpHunter(tape,snapshot,depth,ideas,experimental));
-      await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas,experimental});
+      await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas,experimental,positions});
      }
      if(!pending&&snapshot&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'})){
       await db.setJSON(v8Key,snapshot,{onlyIfNew:true});

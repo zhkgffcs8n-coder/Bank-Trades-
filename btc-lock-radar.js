@@ -61,6 +61,7 @@ async function refreshV8Scoreboard(){
  }
 }
 let sharedV8=[];
+const engineBadges=new Map();
 function paintV8(){
  const shared=sharedV8.find(row=>row.asset===selectedCoin);
  const snapshot=shared?.v8;
@@ -91,7 +92,44 @@ function paintV8(){
     Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds) · modeled net '+
     (idea.estimatedNet*100).toFixed(1)+'¢ per contract';
   }
-  line.append(identity,detail);
+  const position=hunter?.positions?.[name];
+  const now=Date.now();
+  const validPosition=position?.ticker===shared?.ticker&&['UP','DOWN'].includes(position?.side)&&
+   now<position.expiresAt&&now>=hunter.at&&now-hunter.at<=75000;
+  const closed=validPosition&&position.closedAt;
+  const recentExit=closed&&now>=position.closedAt&&now-position.closedAt<=75000;
+  const shadowSide=engine?.decision;
+  let action='SKIP',tone='skip',icon='—',mode='';
+  if(recentExit){
+   action=(position.reason==='TAKE_PROFIT'?'TAKE PROFIT ':position.reason==='STOP_LOSS'?'SELL FAST ':'SELL ')+position.side;
+   tone=position.reason==='TAKE_PROFIT'?'profit':'sell';
+   icon=tone==='profit'?'◆':'✕';mode='PAPER';
+  }else if(validPosition&&!closed){
+   const entry=now-position.at<30000;
+   action=(entry?'BUY ':'HOLD ')+position.side;
+   tone=entry?position.side.toLowerCase():'hold';
+   icon=entry?(position.side==='UP'?'▲':'▼'):'Ⅱ';mode='PAPER';
+  }else if(['UP','DOWN'].includes(shadowSide)){
+   action='BUY '+shadowSide;tone=shadowSide.toLowerCase();
+   icon=shadowSide==='UP'?'▲':'▼';mode='SHADOW';
+  }
+  const label=icon+' '+action+(mode?' · '+mode:'');
+  const badgeKey=[selectedCoin,shared?.ticker,label].join('/');
+  let badge=engineBadges.get(name);
+  if(badge?.dataset.key!==badgeKey){
+   badge=document.createElement('strong');
+   badge.className='bt-engine-action';
+   badge.dataset.key=badgeKey;
+   badge.dataset.tone=tone;
+   badge.textContent=label;
+   engineBadges.set(name,badge);
+   if(tone!=='skip'&&!reducedMotion.matches&&!document.body.classList.contains('bt-arcade-muted')){
+    requestAnimationFrame(()=>badge.animate?.([
+     {opacity:1},{opacity:.66},{opacity:1}
+    ],{duration:name==='B'?550:420,iterations:name==='B'?2:1}));
+   }
+  }
+  line.append(identity,badge,detail);
   return line;
  }));
 }

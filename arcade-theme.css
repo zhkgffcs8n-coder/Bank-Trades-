@@ -108,3 +108,16 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--arc-gold)!important
   animation-duration:.01ms!important;transition-duration:.01ms!important;
  }
 }
+
+.bt-engine-action{
+ --action:#cbd5e1;
+ display:block;width:fit-content;max-width:100%;padding:4px 8px;border:1px solid var(--action);
+ border-radius:7px;color:var(--action);background:#111827;font-size:14px;font-weight:900;
+ letter-spacing:.035em;line-height:1.25;overflow-wrap:anywhere
+}
+.bt-engine-action[data-tone=up]{--action:#69ff9f;background:#052c1b}
+.bt-engine-action:is([data-tone=down],[data-tone=sell]){--action:#ff8190;background:#3d101d}
+.bt-engine-action[data-tone=hold]{--action:#ffe078;background:#332708}
+.bt-engine-action[data-tone=profit]{--action:#66f6ff;background:#082e38}
+.bt-v9-engine[data-engine=B] .bt-engine-action{font-size:16px;border-width:2px}
+.bt-v9-engine[data-engine=B] .bt-engine-action:not([data-tone=skip]){box-shadow:0 0 11px var(--action)}
