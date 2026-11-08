@@ -50,19 +50,21 @@ export async function advanceOmegaPaperStored({db,ticker,roundId,signal,quote,no
  }
  return {status:result.status,netDollars:result.netDollars??null,reason:result.reason??null,realOrdersAuthorized:false};
 }
-export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fetch}={}){
+export async function fetchOmegaLiveQuote({ticker,nowMs=Date.now(),fetchImpl=fetch,clock=()=>nowMs}={}){
  if(!/^[A-Z0-9-]{3,100}$/.test(ticker||''))return null;
  try{
   const response=await fetchImpl('https://api.elections.kalshi.com/trade-api/v2/markets/'+encodeURIComponent(ticker),{
    headers:{accept:'application/json'},signal:AbortSignal.timeout(1500)});
   if(!response.ok)return null;
   const {market}=await response.json();
+  const receivedAtMs=clock();
+  if(!Number.isSafeInteger(receivedAtMs)||receivedAtMs<nowMs)return null;
   if(market?.ticker!==ticker||market.status!=='active')return null;
   // An active status alone is not proof that the contract still accepts orders.
   // Fail closed when an explicit close time has passed or cannot be parsed.
   if(market.close_time!=null){
    const closesAt=Date.parse(market.close_time);
-   if(!Number.isFinite(closesAt)||closesAt<=nowMs)return null;
+   if(!Number.isFinite(closesAt)||closesAt<=receivedAtMs)return null;
   }
   // A legitimate 0 bid means there is no executable exit liquidity; it must
   // not invalidate the whole quote or be mistaken for a positive exit price.

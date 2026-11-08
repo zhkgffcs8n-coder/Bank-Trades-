@@ -46,7 +46,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    return;
   }
   paperMonitoring.open++;
-  const quote=await fetchOmegaLiveQuote({ticker,nowMs,fetchImpl});
+  const quote=await fetchOmegaLiveQuote({ticker,nowMs,fetchImpl,clock});
   if(!quote){
    const settled=await settleOmegaPaperStored({db,ticker,nowMs});
    if(settled.status==='PAPER_SETTLED')paperMonitoring.settled++;
@@ -114,7 +114,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
     persisted?.recordedAtMs!==frozen.recordedAtMs){
     report.paperStatus='FORECAST_NOT_NEWLY_PERSISTED';
    }else{
-    const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs:clock(),fetchImpl});
+    const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs:clock(),fetchImpl,clock});
     const executionAtMs=clock();
     if(quote&&executionAtMs<latest.expiresAt){
      const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,

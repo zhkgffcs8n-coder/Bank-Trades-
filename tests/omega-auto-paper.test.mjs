@@ -140,3 +140,15 @@ test('zero bid parser rejects missing or coercible fake zero prices',async()=>{
  assert.equal(await read(base),null);
  assert.equal((await read({...base,yes_bid_dollars:'0'})).yesBidDollars,0);
 });
+
+test('quote that arrives after the exchange close cannot authorize paper execution',async()=>{
+ const startedAt=100000;
+ const closeTime=startedAt+500;
+ const ticker='BTC-ROUND';
+ const result=await fetchOmegaLiveQuote({ticker,nowMs:startedAt,clock:()=>closeTime+1,
+  fetchImpl:async()=>({ok:true,json:async()=>({market:{
+   ticker,status:'active',close_time:new Date(closeTime).toISOString(),
+   yes_bid:44,yes_ask:45,no_bid:54,no_ask:55
+  }})})});
+ assert.equal(result,null);
+});
