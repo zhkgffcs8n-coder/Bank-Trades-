@@ -3,7 +3,8 @@ import {getStore} from '@netlify/blobs';
 export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,paperHeartbeat=null,forecastResearch=null){
  const raw=heartbeat?.completedAt;
  const completed=typeof raw==='number'?raw:typeof raw==='string'?Date.parse(raw):NaN;
- const ageSeconds=Number.isFinite(completed)?Math.max(0,Math.floor((nowMs-completed)/1000)):null;
+ // A clock-skewed future heartbeat is not a zero-age successful collection.
+ const ageSeconds=Number.isFinite(completed)&&completed<=nowMs?Math.floor((nowMs-completed)/1000):null;
  const sampled=Array.isArray(heartbeat?.sampledAssets)?heartbeat.sampledAssets:[];
  // Eight samples are not eight markets if a corrupted heartbeat repeats one
  // asset. Require the actual collector's complete distinct market coverage.
