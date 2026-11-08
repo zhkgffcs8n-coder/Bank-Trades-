@@ -54,3 +54,28 @@ test('terminal paper positions cannot reenter when a legacy entry marker is miss
   assert.equal(again.realOrdersAuthorized,false);
  }
 });
+
+test('corrupted trailing peaks cannot fabricate a paper profit-taking exit',()=>{
+ const opened=advanceOmegaPaper(base);
+ assert.equal(opened.status,'PAPER_ENTRY');
+ const position=opened.state.positions['BTC-R1'];
+ const impossible=position.quantity-position.entryCostDollars+1;
+ for(const peak of [impossible,Infinity,-Infinity,NaN,'2']){
+  const state={...opened.state,positions:{...opened.state.positions,
+   'BTC-R1':{...position,peakNetDollars:peak}}};
+  const result=advanceOmegaPaper({...base,state,nowMs:101001,
+   quote:{...q,yesBidDollars:.51,asOfMs:101001},exitAtProfitDollars:2});
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.reason,'Invalid persisted paper profit peak');
+  assert.deepEqual(result.state,state);
+  assert.equal(result.realOrdersAuthorized,false);
+ }
+ // A physically possible persisted peak remains eligible for normal monitoring.
+ const state={...opened.state,positions:{...opened.state.positions,
+  'BTC-R1':{...position,peakNetDollars:position.quantity-position.entryCostDollars}}};
+ const result=advanceOmegaPaper({...base,state,nowMs:101001,
+  quote:{...q,yesBidDollars:.51,asOfMs:101001},exitAtProfitDollars:2,
+  trailingArmDollars:2});
+ assert.equal(result.status,'PAPER_EXIT');
+ assert.equal(result.state.positions['BTC-R1'].exitReason,'TRAILING_PROFIT');
+});
