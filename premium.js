@@ -582,6 +582,7 @@ async function refreshSharedSignalTable(){
  }catch(error){
   window.__BANK_TRADES_SHARED_ERROR__=String(error.message||error);
   engineSignals=assets.map(asset=>({asset,action:'WAIT',reason:'Shared signals fetch failed: '+window.__BANK_TRADES_SHARED_ERROR__}));
+  window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:engineSignals}));
   syncSignals();
   const panel=$('premiumAI');if(panel)panel.textContent='Signal service error: '+window.__BANK_TRADES_SHARED_ERROR__;
  }finally{signalFetchBusy=false}

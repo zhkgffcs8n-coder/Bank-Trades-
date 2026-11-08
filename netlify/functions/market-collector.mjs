@@ -1,3 +1,4 @@
+import {evaluateScalperV8,parseDepthV8,scoreScalperV8} from '../../src/scalper-v8.mjs';
 import {blobWindow} from '../../src/blob-window.mjs';
 import {selectEligibleRound} from '../../src/select-eligible-round.mjs';
 import {freezeForecast,scoreFrozenForecast,summarizeForecastResearch} from '../../src/forecast-shadow-learning.mjs';
@@ -153,6 +154,20 @@ export default async()=>{
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
   if(!existing){
+   try{
+    const v8Key='scalper-v8/pending/'+m.ticker;
+    if(evaluateScalperV8(record,recent)&&
+       !await db.get(v8Key,{type:'json'})&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'})){
+     let depth=null;
+     try{
+      const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
+       {signal:AbortSignal.timeout(1600)});
+      if(response.ok)depth=parseDepthV8(await response.json(),m.ticker,Date.now(),record);
+     }catch{} // Keep quote-only observations separate via null imbalance.
+     const candidate=evaluateScalperV8(record,recent,depth);
+     await db.setJSON(v8Key,candidate,{onlyIfNew:true});
+    }
+   }catch(e){researchFailure('scalper-v8-freeze',e,asset)}
    try{
     const titan=freezeTitan(record,recent);
     if(titan)await db.setJSON(titanPrefix(asset)+titanDay(titan.at)+'/'+m.ticker,titan,{onlyIfNew:true});
@@ -383,6 +398,16 @@ export default async()=>{
    })));
    await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor}),titan:titanReports.BTC,titanReports});
   }catch(e){researchFailure('forecast-summary',e)}
+  try{
+   await scanBlobPage(db,{prefix:'scalper-v8/pending/',cursorKey:'scan-cursors/scalper-v8',limit:16},async blob=>{
+    const row=await db.get(blob.key,{type:'json'});
+    if(!row||row.expiresAt>now)return;
+    const resolved=scoreScalperV8(row,await db.get('outcomes/'+row.ticker,{type:'json'}),now);
+    if(!resolved)return;
+    await db.setJSON('scalper-v8/resolved/'+row.ticker,resolved,{onlyIfNew:true});
+    await db.delete(blob.key);
+   });
+  }catch(e){researchFailure('scalper-v8-scoring',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{

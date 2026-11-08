@@ -3,7 +3,8 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 import {buildCommitteeSnapshot} from '../../src/engine-team.mjs';
 import {assessCollectorHealth} from '../../src/collector-health.mjs';
-import {parseCollectorPrice,validCollectorQuote} from '../../src/collector-quote.mjs';
+import {selectEligibleRound} from '../../src/select-eligible-round.mjs';
+import {evaluateScalperV8} from '../../src/scalper-v8.mjs';
 import {learningReport} from '../../src/research-model.mjs';
 const assets={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const expiry=(m,now)=>[m?.expected_expiration_time,m?.expiration_time,m?.close_time].map(v=>Date.parse(v||'')).filter(v=>Number.isFinite(v)&&v>now).sort((a,b)=>a-b)[0]||null;
@@ -75,17 +76,15 @@ export default async req=>{
    const [{data,quoteReceivedAt},recent]=await Promise.all([marketRead,recentRead]);
    const now=Date.now();
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
-   const market=markets[0];
-   if(!market)return {asset,action:'WAIT',reason:'No verified active contract',ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['verified active contract ticker']}};
-   const quote=k=>parseCollectorPrice(market,k);
-   const upAsk=quote('yes_ask'),downAsk=quote('no_ask'),upBid=quote('yes_bid'),downBid=quote('no_bid');
+   const selected=selectEligibleRound(markets,now);
    const timing={quoteReceivedAt,exchangeEventAt:null,quoteFetchMs:quoteReceivedAt-quoteRequestedAt,decisionAt:now};
-   if(!validCollectorQuote({yesAsk:upAsk,noAsk:downAsk,yesBid:upBid,noBid:downBid})){
-    return {asset,ticker:market.ticker,action:'WAIT',reason:'Invalid binary bid/ask quotes',timing};
-   }
+   if(!selected)return {asset,action:'WAIT',reason:markets.length?'No active contract with valid binary quotes':'No verified active contract',ticker:null,timing,committeeInput:{status:'MISSING_INPUT',missing:['verified active contract with valid quotes']}};
+   const {market,yesAsk:upAsk,noAsk:downAsk,yesBid:upBid,noBid:downBid}=selected;
    if(!Array.isArray(recent))return {asset,ticker:market.ticker,action:'WAIT',reason:'Recent sample history unavailable',timing,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable']}};
    const records=recent.filter(x=>x?.ticker===market.ticker);
    const activePosition=openPositions.filter(t=>t.asset===asset&&t.ticker===market.ticker).sort((a,b)=>b.at-a.at)[0]||null;
+   const v8=evaluateScalperV8({ticker:market.ticker,observedAt:quoteReceivedAt,expiresAt:market._expiry,
+    yesAsk:upAsk,noAsk:downAsk,yesBid:upBid,noBid:downBid},records);
    const rawSignal=paperSignal(market,records,activePosition,now,{...research,model:assetModels[asset]||research.model});
    const signal=gatePaperEntry({...rawSignal,asset},stats);
    // Keep the underlying direction and the post-performance veto visible.
@@ -123,7 +122,7 @@ export default async req=>{
    // Feed the same visible forecast into the research committee as non-actionable context.
    // It is quote-implied or momentum-derived, not independently calibrated evidence.
    if(roundCall&&committeeInput&&typeof committeeInput==='object')committeeInput.displayForecast={direction:roundCall.direction,basis:roundCall.basis,asOf:roundCall.asOf,ticker:roundCall.ticker,confidencePercent:roundCall.confidencePercent,actionable:false,mode:'SHADOW_ONLY'};
-   return {asset,...signal,timing,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,timing,v8,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),processingMs:Date.now()-requestStartedAt,source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});

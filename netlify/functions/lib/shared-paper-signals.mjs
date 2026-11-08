@@ -5,7 +5,10 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
  const expires=Date.parse(m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
  const left=(expires-now)/1000,spread=Math.max(ya-yb,na-nb);
  const base={ticker:m?.ticker||null,action:'WAIT',score:0,reason:'Insufficient verified evidence',at:now,expiresAt:expires};
- if(!m?.ticker||![yb,ya,nb,na].every(Number.isFinite)||ya<yb||na<nb||yb<=0||nb<=0||spread>5||!Number.isFinite(left)||left<75||left>930)return {...base,reason:'Missing, stale, illiquid or invalid quotes'};
+ if(!m?.ticker||![yb,ya,nb,na].every(Number.isFinite)||ya<yb||na<nb||yb<=0||nb<=0)
+  return {...base,reason:'Missing or invalid executable bid/ask'};
+ if(!Number.isFinite(left)||left<=0||left>930)return {...base,reason:'Outside the active round time window'};
+ if(spread>5)return {...base,reason:'Spread exceeds 5¢: '+spread.toFixed(1)+'¢'};
  if(position){
   const side=String(position.side).toLowerCase(),bid=side==='up'?yb:side==='down'?nb:NaN,entry=Number(position.ask);
   if(!Number.isFinite(bid)||!Number.isFinite(entry)||entry<=0)return {...base,reason:'Position entry or exit bid unavailable'};

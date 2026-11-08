@@ -6,7 +6,31 @@ scalper.id='btcProScalper';
 scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 const researchReadouts=document.createElement('div');
-scalper.append(researchReadouts);
+const v8Readouts=document.createElement('div');
+const v8Radar=document.createElement('p');
+v8Radar.className='premium-foot';
+box.append(v8Radar);
+scalper.append(v8Readouts,researchReadouts);
+let sharedV8=[];
+function paintV8(){
+ const snapshot=sharedV8.find(row=>row.asset===selectedCoin)?.v8;
+ const age=snapshot?Date.now()-snapshot.at:Infinity;
+ const fresh=age>=0&&age<=30000&&Date.now()<snapshot.expiresAt;
+ v8Radar.textContent=fresh?'V8 SHADOW · '+snapshot.radar+' · '+snapshot.regime+
+  ' · '+Math.floor(age/1000)+'s since observation':'V8 SHADOW · Waiting for a fresh matching observation';
+ v8Readouts.replaceChildren(...['A','B','C'].map(name=>{
+  const line=document.createElement('p');
+  line.style.cssText=researchRowStyle;
+  const engine=fresh?snapshot.engines[name]:null;
+  line.textContent='Scalper '+name+' V8 · '+(engine?engine.decision+' · modeled edge '+
+   (engine.edge*100).toFixed(1)+'¢ · SHADOW':'Waiting for evidence');
+  return line;
+ }));
+}
+window.addEventListener('banktrades:shared-signals',event=>{
+ sharedV8=Array.isArray(event.detail)?event.detail:[];
+ paintV8();
+});
 const researchRowStyle='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
 function createScalperBots(coin){
 const shadow=document.createElement('p');
@@ -410,6 +434,7 @@ function paintCoin(){
   box.querySelector('h2').lastChild.textContent=' '+selectedCoin+' 15-MIN · LOCK & FLIP RADAR';
   scalper.querySelector('h2').textContent='⚡ '+selectedCoin+' 15-MIN PRO SCALPER';
   researchReadouts.replaceChildren(botsFor(selectedCoin).readouts,titan);
+  paintV8();
   for(const button of buttons){
     const active=button.dataset.coin===selectedCoin;
     button.setAttribute('aria-pressed',String(active));
@@ -631,5 +656,6 @@ function assess(coin,market,e,visible){
 waitForData('Checking '+selectedCoin+' market and spot feed');
 botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
+setInterval(()=>{if(!document.hidden)paintV8()},15000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
