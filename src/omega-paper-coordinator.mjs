@@ -9,6 +9,14 @@ export function advanceOmegaPaper({state={},signal,quote,roundId,feesDollars,now
  const ticker=quote.ticker,key=ticker+'|'+roundId,position=positions[ticker];
  if(position?.status==='OPEN'){
   if(position.roundId!==roundId)return {status:'BLOCKED',reason:'Previous round position requires explicit settlement',state,realOrdersAuthorized:false};
+  // A persisted trailing peak is only evidence if a paper position could
+  // physically have earned it. A corrupt inflated peak would otherwise
+  // trigger a false trailing-profit exit on the next ordinary quote.
+  // Missing peaks remain valid for positions opened before tracking existed.
+  if(position.peakNetDollars!==undefined&&
+   (!Number.isFinite(position.peakNetDollars)||
+    position.peakNetDollars>position.quantity-position.entryCostDollars+.00011))
+   return {status:'BLOCKED',reason:'Invalid persisted paper profit peak',state,realOrdersAuthorized:false};
   const marked=paperExit({position,quote,feesDollars,slippageDollars,nowMs});
   if(marked.status!=='PAPER_CLOSED')return {status:'BLOCKED',reason:marked.reasons.join('; '),state,realOrdersAuthorized:false};
   const peak=Math.max(Number.isFinite(position.peakNetDollars)?position.peakNetDollars:marked.netDollars,marked.netDollars);
