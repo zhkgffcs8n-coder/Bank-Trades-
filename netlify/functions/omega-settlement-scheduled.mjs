@@ -31,7 +31,7 @@ export async function scoreOmegaArchive(db){
   // using them as predictedAtMs leaks earlier eligibility into walk-forward
   // selection and makes the official chronology look better than it was.
   await db.setJSON(scoreKey,{...score,predictedAtMs:forecast.recordedAtMs,outcome,settledAtMs,
-   forecastKey:key,recordedAtMs:forecast.recordedAtMs},{onlyIfNew:true});
+   forecastKey:key,recordedAtMs:forecast.recordedAtMs,expiresAtMs:forecast.expiresAtMs},{onlyIfNew:true});
  });
 }
 
