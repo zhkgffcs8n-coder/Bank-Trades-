@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent,trainingObservationDigest} from '../src/training-provenance.mjs';
+import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent,trainingObservationDigest,claimTrainingIntent} from '../src/training-provenance.mjs';
 
 test('preserves finalized pending prediction provenance without claiming it was untrained',()=>{
  const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,features:[1,0,0,0],prediction:.6};
@@ -108,4 +108,33 @@ test('training intent and committed marker cannot predate contract expiry',()=>{
  assert.equal(validCommittedTrainingMarker(marker,rec,'yes',intent),true);
  const forgedIntent={...intent,startedAt:199};
  assert.equal(validCommittedTrainingMarker({...marker,intentStartedAt:199},rec,'yes',forgedIntent),false);
+});
+
+test('only one overlapping collector can claim the same finalized contract before learning',async()=>{
+ const rec={ticker:'KXBTC15M-TEST',asset:'BTC',at:100,expiresAt:200,
+  features:[.1,.2,-.3,.4],baseline:.55,globalPrediction:.52,assetPrediction:.53};
+ const intent=trainingWriteIntent(rec,'yes',frozenTrainingTargets(rec),{count:9},{count:7},250);
+ const key='training/intent/v1/'+rec.ticker,values=new Map();
+ const db={
+  async setJSON(k,v,options){
+   assert.deepEqual(options,{onlyIfNew:true},'claims must never overwrite a prior intent');
+   if(!values.has(k))values.set(k,structuredClone(v));
+  },
+  async get(k){return structuredClone(values.get(k)??null)}
+ };
+ const results=await Promise.all([
+  claimTrainingIntent(db,key,intent,'collector-A'),
+  claimTrainingIntent(db,key,intent,'collector-B')
+ ]);
+ assert.deepEqual(results,[true,false]);
+ assert.equal(values.get(key).claimId,'collector-A');
+ assert.equal(await claimTrainingIntent(db,key,intent,'collector-C'),false);
+ assert.equal(values.get(key).claimId,'collector-A');
+ const marker={version:2,ticker:rec.ticker,asset:rec.asset,result:'yes',globalUpdated:true,assetUpdated:true,
+  globalCount:10,assetCount:8,learnedAt:300,observationDigest:intent.observationDigest,
+  intentStartedAt:intent.startedAt,claimId:'collector-A'};
+ assert.equal(validCommittedTrainingMarker(marker,rec,'yes',values.get(key)),true);
+ assert.equal(validCommittedTrainingMarker({...marker,claimId:'collector-B'},rec,'yes',values.get(key)),false);
+ assert.equal(validCommittedTrainingMarker({...marker,claimId:undefined},rec,'yes',values.get(key)),false);
+ await assert.rejects(claimTrainingIntent(db,'training/intent/v1/WRONG',intent,'collector-D'),/Invalid training claim/);
 });
