@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {auditScalpEntry,earlyScalpSignals} from '../../src/scalp-entry-audit.mjs';
 import {normalizeCoinbaseTape,freezePredatorSample,scorePredatorSamples} from '../../src/predator-forward.mjs';
 import {hunterEngines,openHunterPaper,monitorHunterPaper,settleHunterPaper} from '../../src/scalp-hunter-paper.mjs';
@@ -13,7 +14,7 @@ import {recentContractSamples} from '../../src/recent-contract-samples.mjs';
 import {validCollectorQuote,parseCollectorPrice} from '../../src/collector-quote.mjs';
 import {pairedShadow,resolvePairedShadow,originalMomentumShadow} from '../../src/paired-shadow.mjs';
 import {initialModel,predict,learn,learningReport,modelValidated,multiWindowMomentum} from '../../src/research-model.mjs';
-import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent} from '../../src/training-provenance.mjs';
+import {pendingTrainingReview,frozenTrainingTargets,validCommittedTrainingMarker,trainingWriteIntent,claimTrainingIntent} from '../../src/training-provenance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {edgeResearch} from '../../src/edge-research.mjs';
 import {earlyExitAudit} from '../../src/early-exit-audit.mjs';
@@ -432,10 +433,14 @@ export default async()=>{
      if(!cached&&!learnedMarker&&!priorIntent&&(targets.global||targets.asset)){
       const assetKey=String(rec.asset||'UNKNOWN');
       const assetModel=assetModels[assetKey]||await db.get('training/model/'+assetKey,{type:'json'})||initialModel();
-      // Persist intent BEFORE any gradient write. This is an audit trail, not
-      // an atomic lock: overlapping schedules still require reconciliation.
+      // Claim the per-contract write-ahead intent atomically before touching
+      // model weights. A concurrent collector that loses this conditional
+      // create must not train or delete the winner's pending record.
+      // Separate model keys still require reconciliation after interruptions.
       const intent=trainingWriteIntent(rec,result,targets,model,assetModel,now);
-      await db.setJSON('training/intent/v1/'+rec.ticker,intent);
+      const claimId=randomUUID();
+      const claimed=await claimTrainingIntent(db,'training/intent/v1/'+rec.ticker,intent,claimId);
+      if(!claimed)return;
       // The global model must be scored against its OWN prediction frozen
       // before settlement, not the separate asset model's prediction.
       if(targets.global){
@@ -451,7 +456,7 @@ export default async()=>{
       }
       if(targets.asset)await db.setJSON('training/model/'+assetKey,assetModels[assetKey]);
       // Persist idempotency evidence after both models have been updated.
-      await db.setJSON('training/learned/v1/'+rec.ticker,{version:2,ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),observationDigest:intent.observationDigest,intentStartedAt:intent.startedAt,globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
+      await db.setJSON('training/learned/v1/'+rec.ticker,{version:2,ticker:rec.ticker,result,asset:assetKey,learnedAt:Date.now(),observationDigest:intent.observationDigest,intentStartedAt:intent.startedAt,claimId,globalUpdated:targets.global,assetUpdated:targets.asset,globalCount:model.count,assetCount:assetModels[assetKey].count});
       // Count only fully committed training markers, not interrupted partial writes.
       trainedThisRun++;
       trainedByAsset[assetKey]=(trainedByAsset[assetKey]||0)+1;
