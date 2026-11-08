@@ -13,7 +13,13 @@ box.append(v8Radar);
 const v8Scoreboard=document.createElement('p');
 v8Scoreboard.className='premium-foot';
 v8Scoreboard.textContent='V8 server scoreboard · Loading';
-scalper.append(v8Readouts,v8Scoreboard,researchReadouts);
+const legacyResearch=document.createElement('details');
+legacyResearch.className='bt-command-research';
+const legacyTitle=document.createElement('summary');
+legacyTitle.textContent='V5–V7 research details';
+legacyResearch.append(legacyTitle,researchReadouts);
+const predatorSlot=document.createElement('div');
+scalper.append(v8Readouts,predatorSlot,v8Scoreboard,legacyResearch);
 const predatorServerStatus=document.createElement('p');
 predatorServerStatus.className='premium-foot';
 predatorServerStatus.textContent='OMEGA PREDATOR · Waiting for server research';
@@ -462,7 +468,7 @@ setInterval(()=>{
   if(coin==='BTC'||coin===selectedCoin||shadowPosition||v6Position)scanShadow();
   else socket?.close();
 },5000);
-return {readouts,setMarket:market=>{shadowMarket=market}};
+return {readouts,predatorPanel:coin==='BTC'?predatorPanel:null,setMarket:market=>{shadowMarket=market}};
 
 
 }
@@ -538,7 +544,9 @@ const buttons=easyCoinButtons.map(source=>{
 function paintCoin(){
   box.querySelector('h2').lastChild.textContent=' '+selectedCoin+' 15-MIN · LOCK & FLIP RADAR';
   scalper.querySelector('h2').textContent='⚡ '+selectedCoin+' 15-MIN PRO SCALPER';
-  researchReadouts.replaceChildren(botsFor(selectedCoin).readouts,titan);
+  const bot=botsFor(selectedCoin);
+  researchReadouts.replaceChildren(bot.readouts,titan);
+  predatorSlot.replaceChildren(...(bot.predatorPanel?[bot.predatorPanel]:[]));
   paintV8();
   for(const button of buttons){
     const active=button.dataset.coin===selectedCoin;
@@ -562,16 +570,10 @@ function selectCoin(coin){
 function mountScalper(){
   const feed=document.getElementById('btVerifiedAlertFeed');
   if(!feed)return false;
-  const narrow=matchMedia('(max-width: 760px)');
   const row=document.createElement('div');
-  row.style.cssText='position:relative;display:flex;flex-direction:column;min-width:0';
+  row.className='bt-command-grid';
+  picker.className='bt-command-picker';
   feed.before(row);
-  const backdrop=document.createElement('div');
-  backdrop.setAttribute('aria-hidden','true');
-  backdrop.style.cssText='position:absolute;right:1px;background:#101e30;border-radius:0 11px 11px 0;pointer-events:none';
-  const panels=document.createElement('div');
-  panels.style.cssText='display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px';
-  box.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
   const title=box.querySelector('h2');
   title.style.cssText='margin:0 0 18px;font-size:clamp(20px,2vw,30px)';
   const icon=document.createElement('span');
@@ -588,45 +590,8 @@ function mountScalper(){
       {transform:'rotate(-12deg) scale(1)'}
     ],{duration:1800,iterations:Infinity,easing:'ease-in-out'});
   }
-  panels.append(picker,box,scalper);
-  row.append(feed,backdrop,panels);
+  row.append(feed,picker,box,scalper);
   paintCoin();
-
-  function layout(){
-    const feedBounds=feed.getBoundingClientRect();
-    const range=document.createRange();
-    let textRight=feedBounds.left;
-    for(const line of feed.children){
-      range.selectNodeContents(line);
-      textRight=Math.max(textRight,range.getBoundingClientRect().right);
-    }
-    const available=Math.floor(feedBounds.right-textRight-36);
-    const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor((available-12)/2));
-    const inline=!narrow.matches&&width>=260;
-    panels.style.order=narrow.matches?'-1':'';
-    panels.style.gridTemplateColumns=narrow.matches?'minmax(0,1fr)':'repeat(2,minmax(0,1fr))';
-    panels.style.position=inline?'absolute':'';
-    panels.style.right=inline?'12px':'';
-    panels.style.top=inline?feed.offsetTop+'px':'';
-    panels.style.width=inline?(width*2+12)+'px':'';
-    const panelHeight=panels.offsetHeight;
-    row.style.minHeight=inline&&panelHeight>feed.offsetHeight?(feed.offsetTop+panelHeight)+'px':'';
-    backdrop.hidden=!inline;
-    if(inline){
-      backdrop.style.top=(feed.offsetTop+1)+'px';
-      backdrop.style.height=(Math.max(feed.offsetHeight,panelHeight)-2)+'px';
-      backdrop.style.width=(width*2+35)+'px';
-    }
-  }
-
-  if(typeof ResizeObserver==='function'){
-    const observer=new ResizeObserver(layout);
-    observer.observe(feed);
-    observer.observe(panels);
-  }
-  window.addEventListener('resize',layout);
-  new MutationObserver(layout).observe(feed,{childList:true});
-  layout();
   return true;
 }
 if(!mountScalper()){
