@@ -36,6 +36,9 @@ async function refreshPredatorReport(){
   predatorServerStatus.textContent='OMEGA PREDATOR · Server shadow · '+report.sampleRecords+
    ' observations · '+report.scoredRecords+' scored horizons'+
    (age===null?'':' · latest '+age+'s old · '+report.latest.stage.replaceAll('_',' '));
+  const stream=report.streaming;
+  if(stream?.completedAt)predatorServerStatus.textContent+=' · V12 stream burst '+stream.stage.replaceAll('_',' ')+
+   ' · '+Math.max(0,Math.round((Date.now()-stream.completedAt)/1000))+'s ago · '+stream.sampleRecords+' sampled books';
  }catch{predatorServerStatus.textContent='OMEGA PREDATOR · Server report unavailable'}
  finally{predatorReportBusy=false}
 }

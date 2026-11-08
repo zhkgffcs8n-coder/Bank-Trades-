@@ -27,13 +27,13 @@ export function freezePredatorSample(input){
   momentum:observation?.baselineSide?{side:observation.baselineSide,ask:ask(observation,observation.baselineSide)}:null};
 }
 
-export function scorePredatorSamples(previous,current){
+export function scorePredatorSamples(previous,current,windows=horizons,tolerance=null){
  if(!current.book)return [];
  return previous.flatMap(entry=>{
   if(!entry.book||entry.ticker!==current.ticker||entry.at>=current.at||current.at>=entry.expiresAt)return [];
-  return horizons.flatMap(horizon=>{
+  return windows.flatMap(horizon=>{
    const lag=current.at-entry.at-horizon*1000;
-   if(lag< -5000||lag>15000)return [];
+   if(lag< -(tolerance??5000)||lag>(tolerance??15000))return [];
    const pnl=signal=>{
     const bid=(signal.side==='UP'?current.book.yes:current.book.no).price;
     return {bid,net:bid-signal.ask-cost(signal.ask)-cost(bid)};
