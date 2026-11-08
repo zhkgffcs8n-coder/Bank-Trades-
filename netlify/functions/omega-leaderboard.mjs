@@ -17,7 +17,7 @@ export async function omegaLeaderboard(db,{limit=250}={}){
    /^[A-Z0-9-]{3,100}$/.test(ticker)&&
    record.marketTicker===ticker&&record.roundId===ticker&&
    typeof record.forecastKey==='string'&&record.forecastKey.startsWith(prefix)&&
-   /^\\d+$/.test(record.forecastKey.slice(prefix.length))&&
+   /^\d+$/.test(record.forecastKey.slice(prefix.length))&&
    Number.isSafeInteger(record.predictedAtMs)&&record.predictedAtMs>0&&
    record.recordedAtMs===record.predictedAtMs&&
    Number.isSafeInteger(record.expiresAtMs)&&record.expiresAtMs>record.predictedAtMs&&
