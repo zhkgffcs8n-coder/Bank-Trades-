@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const chart=document.getElementById('btcSpotChart');if(!chart)return;
-const box=document.createElement('section');box.className='card';box.id='btcLockDesk';box.innerHTML='<h2>🔐 BTC 15-MIN · LOCK & FLIP RADAR</h2><div id="btcLockState" class="notice" role="status" aria-live="polite">Collecting independent candle evidence…</div><p id="btcLockFacts" class="premium-foot">A lock candidate is not a confirmed win. Actual settlement determines the result.</p><p class="premium-foot">Uses completed Coinbase BTC-USD candles plus Kalshi quote agreement. No fixed 93% accuracy claim; not the TradingView proprietary script. Paper research only.</p>';chart.closest('section')?.append(box);
+const box=document.createElement('section');box.className='card';box.id='btcLockDesk';box.innerHTML='<h2>🔐 BTC 15-MIN · LOCK & FLIP RADAR</h2><div id="btcLockState" class="notice" role="status" aria-live="polite">Collecting independent candle evidence…</div><p id="btcLockFacts" class="premium-foot">A lock candidate is not a confirmed win. Actual settlement determines the result.</p><p class="premium-foot">Uses completed Coinbase spot candles plus Kalshi quote agreement. No fixed 93% accuracy claim; not the TradingView proprietary script. Paper research only.</p>';chart.closest('section')?.append(box);
 const scalper=document.createElement('section');
 scalper.className='card';
 scalper.id='btcProScalper';
@@ -370,6 +370,48 @@ const actionLooks={
 };
 let scalpMotion;
 const scalpDetail=scalper.querySelector('[data-detail]');
+const easyCoinButtons=[...document.querySelectorAll('#quickAssets button[data-quick-asset]')];
+const coins=easyCoinButtons.map(button=>button.dataset.quickAsset);
+const savedCoin=localStorage.getItem('btProCoin')||localStorage.getItem('btEasyAsset');
+let selectedCoin=coins.includes(savedCoin)?savedCoin:'BTC';
+let selectionVersion=0;
+const picker=document.createElement('div');
+picker.setAttribute('role','group');
+picker.setAttribute('aria-label','Coin for Pro Scalper and Lock & Flip Radar');
+picker.style.cssText='grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fit,minmax(76px,1fr));gap:8px;margin:8px 0 0';
+const buttons=easyCoinButtons.map(source=>{
+  const coin=source.dataset.quickAsset;
+  const button=document.createElement('button');
+  button.type='button';
+  button.dataset.coin=coin;
+  button.textContent=source.textContent;
+  button.style.cssText='min-height:44px;white-space:nowrap;padding:4px;font-weight:800';
+  button.addEventListener('click',()=>selectCoin(coin));
+  picker.append(button);
+  return button;
+});
+function paintCoin(){
+  box.querySelector('h2').lastChild.textContent=' '+selectedCoin+' 15-MIN · LOCK & FLIP RADAR';
+  scalper.querySelector('h2').textContent='⚡ '+selectedCoin+' 15-MIN PRO SCALPER';
+  researchReadouts.hidden=selectedCoin!=='BTC';
+  for(const button of buttons){
+    const active=button.dataset.coin===selectedCoin;
+    button.setAttribute('aria-pressed',String(active));
+    button.style.background=active?'#8a7300':'transparent';
+    button.style.border=active?'4px solid #ffd400':'1px solid rgba(255,255,255,.35)';
+    button.style.color=active?'#fff7a8':'#f8fafc';
+  }
+}
+function selectCoin(coin){
+  if(coin===selectedCoin)return;
+  selectedCoin=coin;
+  localStorage.setItem('btProCoin',coin);
+  selectionVersion++;
+  paintCoin();
+  facts.textContent='';
+  waitForData('Checking '+coin+' market and spot feed');
+  evaluate();
+}
 function mountScalper(){
   const feed=document.getElementById('btVerifiedAlertFeed');
   if(!feed)return false;
@@ -398,8 +440,9 @@ function mountScalper(){
       {transform:'rotate(-12deg) scale(1)'}
     ],{duration:1800,iterations:Infinity,easing:'ease-in-out'});
   }
-  panels.append(box,scalper);
+  panels.append(picker,box,scalper);
   row.append(feed,backdrop,panels);
+  paintCoin();
 
   function layout(){
     const feedBounds=feed.getBoundingClientRect();
@@ -440,7 +483,7 @@ if(!mountScalper()){
   observer.observe(document.body,{childList:true,subtree:true});
 }
 
-let tracked=null,busy=false;
+const positions=new Map();
 function showScalp(message,exitSide){
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
@@ -467,13 +510,15 @@ function showScalp(message,exitSide){
 function scalp(market,left,side,strong,quotes){
   const ticker=market.ticker;
   let entered=false;
+  let tracked=positions.get(selectedCoin);
   if(tracked?.ticker!==ticker)tracked=null;
   if(!tracked){
     if(!strong||left<180||!['up','down'].includes(side)){
-      showScalp('NO ENTRY · Waiting for aligned BTC momentum and a tight spread');
+      showScalp('NO ENTRY · Waiting for aligned '+selectedCoin+' momentum and a tight spread');
       return;
     }
     tracked={ticker,side,entry:quotes[side].ask,exit:null};
+    positions.set(selectedCoin,tracked);
     entered=true;
   }
   const quote=quotes[tracked.side];
@@ -490,34 +535,71 @@ function scalp(market,left,side,strong,quotes){
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
   showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · '+(tracked.exit?'Exit bid ':'Bid ')+displayedBid.toFixed(1)+'% · Move '+(displayedMove>=0?'+':'')+displayedMove.toFixed(1)+' pts',tracked.exit?tracked.side:null);
 }
-const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');let lastDirection='mixed',confirmed=0,history=[];
+const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');
+const directions=new Map();
+let pendingVersion;
 const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
-async function evaluate(){if(busy)return;busy=true;try{
-const e=window.__BANK_TRADES_BTC_EVIDENCE__;if(!e||Date.now()-e.at>90000||Date.now()-e.candleAt>180000){state.textContent='DATA WAIT · BTC spot candle evidence unavailable or stale';showScalp(state.textContent);return}
-let market=null;try{const r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.ok){const d=await r.json();if(Math.abs(Date.now()-Date.parse(d.fetched_at))<30000)market=(d.results||[]).find(x=>String(x.asset).toUpperCase()==='BTC')?.market}}catch{}
-if(/^KXBTC15M-/.test(market?.ticker))shadowMarket=market;
-if(!market){state.textContent='DATA WAIT · Kalshi BTC contract unavailable';showScalp(state.textContent);return}
-const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
-if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb){state.textContent='DATA WAIT · Invalid BTC market or quotes';showScalp(state.textContent);return}
-const diff=e.bull-e.bear,side=diff>=3?'up':diff<=-3?'down':'mixed',ask=side==='up'?ya:na,bid=side==='up'?yb:nb,spread=Math.max(ya-yb,na-nb);
-const strong=side!=='mixed'&&e.direction===side&&Math.abs(diff)>=4&&spread<=3&&ask>=35&&ask<=80&&left>=180;
-const closeLeft=(Date.parse(market.close_time)-Date.now())/1000;
-if(/^KXBTC15M-/.test(market.ticker)&&closeLeft>0&&closeLeft<=900&&
-    [ya,yb,na,nb].every(value=>value>0&&value<100)){
-  scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}});
-}else{
-  showScalp('DATA WAIT · No open BTC 15-minute contract with valid quotes');
+function waitForData(message){
+  facts.textContent='';
+  state.textContent='DATA WAIT · '+message;
+  showScalp(state.textContent);
 }
-const quality=Math.max(0,Math.min(100,Math.round(35+Math.min(30,Math.abs(diff)*6)+Math.max(0,3-spread)*6+(left>=360?10:0))));
-if(side!=='mixed'&&side===lastDirection)confirmed++;else confirmed=1;
-const flipped=lastDirection!=='mixed'&&side!=='mixed'&&side!==lastDirection;
-lastDirection=side;
-const label=flipped?'⚡ POSSIBLE FLIP '+side.toUpperCase():strong&&confirmed>=2?'🔐 '+side.toUpperCase()+' LOCK CANDIDATE':side!=='mixed'?'EARLY LEAN '+side.toUpperCase():'MIXED · NO LOCK';
-state.textContent=label+' · '+Math.ceil(left/60)+' min remaining · '+(strong?'Spot/Kalshi evidence aligned':'Not enough independent agreement');
-facts.textContent='Evidence quality '+quality+'/100 · Bull '+e.bull+'/8 · Bear '+e.bear+'/8 · RSI '+Number(e.rsi).toFixed(1)+' · '+(side==='mixed'?'No direction':'Contract ask '+ask.toFixed(1)+'¢ / bid '+bid.toFixed(1)+'¢')+' · spread '+spread.toFixed(1)+'¢ · '+confirmed+' consecutive assessments. Quality is a rule score, not win probability. Lock candidate ≠ settled win.';
-window.__BANK_TRADES_BTC_LOCK__={at:Date.now(),direction:side,lockCandidate:strong&&confirmed>=2,flipCandidate:flipped,secondsLeft:left,spread,ask,bid,quality,source:'BTC spot indicators and Kalshi quotes'};
-if(flipped){window.dispatchEvent(new CustomEvent('banktrades:btc-flip',{detail:window.__BANK_TRADES_BTC_LOCK__}))}
-}finally{busy=false}}
-showScalp('DATA WAIT · Checking the BTC contract and spot feed');
+async function evaluate(){
+  const version=selectionVersion,coin=selectedCoin;
+  if(pendingVersion===version)return;
+  pendingVersion=version;
+  try{
+    const [markets,e]=await Promise.all([
+      fetch('/api/data?mode=markets',{cache:'no-store',signal:AbortSignal.timeout(15000)})
+        .then(r=>r.ok?r.json():null)
+        .then(d=>Math.abs(Date.now()-Date.parse(d?.fetched_at))<30000
+          ? d.results??[]:[]).catch(()=>[]),
+      coin==='BTC'?window.__BANK_TRADES_BTC_EVIDENCE__
+        :window.bankTradesSpotEvidence?.(coin,AbortSignal.timeout(10000)).catch(()=>null)
+    ]);
+    if(version!==selectionVersion)return;
+    const marketFor=asset=>markets.find(x=>x.asset===asset)?.market;
+    const btcMarket=marketFor('BTC');
+    if(btcMarket?.ticker?.startsWith('KXBTC15M-'))shadowMarket=btcMarket;
+    if(coin!=='BTC')assess('BTC',btcMarket,window.__BANK_TRADES_BTC_EVIDENCE__,false);
+    assess(coin,marketFor(coin),e,true);
+  }finally{
+    if(pendingVersion===version)pendingVersion=undefined;
+  }
+}
+function assess(coin,market,e,visible){
+  const unavailable=message=>{if(visible)waitForData(message)};
+  if(!market?.ticker?.startsWith('KX'+coin+'15M-'))return unavailable('Kalshi '+coin+' 15-minute contract unavailable');
+  if(!e||Date.now()-e.at>90000||Date.now()-e.candleAt>180000)return unavailable(coin+' spot candle evidence unavailable or stale');
+  const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
+  if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb)return unavailable('Invalid '+coin+' market or quotes');
+  const diff=e.bull-e.bear,side=diff>=3?'up':diff<=-3?'down':'mixed',ask=side==='up'?ya:na,bid=side==='up'?yb:nb,spread=Math.max(ya-yb,na-nb);
+  const strong=side!=='mixed'&&e.direction===side&&Math.abs(diff)>=4&&spread<=3&&ask>=35&&ask<=80&&left>=180;
+  const closeLeft=(Date.parse(market.close_time)-Date.now())/1000;
+  if(visible){
+    if(closeLeft>0&&closeLeft<=900&&
+    [ya,yb,na,nb].every(value=>value>0&&value<100)){
+      scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}});
+    }else{
+      showScalp('DATA WAIT · No open '+coin+' 15-minute contract with valid quotes');
+    }
+  }
+  const quality=Math.max(0,Math.min(100,Math.round(35+Math.min(30,Math.abs(diff)*6)+Math.max(0,3-spread)*6+(left>=360?10:0))));
+  const previous=directions.get(coin);
+  const lastDirection=previous?.ticker===market.ticker?previous.side:'mixed';
+  const confirmed=side!=='mixed'&&side===lastDirection?previous.confirmed+1:1;
+  const flipped=lastDirection!=='mixed'&&side!=='mixed'&&side!==lastDirection;
+  directions.set(coin,{ticker:market.ticker,side,confirmed});
+  const label=flipped?'⚡ POSSIBLE FLIP '+side.toUpperCase():strong&&confirmed>=2?'🔐 '+side.toUpperCase()+' LOCK CANDIDATE':side!=='mixed'?'EARLY LEAN '+side.toUpperCase():'MIXED · NO LOCK';
+  if(visible){
+    state.textContent=label+' · '+Math.ceil(left/60)+' min remaining · '+(strong?'Spot/Kalshi evidence aligned':'Not enough independent agreement');
+    facts.textContent='Evidence quality '+quality+'/100 · Bull '+e.bull+'/8 · Bear '+e.bear+'/8 · RSI '+Number(e.rsi).toFixed(1)+' · '+(side==='mixed'?'No direction':'Contract ask '+ask.toFixed(1)+'¢ / bid '+bid.toFixed(1)+'¢')+' · spread '+spread.toFixed(1)+'¢ · '+confirmed+' consecutive assessments. Quality is a rule score, not win probability. Lock candidate ≠ settled win.';
+  }
+  if(coin==='BTC'){
+    window.__BANK_TRADES_BTC_LOCK__={at:Date.now(),direction:side,lockCandidate:strong&&confirmed>=2,flipCandidate:flipped,secondsLeft:left,spread,ask,bid,quality,source:'BTC spot indicators and Kalshi quotes'};
+    if(flipped){window.dispatchEvent(new CustomEvent('banktrades:btc-flip',{detail:window.__BANK_TRADES_BTC_LOCK__}))}
+  }
+}
+waitForData('Checking '+selectedCoin+' market and spot feed');
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
