@@ -1,12 +1,10 @@
 (()=>{'use strict';
-const chart=document.getElementById('btcSpotChart');if(!chart)return;
-const box=document.createElement('section');box.className='card';box.id='btcLockDesk';box.innerHTML='<h2>🔐 BTC 15-MIN · LOCK & FLIP RADAR</h2><div id="btcLockState" class="notice" role="status" aria-live="polite">Collecting independent candle evidence…</div><p id="btcLockFacts" class="premium-foot">A lock candidate is not a confirmed win. Actual settlement determines the result.</p><p class="premium-foot">Uses completed Coinbase spot candles plus Kalshi quote agreement. No fixed 93% accuracy claim; not the TradingView proprietary script. Paper research only.</p>';chart.closest('section')?.append(box);
+const box=document.createElement('section');box.className='card';box.id='btcLockDesk';box.innerHTML='<h2>🔐 BTC 15-MIN · LOCK & FLIP RADAR</h2><div id="btcLockState" class="notice" role="status" aria-live="polite">Collecting independent candle evidence…</div><p id="btcLockFacts" class="premium-foot">A lock candidate is not a confirmed win. Actual settlement determines the result.</p><p class="premium-foot">Uses completed Coinbase spot candles plus Kalshi quote agreement. No fixed 93% accuracy claim; not the TradingView proprietary script. Paper research only.</p>';
 const scalper=document.createElement('section');
 scalper.className='card';
 scalper.id='btcProScalper';
 scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
-box.before(scalper);
 const researchReadouts=document.createElement('div');
 scalper.append(researchReadouts);
 function createScalperBots(coin){
@@ -433,8 +431,9 @@ function selectCoin(coin){
 function mountScalper(){
   const feed=document.getElementById('btVerifiedAlertFeed');
   if(!feed)return false;
+  const narrow=matchMedia('(max-width: 760px)');
   const row=document.createElement('div');
-  row.style.position='relative';
+  row.style.cssText='position:relative;display:flex;flex-direction:column;min-width:0';
   feed.before(row);
   const backdrop=document.createElement('div');
   backdrop.setAttribute('aria-hidden','true');
@@ -452,7 +451,7 @@ function mountScalper(){
   const radarStatus=box.querySelector('#btcLockState');
   radarStatus.style.cssText='padding:12px;border:2px solid #67e8f9;border-radius:14px;background:#123354;color:#ecfeff;font-size:clamp(16px,1.6vw,24px);font-weight:800';
   if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
-    icon.animate([
+    icon.animate?.([
       {transform:'rotate(-12deg) scale(1)'},
       {transform:'rotate(12deg) scale(1.16)'},
       {transform:'rotate(-12deg) scale(1)'}
@@ -472,7 +471,9 @@ function mountScalper(){
     }
     const available=Math.floor(feedBounds.right-textRight-36);
     const width=Math.min(560,Math.floor(feedBounds.width*0.48),Math.floor((available-12)/2));
-    const inline=width>=260;
+    const inline=!narrow.matches&&width>=260;
+    panels.style.order=narrow.matches?'-1':'';
+    panels.style.gridTemplateColumns=narrow.matches?'minmax(0,1fr)':'repeat(2,minmax(0,1fr))';
     panels.style.position=inline?'absolute':'';
     panels.style.right=inline?'12px':'';
     panels.style.top=inline?feed.offsetTop+'px':'';
@@ -487,9 +488,12 @@ function mountScalper(){
     }
   }
 
-  const observer=new ResizeObserver(layout);
-  observer.observe(feed);
-  observer.observe(panels);
+  if(typeof ResizeObserver==='function'){
+    const observer=new ResizeObserver(layout);
+    observer.observe(feed);
+    observer.observe(panels);
+  }
+  window.addEventListener('resize',layout);
   new MutationObserver(layout).observe(feed,{childList:true});
   layout();
   return true;
