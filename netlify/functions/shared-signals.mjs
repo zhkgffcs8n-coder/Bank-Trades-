@@ -73,7 +73,8 @@ export default async req=>{
     }finally{clearTimeout(timer)}
    })();
    const recentRead=timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples').catch(()=>null);
-   const [{data,quoteReceivedAt},recent]=await Promise.all([marketRead,recentRead]);
+   const hunterRead=timed(db.get('scalp-hunter/latest/'+asset,{type:'json'}),1200,'scalp hunter').catch(()=>null);
+   const [{data,quoteReceivedAt},recent,hunter]=await Promise.all([marketRead,recentRead,hunterRead]);
    const now=Date.now();
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
    const selected=selectEligibleRound(markets,now);
@@ -122,7 +123,7 @@ export default async req=>{
    // Feed the same visible forecast into the research committee as non-actionable context.
    // It is quote-implied or momentum-derived, not independently calibrated evidence.
    if(roundCall&&committeeInput&&typeof committeeInput==='object')committeeInput.displayForecast={direction:roundCall.direction,basis:roundCall.basis,asOf:roundCall.asOf,ticker:roundCall.ticker,confidencePercent:roundCall.confidencePercent,actionable:false,mode:'SHADOW_ONLY'};
-   return {asset,...signal,timing,v8,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,timing,v8,scalpHunter:hunter?.ticker===market.ticker&&now-hunter.at>=0&&now-hunter.at<=30000?hunter:null,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),processingMs:Date.now()-requestStartedAt,source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});

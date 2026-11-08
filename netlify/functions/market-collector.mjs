@@ -1,3 +1,4 @@
+import {observeScalpHunter,learnScalpHunter,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
 import {replayScalperExits} from '../../src/scalper-v8-exits.mjs';
 import {evaluateScalperV8,parseDepthV8,scoreScalperV8} from '../../src/scalper-v8.mjs';
 import {blobWindow} from '../../src/blob-window.mjs';
@@ -158,18 +159,35 @@ export default async()=>{
    try{
     const v8Key='scalper-v8/pending/'+m.ticker;
     const pending=await db.get(v8Key,{type:'json'});
-    const candidate=pending?null:evaluateScalperV8(record,recent);
+    const candidate=evaluateScalperV8(record,recent);
     const trackExit=pending&&['A','B','C'].some(name=>pending.engines[name].decision!=='SKIP');
-    if(trackExit||(candidate&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'}))){
+    if(trackExit||candidate){
      let depth=null;
      try{
       const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
        {signal:AbortSignal.timeout(1600)});
       if(response.ok)depth=parseDepthV8(await response.json(),m.ticker,Date.now(),record);
      }catch{} // Quotes without depth cannot be used to simulate an early fill.
-     if(candidate){
-      await db.setJSON(v8Key,evaluateScalperV8(record,recent,depth),{onlyIfNew:true});
-     }else if(depth&&depth.at-record.observedAt<=5000&&depth.at<pending.expiresAt){
+     const snapshot=depth?evaluateScalperV8(record,recent,depth):candidate;
+     if(snapshot&&depth&&snapshot.at===depth.at){
+      const tapeKey='scalp-hunter/tape/'+asset;
+      const tape=await db.get(tapeKey,{type:'json'})||[];
+      const profile=learnScalpHunter(tape,snapshot.at);
+      const ideas=forecastScalpHunter(snapshot,depth,profile);
+      if(Object.values(ideas).some(Boolean)){
+       await db.setJSON('scalp-hunter/predictions/'+m.ticker+'/'+bucket,
+        {asset,ticker:m.ticker,at:snapshot.at,ideas},{onlyIfNew:true});
+      }
+      for(const outcome of scoreScalpHunter(tape,depth)){
+       await db.setJSON('scalp-hunter/outcomes/'+outcome.ticker+'/'+outcome.entryAt+'/'+outcome.name,
+        outcome,{onlyIfNew:true});
+      }
+      await db.setJSON(tapeKey,observeScalpHunter(tape,snapshot,depth,ideas));
+      await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas});
+     }
+     if(!pending&&snapshot&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'})){
+      await db.setJSON(v8Key,snapshot,{onlyIfNew:true});
+     }else if(trackExit&&depth&&depth.at-record.observedAt<=5000&&depth.at<pending.expiresAt){
       await db.setJSON('scalper-v8/depth/'+m.ticker+'/'+bucket,depth,{onlyIfNew:true});
      }
     }

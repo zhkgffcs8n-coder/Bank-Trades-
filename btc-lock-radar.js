@@ -34,7 +34,9 @@ async function refreshV8Scoreboard(){
 }
 let sharedV8=[];
 function paintV8(){
- const snapshot=sharedV8.find(row=>row.asset===selectedCoin)?.v8;
+ const shared=sharedV8.find(row=>row.asset===selectedCoin);
+ const snapshot=shared?.v8;
+ const hunter=shared?.scalpHunter;
  const age=snapshot?Date.now()-snapshot.at:Infinity;
  const fresh=age>=0&&age<=30000&&Date.now()<snapshot.expiresAt;
  v8Radar.textContent=fresh?'V8 SHADOW · '+snapshot.radar+' · '+snapshot.regime+
@@ -45,6 +47,12 @@ function paintV8(){
   const engine=fresh?snapshot.engines[name]:null;
   line.textContent='Scalper '+name+' V8 · '+(engine?engine.decision+' · modeled edge '+
    (engine.edge*100).toFixed(1)+'¢ · SHADOW':'Waiting for evidence');
+  const idea=hunter&&Date.now()-hunter.at<=30000?hunter.ideas[name]:null;
+  if(idea){
+   line.textContent+=' · '+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
+    (idea.target*100).toFixed(1)+'% · '+idea.horizonSeconds+'s · historical hit rate '+
+    Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds)';
+  }
   return line;
  }));
 }
