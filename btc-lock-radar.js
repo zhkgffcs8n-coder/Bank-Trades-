@@ -401,11 +401,12 @@ if(!mountScalper()){
 }
 
 let tracked=null,busy=false;
-function showScalp(message){
+function showScalp(message,exitSide){
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
   const detail=separator<0?'':message.slice(separator+3);
-  if(scalpLabel.textContent!==action){
+  const label=exitSide?action+' '+exitSide.toUpperCase():action;
+  if(scalpLabel.textContent!==label){
     const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
       :action.startsWith('HOLD')?'hold':action==='TAKE PROFIT'?'profit':action==='SELL FAST'?'fast'
       :/^(TIME EXIT|EXIT)/.test(action)?'exit':'wait';
@@ -413,7 +414,7 @@ function showScalp(message){
     scalpAction.style.background=background;
     scalpAction.style.color=color;
     scalpAction.style.boxShadow='0 4px 0 '+background+', 0 0 18px '+color+'44';
-    scalpLabel.textContent=action;
+    scalpLabel.textContent=label;
     scalpIcon.textContent=icon;
     scalpMotion?.cancel();
     if(move&&!document.hidden&&!reducedMotion.matches&&!document.body.classList.contains('bt-arcade-muted')){
@@ -447,7 +448,7 @@ function scalp(market,left,side,strong,quotes){
   const displayedBid=tracked.exitBid??quote.bid;
   const displayedMove=displayedBid-tracked.entry;
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
-  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · '+(tracked.exit?'Exit bid ':'Bid ')+displayedBid.toFixed(1)+'% · Move '+(displayedMove>=0?'+':'')+displayedMove.toFixed(1)+' pts');
+  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · '+(tracked.exit?'Exit bid ':'Bid ')+displayedBid.toFixed(1)+'% · Move '+(displayedMove>=0?'+':'')+displayedMove.toFixed(1)+' pts',tracked.exit?tracked.side:null);
 }
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');let lastDirection='mixed',confirmed=0,history=[];
 const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
