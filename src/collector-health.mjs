@@ -5,8 +5,16 @@ export function assessCollectorHealth(heartbeat,now=Date.now(),expectedAssets=8)
  const ageSeconds=Number.isFinite(completedAt)&&completedAt>0&&completedAt<=now
   ?Math.floor((now-completedAt)/1000):null;
  const heartbeatFresh=ageSeconds!==null&&ageSeconds<=180;
+ // Count-only heartbeats can claim complete coverage with repeated or
+ // substituted markets. Both the dashboard and the KaiBot paper status must
+ // verify the actual distinct eight-asset set before reporting health.
+ const expected=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
+ const sampled=Array.isArray(heartbeat?.sampledAssets)?heartbeat.sampledAssets:[];
+ const unique=new Set(sampled);
  const fullCoverage=heartbeat?.status==='COMPLETED'&&
-  heartbeat?.sampledAssetCount===expectedAssets&&
+  expectedAssets===expected.length&&sampled.length===expected.length&&
+  unique.size===expected.length&&expected.every(asset=>unique.has(asset))&&
+  heartbeat?.sampledAssetCount===unique.size&&
   Array.isArray(heartbeat?.failedAssets)&&heartbeat.failedAssets.length===0;
  const trainingSucceeded=heartbeat?.trainingSucceeded===true;
  return {lastCompletedAt:ageSeconds===null?null:completedAt,ageSeconds,
