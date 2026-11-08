@@ -1,7 +1,7 @@
 import {modeledCost} from './scalper-v8.mjs';
 
-const horizons=[60,120];
-const sampleJitterMs=5000;
+const horizons=[3,6,10,20,30,60];
+const sampleJitterMs=1000;
 const sides=['UP','DOWN'];
 const names=['A','B','C'];
 const key=(name,side,ask,horizon)=>[name,side,Math.min(9,Math.floor(ask*10)),horizon].join('/');
@@ -9,11 +9,11 @@ const leg=(depth,side)=>side==='UP'?depth.yes:depth.no;
 const opposite=(depth,side)=>side==='UP'?depth.no:depth.yes;
 
 function setup(snapshot,depth,name,side,early=false){
- if(snapshot.spread>.05||snapshot.imbalance===null||snapshot.expiresAt-snapshot.at<90000)return null;
+ if(snapshot.spread>.05||snapshot.imbalance===null||snapshot.expiresAt<=snapshot.at)return null;
  const sign=side==='UP'?1:-1;
  const ask=1-opposite(depth,side).price;
  const bid=leg(depth,side).price;
- if(!(ask>0&&ask<1)||name!=='B'&&(ask<.01-1e-9||ask>.99+1e-9)||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
+ if(!(ask>0&&ask<1)||(ask<.01-1e-9||ask>.99+1e-9)||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
  const supported=early?snapshot.early?.[name]?.[side]:name==='A'?sign*snapshot.imbalance>=.2&&sign*snapshot.acceleration>=.01:
   name==='B'?sign*snapshot.velocity>=.02&&sign*snapshot.breakout>0:
   snapshot.radar===side+' FLIP WATCH';
@@ -39,9 +39,9 @@ export function collectComparableRounds(tape,asOf){
    for(const horizon of horizons){
     const target=entry.at+horizon*1000;
     let exit;
-    for(let next=index+1;next<known.length&&known[next].at<=target+30000;next++){
+    for(let next=index+1;next<known.length&&known[next].at<=target+(horizon===60?30000:sampleJitterMs);next++){
      const row=known[next];
-     if(row.ticker===entry.ticker&&row.at>=target-sampleJitterMs&&row.at<entry.expiresAt){exit=row;break;}
+     if(row.ticker===entry.ticker&&row.at>=target-(horizon===60?5000:0)&&row.at<entry.expiresAt){exit=row;break;}
     }
     if(!exit)continue;
     const quote=leg(exit,side);
@@ -132,7 +132,7 @@ export function scoreScalpHunter(tape,exit,field='ideas'){
   .flatMap(entry=>Object.entries(entry[field]||{}).flatMap(([name,idea])=>{
    if(!idea)return [];
    const targetAt=entry.at+idea.horizonSeconds*1000;
-   if(exit.at<targetAt-sampleJitterMs||exit.at>targetAt+30000)return [];
+   if(exit.at<targetAt-(idea.horizonSeconds===60?5000:0)||exit.at>targetAt+(idea.horizonSeconds===60?30000:sampleJitterMs))return [];
    const quote=leg(exit,idea.side);
    const bid=quote.size>=1?quote.price:null;
    return [{ticker:entry.ticker,name,entryAt:entry.at,observedAt:exit.at,bid,idea,
