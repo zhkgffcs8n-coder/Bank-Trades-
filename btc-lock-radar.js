@@ -9,7 +9,13 @@ scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">�
 box.before(scalper);
 const shadow=document.createElement('p');
 shadow.style.cssText='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
-shadow.textContent='V5 SHADOW · Waiting for BTC trades and executable depth';
+const shadowSignal=document.createElement('strong');
+shadowSignal.style.cssText='display:inline-block;margin:0 6px 4px 0;padding:3px 8px;border:1px solid currentColor;border-radius:6px';
+shadowSignal.hidden=true;
+shadowSignal.style.display='none';
+const shadowDetail=document.createElement('span');
+shadowDetail.textContent='V5 SHADOW · Waiting for BTC trades and executable depth';
+shadow.append(shadowSignal,shadowDetail);
 const researchReadouts=document.createElement('div');
 researchReadouts.append(shadow);
 scalper.append(researchReadouts);
@@ -260,11 +266,19 @@ async function scanShadow(){
   if(market&&left>0&&lastRound?.ticker!==market.ticker){
     lastRound={ticker:market.ticker,close:market.close_time,reason:'No completed scan'};
   }
-  const set=message=>{
+  const set=(message,action,side)=>{
     if(lastRound?.ticker===market?.ticker&&lastRound)lastRound.reason=message;
     const exits=journal.filter(row=>row.event==='EXIT'&&Number.isFinite(row.pnl));
     const net=exits.reduce((total,row)=>total+row.pnl,0);
-    shadow.textContent='V5 SHADOW · '+message+' · Local simulated exits '+exits.length+
+    const label=action&&side?action+' '+side:'';
+    const color=action==='BUY'||action==='TAKE PROFIT'?'#a7f3d0':action==='HOLD'?'#fef08a':'#fecaca';
+    const background=action==='BUY'||action==='TAKE PROFIT'?'#064e3b':action==='HOLD'?'#713f12':'#7f1d1d';
+    shadowSignal.hidden=!label;
+    shadowSignal.style.display=label?'inline-block':'none';
+    shadowSignal.style.color=color;
+    shadowSignal.style.background=background;
+    if(shadowSignal.textContent!==label)shadowSignal.textContent=label;
+    shadowDetail.textContent='V5 SHADOW · '+message+' · Local simulated exits '+exits.length+
       ' · Est. total '+(net*100).toFixed(1)+'¢';
   };
   if(shadowPosition&&(shadowPosition.ticker!==market?.ticker||left<=0)){
@@ -301,10 +315,15 @@ async function scanShadow(){
         record({event:'EXIT',ticker:market.ticker,side:position.side,bid,pnl,estimatedCosts:position.cost+estimatedCost(bid),reason:exit});
         shadowPosition=null;
       }
-      set((exit||'HOLD '+position.side)+' · Bid '+cents(bid)+' · Est. net '+(pnl*100).toFixed(1)+'¢ · '+Math.ceil(remaining)+'s left');
+      set('Bid '+cents(bid)+' · Est. net '+(pnl*100).toFixed(1)+'¢ · '+Math.ceil(remaining)+'s left',exit||'HOLD',position.side);
       return;
     }
-    if(evaluated.has(market.ticker)){set('Round logged · one shadow entry per round');return}
+    if(evaluated.has(market.ticker)){
+      const closed=journal.findLast(row=>row.ticker===market.ticker&&row.event==='EXIT');
+      if(closed)set('Exit logged · Bid '+cents(closed.bid)+' · Est. net '+(closed.pnl*100).toFixed(1)+'¢',closed.reason,closed.side);
+      else set('Round logged · one shadow entry per round');
+      return;
+    }
     const strike=Number(market.floor_strike);
     if(!tapeReady||current-latest.time>5000||!Number.isFinite(strike)||strike<=0){
       set('Waiting for fresh trade flow and a numeric Kalshi threshold');return;
@@ -330,7 +349,7 @@ async function scanShadow(){
     shadowPosition={ticker:market.ticker,side,ask,cost,entryBid:side==='UP'?yes.price:no.price,peak:-Infinity};
     evaluated.add(market.ticker);
     record({event:'ENTRY',ticker:market.ticker,side,ask,cost,edge,probability,pressure,spread,latency,remaining,spot:latest.price,strike});
-    set('EARLY BUY '+side+' · '+cents(ask)+' · Heuristic value '+Math.round(probability*100)+'% · Est. edge '+(edge*100).toFixed(1)+'¢ · '+Math.ceil(remaining)+'s left'+telemetry);
+    set('Entry '+cents(ask)+' · Heuristic value '+Math.round(probability*100)+'% · Est. edge '+(edge*100).toFixed(1)+'¢ · '+Math.ceil(remaining)+'s left'+telemetry,'BUY',side);
   }catch{set('Waiting for executable Kalshi depth')}
   finally{bookBusy=false}
 }
