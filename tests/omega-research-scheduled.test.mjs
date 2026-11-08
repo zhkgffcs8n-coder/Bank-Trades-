@@ -291,3 +291,28 @@ test('delayed Kalshi quote can exit paper using post-receipt decision time',asyn
  assert.equal(db.values.get('omega/paper/latest').updatedAtMs,decisionAt);
  assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
 });
+
+
+test('slow provider responses cannot freeze stale forecasts or open paper positions',async()=>{
+ const data=new Map([['latest/'+asset,sample]]);
+ const db={get:async k=>data.get(k)??null,setJSON:async(k,v)=>data.set(k,v)};
+ let clockCalls=0,providerCalls=0;
+ // First quote receipt, observation and provider request are timely.
+ // The provider response returns after the 15-second freshness budget.
+ const clock=()=>++clockCalls<=3?now:now+20000;
+ const report=await runOmegaScheduled({nowMs:now,db,clock,
+  env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},
+  fetchImpl:async url=>{
+   if(url.includes('/markets/'))return {ok:true,json:async()=>({market:{
+    ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55
+   }})};
+   providerCalls++;
+   return {ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.95}'}}]})};
+  }});
+ assert.equal(providerCalls,2);
+ assert.equal(report.status,'STALE_PROVIDER_RESEARCH');
+ assert.equal(report.paperStatus,'FORECAST_STALE_BEFORE_FREEZE');
+ assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+ assert.equal([...data.keys()].some(k=>k.startsWith('omega/paper/v1/')),false);
+ assert.equal(data.get('omega/heartbeat').ordersAuthorized,false);
+});
