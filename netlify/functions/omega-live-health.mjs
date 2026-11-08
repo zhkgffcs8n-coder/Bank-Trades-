@@ -9,8 +9,13 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
  // asset. Require the actual collector's complete distinct market coverage.
  const expectedAssets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
  const distinctSampled=new Set(sampled.filter(asset=>typeof asset==='string'));
- const fullCoverage=distinctSampled.size===expectedAssets.length&&
-  expectedAssets.every(asset=>distinctSampled.has(asset));
+ // Require the collector's complete exact sample set and its own recorded
+ // count/failure diagnostics, not merely eight distinct names among extras.
+ const fullCoverage=sampled.length===expectedAssets.length&&
+  distinctSampled.size===expectedAssets.length&&
+  expectedAssets.every(asset=>distinctSampled.has(asset))&&
+  heartbeat?.sampledAssetCount===expectedAssets.length&&
+  Array.isArray(heartbeat?.failedAssets)&&heartbeat.failedAssets.length===0;
  const fresh=ageSeconds!==null&&completed<=nowMs&&ageSeconds<=150;
  const healthy=fresh&&heartbeat?.status==='COMPLETED'&&fullCoverage&&heartbeat?.trainingSucceeded===true;
  const omegaAt=Date.parse(omegaHeartbeat?.checkedAt||'');
