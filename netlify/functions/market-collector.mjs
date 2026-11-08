@@ -21,6 +21,33 @@ const base='https://api.elections.kalshi.com/trade-api/v2';
 const store=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
 const price=parseCollectorPrice;
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}finally{clearTimeout(t)}}
+// Retry only transient series-list failures. Keep settlement reads and the
+// per-cycle request budget independent from this retry.
+export async function readCollectorSeries(url,{fetchImpl=fetch,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+ for(let attempt=0;attempt<2;attempt++){
+  let delay=400;
+  try{
+   const response=await fetchImpl(url,{headers:{Accept:'application/json'},signal:AbortSignal.timeout(4000)});
+   if(response.ok){
+    const data=await response.json();
+    if(!Array.isArray(data?.markets))throw Error('Invalid Kalshi market list');
+    return data;
+   }
+   if(response.status!==429&&response.status<500)return null;
+   const retryAfter=response.headers?.get('retry-after');
+   if(retryAfter){
+    const seconds=Number(retryAfter);
+    const retryMs=Number.isFinite(seconds)?seconds*1000:Date.parse(retryAfter)-Date.now();
+    if(!Number.isFinite(retryMs)||retryMs>1500)return null;
+    delay=Math.max(delay,retryMs);
+   }
+  }catch{
+   // Transport errors and malformed responses get a single retry.
+  }
+  if(attempt===0)await wait(delay);
+ }
+ return null;
+}
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 const TITAN='titan/v7/';
 const titanDay=at=>new Date(at).toISOString().slice(0,10);
@@ -97,7 +124,8 @@ export default async()=>{
  const previousHeartbeat=await db.get('collector/heartbeat',{type:'json'});
  await db.setJSON('collector/heartbeat',{...previousHeartbeat,startedAt:now,status:'RUNNING',mode:'PAPER RESEARCH',expectedIntervalSeconds:60});
  await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{try{
-  const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
+  const d=await readCollectorSeries(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}));
+  if(!d)throw Error('Kalshi series list unavailable');
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
   const selection=selectEligibleRound(markets,now);
   if(!selection){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:markets.length?'No eligible contract with executable binary quote':'No verified open contract'});return;}
