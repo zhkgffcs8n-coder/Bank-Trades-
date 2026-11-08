@@ -146,3 +146,54 @@ test('provider circuit opens on quota exhaustion and probes again after cooldown
  assert.equal(recovered.status,'SHADOW_RESEARCH');
  assert.equal(recovered.providerStatus.find(x=>x.provider==='gpt').retryAtMs,undefined);
 });
+
+
+function durableForecastTestStore({existing=null,dropForecastWrites=false}={}){
+ const key='omega/predictions/v1/'+sample.ticker+'/'+Math.floor(now/60000);
+ const values=new Map([['latest/'+asset,sample],...(existing?[[key,existing]]:[])]);
+ return {key,values,
+  async get(k){return values.get(k)||null;},
+  async setJSON(k,v,opts={}){
+   if(k.startsWith('omega/predictions/')&&dropForecastWrites)return;
+   if(opts.onlyIfNew&&values.has(k))return;
+   values.set(k,v);
+  }
+ };
+}
+const confidentForecastFetch=async url=>({
+ ok:true,
+ json:async()=>url.includes('/markets/')?
+  {market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}}:
+  {choices:[{message:{content:'{"upProbability":0.95}'}}]}
+});
+const configuredResearch={OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'};
+
+test('OMEGA never simulates entry when the prospective forecast write is not durable',async()=>{
+ const db=durableForecastTestStore({dropForecastWrites:true});
+ const report=await runOmegaScheduled({nowMs:now,db,env:configuredResearch,fetchImpl:confidentForecastFetch});
+ assert.equal(report.status,'SHADOW_RESEARCH');
+ assert.equal(report.paperStatus,'FORECAST_NOT_NEWLY_PERSISTED');
+ assert.equal(db.values.has(db.key),false);
+ assert.equal(db.values.has('omega/paper/v1/'+sample.ticker),false);
+ assert.equal(report.ordersAuthorized,false);
+});
+
+test('a previously frozen same-minute forecast cannot authorize another paper decision',async()=>{
+ const original={freezeId:'older-run',ticker:sample.ticker,recordedAtMs:now-1000,status:'SHADOW_RESEARCH'};
+ const db=durableForecastTestStore({existing:original});
+ const report=await runOmegaScheduled({nowMs:now,db,env:configuredResearch,fetchImpl:confidentForecastFetch});
+ assert.equal(report.status,'SHADOW_RESEARCH');
+ assert.equal(report.paperStatus,'FORECAST_NOT_NEWLY_PERSISTED');
+ assert.deepEqual(db.values.get(db.key),original);
+ assert.equal(db.values.has('omega/paper/v1/'+sample.ticker),false);
+});
+
+test('a newly frozen, read-back verified forecast can still open paper-only entry',async()=>{
+ const db=durableForecastTestStore();
+ const report=await runOmegaScheduled({nowMs:now,db,env:configuredResearch,fetchImpl:confidentForecastFetch});
+ assert.equal(report.status,'SHADOW_RESEARCH');
+ assert.equal(report.paperStatus,'PAPER_ENTRY');
+ assert.equal(db.values.get(db.key).freezeId.length>0,true);
+ assert.equal(db.values.get('omega/paper/v1/'+sample.ticker).state.positions[sample.ticker].status,'OPEN');
+ assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
+});
