@@ -6,7 +6,19 @@ import {kalshiClient} from './kalshi-execution-client.mjs';
 import {releaseStatus} from './kalshi-release-gate.mjs';
 import {qualifiesLiveEntry} from '../../../src/live-execution.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
+import {parseCollectorPrice,validCollectorQuote} from '../../../src/collector-quote.mjs';
 import sharedSignals from '../shared-signals.mjs';
+export function parseLiveQuote(m,ticker,at,receivedAt){
+ if(m?.ticker!==ticker||m.status!=='active'||receivedAt<at||receivedAt-at>10000)return null;
+ const close=Date.parse(m.close_time);
+ if(m.close_time!=null&&!Number.isFinite(close))return null;
+ const expiresAt=Math.min(...[close,Date.parse(m.expiration_time),Date.parse(m.expected_expiration_time)].filter(Number.isFinite));
+ if(!Number.isFinite(expiresAt)||expiresAt<=receivedAt)return null;
+ const yesAsk=parseCollectorPrice(m,'yes_ask'),yesBid=parseCollectorPrice(m,'yes_bid');
+ const noAsk=parseCollectorPrice(m,'no_ask'),noBid=parseCollectorPrice(m,'no_bid');
+ if(!validCollectorQuote({yesAsk,yesBid,noAsk,noBid}))return null;
+ return {ticker,at,expiresAt,upAsk:yesAsk*100,upBid:yesBid*100,downAsk:noAsk*100,downBid:noBid*100};
+}
 export const liveStore=()=>getStore({name:'bank-trades-live-execution-v1',consistency:'strong'});
 export async function runtime(userId){
  const user=await admin.getUser(userId);if(!user?.confirmedAt||!user.roles?.includes('owner'))throw Error('OWNER_ACCESS_REQUIRED');
@@ -26,11 +38,7 @@ export async function runtime(userId){
    signals:async()=>{const res=await sharedSignals(new Request('https://internal/shared-signals'));if(!res.ok)throw Error('SIGNAL_SERVICE_FAILED');const payload=await res.json();return (payload.results||[]).filter(s=>qualifiesLiveEntry(s,record.state.entryMode));},
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
-    if(m?.ticker!==ticker||m.status!=='active')return null;
-    const price=k=>m[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m[k]);
-    const q={ticker,at,expiresAt:Math.min(...[m.close_time,m.expiration_time,m.expected_expiration_time].filter(Boolean).map(v=>Date.parse(v)).filter(Number.isFinite)),upAsk:price('yes_ask'),upBid:price('yes_bid'),downAsk:price('no_ask'),downBid:price('no_bid')};
-    if(!Number.isFinite(q.expiresAt)||![q.upAsk,q.upBid,q.downAsk,q.downBid].every(Number.isFinite))return null;
-    return q;
+    return parseLiveQuote(m,ticker,at,Date.now());
    }});
   await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:process.env.COMMIT_REF||null});return result;
  }};

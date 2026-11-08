@@ -87,3 +87,15 @@ test('demo lifecycle requires actual exit fills before reporting a round trip',a
  assert.equal((await runDemoLifecycle(args)).upRoundTripVerified,undefined);
  assert.equal((await runDemoLifecycle(args)).upRoundTripVerified,true);
 });
+
+test('live quote parser rejects malformed, stale, and closed books',async()=>{
+ const {parseLiveQuote}=await import('../netlify/functions/lib/live-runtime.mjs');
+ const at=100000,ticker='BTC-ROUND';
+ const market={ticker,status:'active',close_time:new Date(at+20000).toISOString(),yes_ask:50,yes_bid:49,no_ask:51,no_bid:50};
+ assert.equal(parseLiveQuote(market,ticker,at,at+100).upBid,49);
+ for(const bad of [{yes_bid:null},{yes_bid:''},{yes_bid:false},{yes_bid:70},{close_time:'invalid'}]){
+  assert.equal(parseLiveQuote({...market,...bad},ticker,at,at+100),null);
+ }
+ assert.equal(parseLiveQuote(market,ticker,at,at+10001),null);
+ assert.equal(parseLiveQuote({...market,close_time:new Date(at+50).toISOString()},ticker,at,at+100),null);
+});
