@@ -82,3 +82,15 @@ test('walk-forward calibration excludes labels received after the forecast',asyn
  assert.equal(report.A.sampleSize,1);
  assert.ok(report.A.calibratedBrier<report.A.rawBrier);
 });
+
+test('same-ticker depth yields coherent executable prices without mixing list quotes',async()=>{
+ const {scalperQuoteFromDepth}=await import('../src/scalper-v8.mjs');
+ const depth={ticker,at:at+100,yes:{price:.72,size:2},no:{price:.26,size:3}};
+ const current=scalperQuoteFromDepth(quote,depth);
+ assert.equal(current.yesBid,.72);
+ assert.equal(current.yesAsk,.74);
+ assert.equal(current.observedAt,depth.at);
+ assert.equal(scalperQuoteFromDepth(quote,{...depth,ticker:'OTHER'}),null);
+ assert.equal(scalperQuoteFromDepth(quote,{...depth,at:at+5001}),null);
+ assert.equal(scalperQuoteFromDepth(quote,{...depth,no:{price:.3,size:1}}),null);
+});

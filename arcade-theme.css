@@ -43,3 +43,68 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--arc-gold)!important
 @media(max-width:700px){.bt-arena-field{height:92px}.bt-arena-top{font-size:11px}}
 @media(prefers-reduced-motion:reduce){#btBattleArena *{animation:none!important;transition:none!important}}
 .bt-arcade-muted #btBattleArena *{animation:none!important;transition:none!important}
+
+/* V9 command center */
+.bt-command-v9{
+ background:radial-gradient(ellipse at 80% 0%,#151b51,transparent 48%),
+ radial-gradient(ellipse at 0 28%,#2b0e45,transparent 42%),#050510!important;
+ color-scheme:dark;
+}
+.bt-command-v9 :is(.card,.premium-panel,.premium-hero){
+ background:linear-gradient(150deg,#151a35,#090b19 70%)!important;
+ border-color:#495d9d!important;
+}
+.bt-command-v9 :is(h1,h2){color:#f5f7ff;text-shadow:0 0 18px #6d9bff66}
+.bt-command-v9 :is(#btcLockDesk,#btcProScalper){
+ min-width:0;
+ background:linear-gradient(155deg,#181d42,#080d1f 65%)!important;
+ box-shadow:inset 0 2px #a5c6ff33,0 0 22px #627cff29!important;
+}
+.bt-v9-engine{
+ --pilot:#62e6ff;
+ display:grid;
+ grid-template-columns:minmax(0,1fr);
+ gap:5px;
+ padding:10px 12px;
+ margin:8px 0;
+ min-width:0;
+ border:1px solid var(--pilot);
+ border-radius:11px;
+ background:linear-gradient(100deg,#24264b,#0d1226 70%);
+ color:#f5f7ff;
+ overflow-wrap:anywhere;
+ font-size:13px;
+ line-height:1.4;
+}
+.bt-v9-engine[data-engine=B]{--pilot:#c09bff}
+.bt-v9-engine[data-engine=C]{--pilot:#ffe184}
+.bt-v9-engine[data-direction=UP]{box-shadow:inset 3px 0 #42f7a2}
+.bt-v9-engine[data-direction=DOWN]{box-shadow:inset 3px 0 #ff5579}
+.bt-v9-identity{display:flex;align-items:center;gap:8px;color:var(--pilot);letter-spacing:.08em}
+.bt-v9-identity::before{
+ content:"";
+ flex:0 0 24px;
+ height:16px;
+ border:2px solid var(--pilot);
+ border-radius:7px 7px 5px 5px;
+ background:linear-gradient(var(--pilot),var(--pilot)) center/12px 3px no-repeat,#101634;
+ box-shadow:0 0 10px var(--pilot);
+}
+.bt-v9-radar-status{
+ --radar:#74c6ff;
+ border-left:3px solid var(--radar);
+ padding:10px;
+ background:repeating-linear-gradient(0deg,#12223b 0 2px,#0d182a 2px 5px);
+ color:#eef9ff;
+}
+#btcLockDesk[data-radar^="UP"] .bt-v9-radar-status{--radar:#42f7a2}
+#btcLockDesk[data-radar^="DOWN"] .bt-v9-radar-status{--radar:#ff5579}
+@media (prefers-reduced-motion:no-preference){
+ #btcLockDesk[data-radar*="FLIP"] .bt-v9-radar-status{animation:bt-v9-radar .45s ease-out 2 alternate}
+ @keyframes bt-v9-radar{to{box-shadow:inset 0 0 18px var(--radar)}}
+}
+@media (prefers-reduced-motion:reduce){
+ .bt-command-v9 *, .bt-command-v9 *::before,.bt-command-v9 *::after{
+  animation-duration:.01ms!important;transition-duration:.01ms!important;
+ }
+}

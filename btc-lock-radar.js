@@ -39,20 +39,30 @@ function paintV8(){
  const hunter=shared?.scalpHunter;
  const age=snapshot?Date.now()-snapshot.at:Infinity;
  const fresh=age>=0&&age<=30000&&Date.now()<snapshot.expiresAt;
+ box.dataset.radar=fresh?snapshot.radar:'WAIT';
+ v8Radar.classList.add('bt-v9-radar-status');
  v8Radar.textContent=fresh?'V8 SHADOW · '+snapshot.radar+' · '+snapshot.regime+
   ' · '+Math.floor(age/1000)+'s since observation':'V8 SHADOW · Waiting for a fresh matching observation';
  v8Readouts.replaceChildren(...['A','B','C'].map(name=>{
   const line=document.createElement('p');
-  line.style.cssText=researchRowStyle;
+  line.className='bt-v9-engine';
+  line.dataset.engine=name;
+  const identity=document.createElement('strong');
+  identity.className='bt-v9-identity';
+  identity.textContent={A:'A · NOVA',B:'B · VOLT',C:'C · KITSUNE'}[name];
+  const detail=document.createElement('span');
   const engine=fresh?snapshot.engines[name]:null;
-  line.textContent='Scalper '+name+' V8 · '+(engine?engine.decision+' · modeled edge '+
+  line.dataset.direction=engine?.decision||'SKIP';
+  detail.textContent=(engine?engine.decision+' · modeled edge '+
    (engine.edge*100).toFixed(1)+'¢ · SHADOW':'Waiting for evidence');
   const idea=hunter&&Date.now()-hunter.at<=30000?hunter.ideas[name]:null;
   if(idea){
-   line.textContent+=' · '+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
+   detail.textContent+=' · '+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
     (idea.target*100).toFixed(1)+'% · '+idea.horizonSeconds+'s · historical hit rate '+
-    Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds)';
+    Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds) · modeled net '+
+    (idea.estimatedNet*100).toFixed(1)+'¢ per contract';
   }
+  line.append(identity,detail);
   return line;
  }));
 }

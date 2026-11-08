@@ -22,7 +22,7 @@ export function monitorHunterPaper(position,depth){
 }
 export function settleHunterPaper(position,label,now){
  const outcome=trustedStoredFinalizedOutcome(label,position.ticker);
- if(!outcome||label.labeledAt<position.expiresAt||label.labeledAt>now)return null;
+ if(!outcome||!Number.isFinite(label.labeledAt)||label.labeledAt<position.expiresAt||label.labeledAt>now)return null;
  const payout=(position.side==='UP')===(outcome==='yes')?1:0;
  return {...position,reason:'OFFICIAL_SETTLEMENT',verification:label.verification,exitCost:0,
   net:payout-position.ask-position.entryCost,closedAt:label.labeledAt};

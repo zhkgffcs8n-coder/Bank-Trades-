@@ -84,7 +84,15 @@ export function parseDepthV8(payload,ticker,at,quote){
   return price>0&&price<1&&Number.isFinite(size)&&size>0&&(!top||price>top.price)?{price,size}:top;
  },null):null;
  const yes=best(book?.yes_dollars),no=best(book?.no_dollars);
- if(!yes||!no||yes.price+no.price>1||Math.abs(yes.price-quote.yesBid)>.01||
-  Math.abs(no.price-quote.noBid)>.01)return null;
+ if(!yes||!no||yes.price+no.price>1||(quote&&(Math.abs(yes.price-quote.yesBid)>.01||
+  Math.abs(no.price-quote.noBid)>.01)))return null;
  return {ticker,at,yes,no,imbalance:(yes.size-no.size)/(yes.size+no.size)};
+}
+
+export function scalperQuoteFromDepth(record,depth){
+ if(!depth||depth.ticker!==record.ticker||depth.at<record.observedAt||
+  depth.at-record.observedAt>5000||depth.at>=record.expiresAt)return null;
+ const yesBid=depth.yes.price,noBid=depth.no.price;
+ const quote={...record,observedAt:depth.at,yesBid,noBid,yesAsk:1-noBid,noAsk:1-yesBid};
+ return yesBid+noBid<1&&validCollectorQuote(quote)?quote:null;
 }
