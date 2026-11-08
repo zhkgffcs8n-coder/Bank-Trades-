@@ -16,7 +16,7 @@ function setup(){const state=initialState();state.enabled=true;state.stopped=fal
 test('spending is reserved durably before an exchange request',async()=>{const x=setup();await submitIntent(x);assert.equal(x.state.intents[0].reserve,60);assert.equal(x.stats().calls,1);assert.equal(x.stats().writes,3);await assert.rejects(submitIntent(x),/UNRESOLVED_ORDER/);assert.equal(x.stats().calls,1);});
 test('limits and stop block all exchange requests',async()=>{const x=setup();x.state.limits.orderCents=40;await assert.rejects(submitIntent(x),/SPENDING_LIMIT/);assert.equal(x.stats().calls,0);x.state.limits.orderCents=100;x.checkStopped=async()=>true;await assert.rejects(submitIntent(x),/TRADING_STOPPED/);assert.equal(x.stats().calls,0);assert.throws(()=>validateLimits({}),/INVALID_LIMIT/);});
 test('unknown order outcome freezes trading and is not retried',async()=>{const x=setup();let calls=0;x.client.create=async()=>{calls++;throw Error('timeout')};await assert.rejects(submitIntent(x),/OUTCOME_UNKNOWN/);assert.equal(x.state.intents[0].status,'UNKNOWN');await assert.rejects(submitIntent(x),/TRADING_STOPPED/);assert.equal(calls,1);});
-test('stop is persisted before cancellation and cancellation failure is visible',async()=>{const state=initialState();state.intents=[{id:'ours'}];let saved=false;const client={snapshot:async()=>({orders:[{order_id:'o',ticker:'BTC-ROUND',client_order_id:'ours',status:'resting'}]}),cancel:async()=>{assert.ok(saved);throw Error('network')}};await assert.rejects(emergencyStop({state,client,persist:async()=>{saved=true}}),/STOPPED_CANCEL_FAILED:o/);assert.equal(state.stopped,true);assert.equal(state.enabled,false);});
+test('stop is persisted before cancellation and cancellation failure is visible',async()=>{const state=initialState();state.intents=[{id:'ours'}];let saved=false;const client={snapshot:async()=>({complete:true,orders:[{order_id:'o',ticker:'BTC-ROUND',client_order_id:'ours',status:'resting'}]}),cancel:async()=>{assert.ok(saved);throw Error('network')}};await assert.rejects(emergencyStop({state,client,persist:async()=>{saved=true}}),/STOPPED_CANCEL_FAILED:o/);assert.equal(state.stopped,true);assert.equal(state.enabled,false);});
 test('stop during intent persistence blocks exchange submission',async()=>{
  const x=setup();
  x.checkStopped=async()=>x.state.intents[0]?.status==='SUBMITTING';
@@ -97,4 +97,24 @@ test('credential enrollment validates the same production host and balance schem
   return {ok:true,status:200,json:async()=>({balance:0})};
  });assert.equal(valid.ok,true);
  await assert.rejects(verifyKalshi(credentials.keyId,credentials.privateKeyPem,async()=>({ok:true,json:async()=>({})})),/INVALID_ACCOUNT_BALANCE/);
+});
+
+test('emergency stop cannot confirm cancellation from an incomplete exchange snapshot',async()=>{
+ for(const incompleteRead of [1,2]){
+  const state=initialState();
+  state.enabled=true;
+  state.stopped=false;
+  state.intents=[{id:'ours',status:'RECONCILED'}];
+  let reads=0,cancels=0;
+  const client={
+   snapshot:async()=>++reads===incompleteRead?{complete:false,orders:[]}:
+    {...snapshot(),orders:[{order_id:'o',client_order_id:'ours',status:'resting'}]},
+   cancel:async()=>{cancels++}
+  };
+  await assert.rejects(emergencyStop({state,client,persist:async()=>{}}),
+   incompleteRead===1?/STOPPED_CANCELLATION_SNAPSHOT_FAILED/:/STOPPED_CANCELLATION_UNVERIFIED/);
+  assert.equal(cancels,incompleteRead-1);
+  assert.equal(state.stopped,true);
+  assert.equal(state.enabled,false);
+ }
 });

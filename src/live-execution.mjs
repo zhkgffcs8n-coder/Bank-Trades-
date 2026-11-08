@@ -112,9 +112,11 @@ export async function emergencyStop({state,client,persist}){
  state.enabled=false;state.stopped=true;await persist(state);
  const failures=[];let snapshot;
  try{snapshot=await client.snapshot();}catch{throw Error('STOPPED_CANCELLATION_SNAPSHOT_FAILED');}
+ if(snapshot?.complete!==true||!Array.isArray(snapshot.orders))throw Error('STOPPED_CANCELLATION_SNAPSHOT_FAILED');
  const own=new Set(state.intents.map(i=>i.id));
  for(const o of snapshot.orders.filter(o=>o.status==='resting'&&own.has(o.client_order_id))){try{await client.cancel(o);}catch{failures.push(o.order_id);}}
  let after;try{after=await client.snapshot();}catch{throw Error('STOPPED_CANCELLATION_UNVERIFIED');}
+ if(after?.complete!==true||!Array.isArray(after.orders))throw Error('STOPPED_CANCELLATION_UNVERIFIED');
  const remaining=after.orders.filter(o=>o.status==='resting'&&own.has(o.client_order_id)).map(o=>o.order_id);
  if(failures.length||remaining.length)throw Error('STOPPED_CANCEL_FAILED:'+Array.from(new Set([...failures,...remaining])).join(','));
  if(state.intents.some(i=>['SUBMITTING','UNKNOWN','AWAITING_RECONCILIATION'].includes(i.status))){
