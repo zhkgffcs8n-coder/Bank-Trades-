@@ -54,10 +54,20 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   omegaPaperMonitoring:Object.fromEntries(['open','exits','holds','settled','unpriced','backfilled'].map(k=>
    [k,Number.isSafeInteger(omegaHeartbeat?.paperMonitoring?.[k])&&omegaHeartbeat.paperMonitoring[k]>=0?
     omegaHeartbeat.paperMonitoring[k]:null])),
-  paperLastAction:paperHeartbeat?.action||'NONE_VERIFIED',
-  paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs?paperHeartbeat.updatedAtMs:null,
-  // One completed action, not cumulative net P&L or a verified exchange fill.
-  paperLastActionNetDollars:Number.isFinite(paperHeartbeat?.netDollars)?paperHeartbeat.netDollars:null,
+  // A future-dated or timestamp-free record cannot establish a completed
+  // paper action. Never surface its net dollars as realized paper profit.
+  paperLastAction:(()=>{
+   const at=paperHeartbeat?.updatedAtMs;
+   return Number.isSafeInteger(at)&&at>0&&at<=nowMs&&
+    ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.action:'NONE_VERIFIED';
+  })(),
+  paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
+   ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.updatedAtMs:null,
+  // Entries have no realized P&L. A timestamped simulated exit or official
+  // settlement is still one action, never a cumulative verified total.
+  paperLastActionNetDollars:['PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)&&
+   Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
+   Number.isFinite(paperHeartbeat?.netDollars)?paperHeartbeat.netDollars:null,
   forecastShadow:(()=>{
    const age=Number.isSafeInteger(forecastResearch?.at)&&forecastResearch.at<=nowMs?Math.floor((nowMs-forecastResearch.at)/1000):null;
    if(forecastResearch?.version!==2||forecastResearch?.mode!=='SHADOW_ONLY'||age===null||age>150)return {status:'NOT_VERIFIED',ageSeconds:age};
