@@ -1,3 +1,4 @@
+import {normalizeCoinbaseTape,freezePredatorSample,scorePredatorSamples} from '../../src/predator-forward.mjs';
 import {hunterEngines,openHunterPaper,monitorHunterPaper,settleHunterPaper} from '../../src/scalp-hunter-paper.mjs';
 import {observeScalpHunter,collectComparableRounds,mergeComparableRounds,profileComparableRounds,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
 import {replayScalperExits} from '../../src/scalper-v8-exits.mjs';
@@ -168,7 +169,9 @@ export default async()=>{
     const open=await db.get(paperKey,{type:'json'});
     const diagnosticsKey='scalp-hunter/diagnostics/'+asset;
     if(!candidate)await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:'WAIT_SAME_ROUND_HISTORY'});
-    if(trackExit||candidate||Object.values(open||{}).some(position=>!position.closedAt)){
+    if(asset==='BTC'||trackExit||candidate||Object.values(open||{}).some(position=>!position.closedAt)){
+     const tapeRead=asset==='BTC'?fetch('https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=100',
+      {signal:AbortSignal.timeout(1600)}).then(r=>r.ok?r.json():null).catch(()=>null):null;
      let depth=null,depthStatus='ORDERBOOK_UNAVAILABLE';
      try{
       const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
@@ -180,6 +183,24 @@ export default async()=>{
       }
      }catch{} // Quotes without depth cannot be used to simulate an early fill.
      const bookQuote=scalperQuoteFromDepth(record,depth);
+     if(asset==='BTC'){
+      try{
+       const payload=await tapeRead;
+       const observedAt=Date.now();
+       const observation=freezePredatorSample({ticker:m.ticker,now:observedAt,bookAt:depth?.at,
+        remaining:(record.expiresAt-observedAt)/1000,expiresAt:record.expiresAt,
+        yes:bookQuote?depth.yes:null,no:bookQuote?depth.no:null,trades:normalizeCoinbaseTape(payload,observedAt)});
+       if(bookQuote&&!Array.isArray(payload))observation.stage='COINBASE_UNAVAILABLE';
+       const recentKey='predator-v11/recent';
+       const previous=await db.get(recentKey,{type:'json'})||[];
+       await db.setJSON('predator-v11/samples/'+m.ticker+'/'+bucket,observation,{onlyIfNew:true});
+       for(const result of scorePredatorSamples(previous,observation)){
+        await db.setJSON('predator-v11/results/'+result.ticker+'/'+result.at+'/'+result.horizon,result,{onlyIfNew:true});
+       }
+       await db.setJSON(recentKey,[...previous.filter(row=>row.ticker===m.ticker&&row.at<observedAt),observation].slice(-4));
+       await db.setJSON('predator-v11/latest',observation);
+      }catch(e){researchFailure('predator-v11',e,asset)}
+     }
      if(depth&&!bookQuote)depthStatus='BOOK_STALE_OR_CROSSED';
      const snapshot=bookQuote?evaluateScalperV8(bookQuote,recent.filter(row=>row.t!==record.t),depth):candidate;
      if(bookQuote){

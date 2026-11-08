@@ -14,6 +14,25 @@ const v8Scoreboard=document.createElement('p');
 v8Scoreboard.className='premium-foot';
 v8Scoreboard.textContent='V8 server scoreboard · Loading';
 scalper.append(v8Readouts,v8Scoreboard,researchReadouts);
+const predatorServerStatus=document.createElement('p');
+predatorServerStatus.className='premium-foot';
+predatorServerStatus.textContent='OMEGA PREDATOR · Waiting for server research';
+v8Scoreboard.after(predatorServerStatus);
+let predatorReportBusy=false;
+async function refreshPredatorReport(){
+ if(predatorReportBusy||document.hidden)return;
+ predatorReportBusy=true;
+ try{
+  const response=await fetch('/.netlify/functions/predator-report',{signal:AbortSignal.timeout(10000)});
+  if(!response.ok)throw Error('Predator report unavailable');
+  const report=await response.json();
+  const age=report.latest?Math.max(0,Math.round((Date.now()-report.latest.at)/1000)):null;
+  predatorServerStatus.textContent='OMEGA PREDATOR · Server shadow · '+report.sampleRecords+
+   ' observations · '+report.scoredRecords+' scored horizons'+
+   (age===null?'':' · latest '+age+'s old · '+report.latest.stage.replaceAll('_',' '));
+ }catch{predatorServerStatus.textContent='OMEGA PREDATOR · Server report unavailable'}
+ finally{predatorReportBusy=false}
+}
 let v8ReportBusy=false;
 async function refreshV8Scoreboard(){
  if(v8ReportBusy||document.hidden)return;
@@ -743,6 +762,7 @@ waitForData('Checking '+selectedCoin+' market and spot feed');
 botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
+refreshPredatorReport();setInterval(refreshPredatorReport,60000);
 setInterval(()=>{if(!document.hidden)paintV8()},15000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
