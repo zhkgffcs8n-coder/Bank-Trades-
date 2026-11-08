@@ -596,7 +596,7 @@ async function evaluate(){
 function assess(coin,market,e,visible){
   const unavailable=message=>{if(visible)waitForData(message)};
   if(!market?.ticker?.startsWith('KX'+coin+'15M-'))return unavailable('Kalshi '+coin+' 15-minute contract unavailable');
-  if(!e||Date.now()-e.at>90000||Date.now()-e.candleAt>180000)return unavailable(coin+' spot candle evidence unavailable or stale');
+  if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||Date.now()-e.at>90000||Date.now()-e.candleAt>180000||e.at>Date.now()||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');
   const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
   if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb)return unavailable('Invalid '+coin+' market or quotes');
   const diff=e.bull-e.bear,side=diff>=3?'up':diff<=-3?'down':'mixed',ask=side==='up'?ya:na,bid=side==='up'?yb:nb,spread=Math.max(ya-yb,na-nb);
@@ -612,14 +612,16 @@ function assess(coin,market,e,visible){
   }
   const quality=Math.max(0,Math.min(100,Math.round(35+Math.min(30,Math.abs(diff)*6)+Math.max(0,3-spread)*6+(left>=360?10:0))));
   const previous=directions.get(coin);
-  const lastDirection=previous?.ticker===market.ticker?previous.side:'mixed';
-  const confirmed=side!=='mixed'&&side===lastDirection?previous.confirmed+1:1;
-  const flipped=lastDirection!=='mixed'&&side!=='mixed'&&side!==lastDirection;
-  directions.set(coin,{ticker:market.ticker,side,confirmed});
+  const sameRound=previous?.ticker===market.ticker;
+  const lastDirection=sameRound?previous.side:'mixed';
+  const newCandle=!sameRound||e.candleAt>previous.candleAt;
+  const confirmed=!strong?0:side!==lastDirection?1:previous.confirmed+Number(newCandle);
+  const flipped=newCandle&&strong&&lastDirection!=='mixed'&&side!==lastDirection;
+  directions.set(coin,{ticker:market.ticker,side,confirmed,candleAt:sameRound?Math.max(previous.candleAt,e.candleAt):e.candleAt});
   const label=flipped?'⚡ POSSIBLE FLIP '+side.toUpperCase():strong&&confirmed>=2?'🔐 '+side.toUpperCase()+' LOCK CANDIDATE':side!=='mixed'?'EARLY LEAN '+side.toUpperCase():'MIXED · NO LOCK';
   if(visible){
     state.textContent=label+' · '+Math.ceil(left/60)+' min remaining · '+(strong?'Spot/Kalshi evidence aligned':'Not enough independent agreement');
-    facts.textContent='Evidence quality '+quality+'/100 · Bull '+e.bull+'/8 · Bear '+e.bear+'/8 · RSI '+Number(e.rsi).toFixed(1)+' · '+(side==='mixed'?'No direction':'Contract ask '+ask.toFixed(1)+'¢ / bid '+bid.toFixed(1)+'¢')+' · spread '+spread.toFixed(1)+'¢ · '+confirmed+' consecutive assessments. Quality is a rule score, not win probability. Lock candidate ≠ settled win.';
+    facts.textContent='Evidence quality '+quality+'/100 · Bull '+e.bull+'/8 · Bear '+e.bear+'/8 · RSI '+Number(e.rsi).toFixed(1)+' · '+(side==='mixed'?'No direction':'Contract ask '+ask.toFixed(1)+'¢ / bid '+bid.toFixed(1)+'¢')+' · spread '+spread.toFixed(1)+'¢ · '+confirmed+' distinct confirming candles. Quality is a rule score, not win probability. Lock candidate ≠ settled win.';
   }
   if(coin==='BTC'){
     window.__BANK_TRADES_BTC_LOCK__={at:Date.now(),direction:side,lockCandidate:strong&&confirmed>=2,flipCandidate:flipped,secondsLeft:left,spread,ask,bid,quality,source:'BTC spot indicators and Kalshi quotes'};

@@ -390,20 +390,16 @@ function syncSignals(){
   badge.style.cssText='display:inline-block;padding:4px 9px;margin:1px 0 3px;border:2px solid '+color+';border-radius:9px;background:'+color+'20;color:'+color+';font-size:clamp(12px,1.1vw,16px);font-weight:900;letter-spacing:.2px;box-shadow:0 0 8px '+color+'44';
   const forecast=sig?.roundCall;
   const forecastFresh=decision==='WAIT'&&forecast?.ticker===ticker&&Number.isFinite(forecast.asOf)&&Date.now()-forecast.asOf>=0&&Date.now()-forecast.asOf<90000&&['UP','DOWN'].includes(forecast.direction);
-  badge.textContent=forecastFresh?tr.dataset.asset+' · '+(forecast.direction==='UP'?'🟢 BUY UP':'🔴 BUY DOWN')+' · FORECAST ONLY':(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
+  badge.textContent=forecastFresh?tr.dataset.asset+' · '+(forecast.direction==='UP'?'▲ UP BIAS':'▼ DOWN BIAS')+' · FORECAST ONLY':(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   if(forecastFresh){badge.title='Directional forecast only. Actual entry remains blocked until qualified; no order placed.';badge.style.borderColor='#38bdf8';badge.style.color='#7dd3fc';}
   cell.prepend(badge);
-  // Display the per-round directional call next to WAIT; do not mislabel an
-  // unqualified quote-based prediction as an approved trading entry.
-  const roundCall=sig?.roundCall;
-  if(decision==='WAIT'&&roundCall?.ticker===ticker&&
-     Number.isFinite(roundCall.asOf)&&Date.now()-roundCall.asOf<90000&&
-     ['UP','DOWN'].includes(roundCall.direction)){
-   const chip=document.createElement('span');
-   chip.style.cssText='display:inline-block;margin-left:7px;padding:4px 8px;border-radius:8px;border:1px solid #38bdf8;color:#7dd3fc;font-size:15px;font-weight:900;white-space:normal;box-shadow:0 0 12px #38bdf855';
-   chip.textContent=(roundCall.direction==='UP'?'▲ BUY UP · ROUND PREDICTION':'▼ BUY DOWN · ROUND PREDICTION');
-   chip.title='Direction call only, not a qualified BUY signal or order. '+roundCall.basis;
-   badge.after(chip);
+  const receivedAt=sig?.timing?.quoteReceivedAt;
+  if(sig?.ticker===ticker&&Number.isFinite(receivedAt)){
+   const quoteAge=Math.max(0,Math.floor((Date.now()-receivedAt)/1000));
+   const freshness=document.createElement('small');
+   freshness.textContent=' · Quote received '+quoteAge+'s ago';
+   freshness.title='Age since server receipt. Exchange event latency is unavailable.';
+   badge.after(freshness);
   }
   const flip=flipWatchFor(tr.dataset.asset,sig,ticker);
   if(flip){

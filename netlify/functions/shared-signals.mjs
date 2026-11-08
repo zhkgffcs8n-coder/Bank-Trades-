@@ -3,14 +3,19 @@ import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 import {buildCommitteeSnapshot} from '../../src/engine-team.mjs';
 import {assessCollectorHealth} from '../../src/collector-health.mjs';
+import {parseCollectorPrice,validCollectorQuote} from '../../src/collector-quote.mjs';
 import {learningReport} from '../../src/research-model.mjs';
 const assets={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const expiry=(m,now)=>[m?.expected_expiration_time,m?.expiration_time,m?.close_time].map(v=>Date.parse(v||'')).filter(v=>Number.isFinite(v)&&v>now).sort((a,b)=>a-b)[0]||null;
-const timed=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(Error(label+' timeout')),ms))]);
+const timed=(promise,ms,label)=>{
+ let timeout;
+ return Promise.race([promise,new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error(label+' timeout')),ms)})])
+  .finally(()=>clearTimeout(timeout));
+};
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json','cache-control':'no-store'}});
 export default async req=>{
  if(req.method!=='GET')return json({error:'GET only'},405);
- const now=Date.now();
+ const requestStartedAt=Date.now();
  let db=null,paperDb=null;
  try{db=getStore({name:'bank-trades-market-history',consistency:'strong'});paperDb=getStore({name:'bank-trades-server-kaibot',consistency:'strong'});}catch(e){return json({fetched_at:new Date().toISOString(),results:Object.keys(assets).map(asset=>({asset,action:'WAIT',reason:'Signal storage initialization failed: '+String(e.message||e)})),error:'storage_initialization_failed'});}
  let openPositions=[],stats=performance([]),performanceStatus={state:'UNAVAILABLE',reason:'Paper ledger not loaded',updatedAt:null};
@@ -31,7 +36,7 @@ export default async req=>{
  await Promise.all([timed(db.get('training/model',{type:'json'}),1800,'model').then(v=>research.model=v).catch(()=>{}),timed(db.get('training/status',{type:'json'}),1800,'status').then(v=>research.status=v).catch(()=>{}),timed(db.get('collector/heartbeat',{type:'json'}),1800,'collector heartbeat').then(v=>research.heartbeat=v).catch(()=>{})]);
  // Learning continues in the scheduled collector. Keep optional reports out of
  // the latency-critical signal endpoint to avoid overwhelming Netlify Blobs.
- const collector=assessCollectorHealth(research.heartbeat,now);
+ const collector=assessCollectorHealth(research.heartbeat,Date.now());
  const collectionDiagnostics={lastStartedAt:research.heartbeat?.startedAt||null,
   lastCompletedAt:research.heartbeat?.completedAt||null,
   sampledAssets:research.heartbeat?.sampledAssets||[],
@@ -58,19 +63,29 @@ export default async req=>{
  const results=await Promise.all(Object.entries(assets).map(async([asset,series])=>{
   try{
    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
-   let response;try{response=await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}),{signal:controller.signal});}finally{clearTimeout(timer)}
-   if(!response.ok)throw Error('Market HTTP '+response.status);
-   const data=await response.json();
+   const quoteRequestedAt=Date.now();
+   const marketRead=(async()=>{
+    try{
+     const response=await fetch('https://api.elections.kalshi.com/trade-api/v2/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'100'}),{signal:controller.signal});
+     if(!response.ok)throw Error('Market HTTP '+response.status);
+     return {data:await response.json(),quoteReceivedAt:Date.now()};
+    }finally{clearTimeout(timer)}
+   })();
+   const recentRead=timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples').catch(()=>null);
+   const [{data,quoteReceivedAt},recent]=await Promise.all([marketRead,recentRead]);
+   const now=Date.now();
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
-   const position=openPositions.filter(t=>t.asset===asset).sort((a,b)=>b.at-a.at)[0];
    const market=markets[0];
    if(!market)return {asset,action:'WAIT',reason:'No verified active contract',ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['verified active contract ticker']}};
-   const activePosition=position?.ticker===market.ticker?position:null;
-   let records=[];
-   try{
-    const recent=await timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples');
-    records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===market.ticker);
-   }catch(e){return {asset,action:'WAIT',score:0,ticker:market.ticker,reason:'Recent sample read unavailable: '+e.message,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable: '+String(e.message)]}};}
+   const quote=k=>parseCollectorPrice(market,k);
+   const upAsk=quote('yes_ask'),downAsk=quote('no_ask'),upBid=quote('yes_bid'),downBid=quote('no_bid');
+   const timing={quoteReceivedAt,exchangeEventAt:null,quoteFetchMs:quoteReceivedAt-quoteRequestedAt,decisionAt:now};
+   if(!validCollectorQuote({yesAsk:upAsk,noAsk:downAsk,yesBid:upBid,noBid:downBid})){
+    return {asset,ticker:market.ticker,action:'WAIT',reason:'Invalid binary bid/ask quotes',timing};
+   }
+   if(!Array.isArray(recent))return {asset,ticker:market.ticker,action:'WAIT',reason:'Recent sample history unavailable',timing,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable']}};
+   const records=recent.filter(x=>x?.ticker===market.ticker);
+   const activePosition=openPositions.filter(t=>t.asset===asset&&t.ticker===market.ticker).sort((a,b)=>b.at-a.at)[0]||null;
    const rawSignal=paperSignal(market,records,activePosition,now,{...research,model:assetModels[asset]||research.model});
    const signal=gatePaperEntry({...rawSignal,asset},stats);
    // Keep the underlying direction and the post-performance veto visible.
@@ -83,8 +98,6 @@ export default async req=>{
    // even when the actionable paper signal correctly remains WAIT.
    const committeeInput=buildCommitteeSnapshot(market,records,now);
    const roundAssessment={ticker:market.ticker,asset,expiresAt:market._expiry,evaluatedAt:now,coverage:'EVALUATED',entryQualified:['BUY UP','BUY DOWN'].includes(signal.action),action:signal.action,reason:signal.reason};
-   const quote=k=>market[k+'_dollars']!=null?Number(market[k+'_dollars']):market[k]!=null?Number(market[k])/100:NaN;
-   const upAsk=quote('yes_ask'),downAsk=quote('no_ask'),upBid=quote('yes_bid'),downBid=quote('no_bid');
    const fairUp=Number.isFinite(upBid)&&Number.isFinite(upAsk)?(upBid+upAsk)/2:NaN;
    const valid=Number.isFinite(upAsk)&&Number.isFinite(downAsk)&&upAsk>0&&downAsk>0&&upAsk<1&&downAsk<1;
    const forecast=valid?{direction:signal.action==='BUY UP'?'UP':signal.action==='BUY DOWN'?'DOWN':Number.isFinite(fairUp)?fairUp>=.5?'UP':'DOWN':null,method:signal.action.startsWith('BUY')?'qualified experimental entry':'quote-implied direction only; not a predictive edge',up:{askCents:Math.round(upAsk*1000)/10,maxProfitPerContract:Math.round((1-upAsk)*1000)/1000,maxLossPerContract:upAsk},down:{askCents:Math.round(downAsk*1000)/10,maxProfitPerContract:Math.round((1-downAsk)*1000)/1000,maxLossPerContract:downAsk},expiresAt:market._expiry,actionable:signal.action.startsWith('BUY')}:null;
@@ -110,8 +123,8 @@ export default async req=>{
    // Feed the same visible forecast into the research committee as non-actionable context.
    // It is quote-implied or momentum-derived, not independently calibrated evidence.
    if(roundCall&&committeeInput&&typeof committeeInput==='object')committeeInput.displayForecast={direction:roundCall.direction,basis:roundCall.basis,asOf:roundCall.asOf,ticker:roundCall.ticker,confidencePercent:roundCall.confidencePercent,actionable:false,mode:'SHADOW_ONLY'};
-   return {asset,...signal,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,timing,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
- return json({fetched_at:new Date().toISOString(),source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});
+ return json({fetched_at:new Date().toISOString(),processingMs:Date.now()-requestStartedAt,source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});
 };
