@@ -62,6 +62,34 @@ async function refreshV8Scoreboard(){
 }
 let sharedV8=[];
 const engineBadges=new Map();
+const shadowRounds=new Map();
+const scalperBooks=new Map();
+function trackShadowEngine(coin,ticker,name,engine,expiresAt,now){
+ let round=shadowRounds.get(coin);
+ if(!ticker)return round?.positions[name];
+ if(round?.ticker!==ticker){
+  round={ticker,positions:{}};
+  shadowRounds.set(coin,round);
+ }
+ let position=round.positions[name];
+ if(!position&&['UP','DOWN'].includes(engine?.decision)&&engine.ask>0&&engine.ask<1&&now<expiresAt){
+  position={ticker,side:engine.decision,ask:engine.ask,at:now,expiresAt,peak:0};
+  round.positions[name]=position;
+ }
+ const book=scalperBooks.get(coin);
+ if(!position||position.closedAt||now>=position.expiresAt||
+    book?.ticker!==position.ticker||book.at<=position.at||now-book.at>5000)return position;
+ const level=position.side==='UP'?book.yes:book.no;
+ const cost=price=>Math.ceil(7*price*(1-price))/100+.01;
+ const net=level.price-position.ask-cost(position.ask)-cost(level.price);
+ position.bid=level.price;position.net=net;
+ position.peak=Math.max(position.peak,net);
+ const reason=net>=.08?'TAKE_PROFIT':net<=-.07?'STOP_LOSS':
+  position.peak>=.05&&position.peak-net>=.04?'TRAIL_EXIT':
+  position.expiresAt-now<=30000?'TIME_EXIT':null;
+ if(reason){position.reason=reason;position.closedAt=now;}
+ return position;
+}
 function paintV8(){
  const shared=sharedV8.find(row=>row.asset===selectedCoin);
  const snapshot=shared?.v8;
@@ -92,26 +120,35 @@ function paintV8(){
     Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds) · modeled net '+
     (idea.estimatedNet*100).toFixed(1)+'¢ per contract';
   }
-  const position=hunter?.positions?.[name];
+  const paperPosition=hunter?.positions?.[name];
   const now=Date.now();
-  const validPosition=position?.ticker===shared?.ticker&&['UP','DOWN'].includes(position?.side)&&
-   now<position.expiresAt&&now>=hunter.at&&now-hunter.at<=75000;
+  const paperValid=paperPosition?.ticker===shared?.ticker&&['UP','DOWN'].includes(paperPosition?.side)&&
+   now<paperPosition.expiresAt&&now>=hunter.at&&now-hunter.at<=75000;
+  const position=paperValid?paperPosition:trackShadowEngine(selectedCoin,shared?.ticker,name,engine,snapshot?.expiresAt,now);
+  const validPosition=position&&now<position.expiresAt;
+  const positionMode=paperValid?'PAPER':'SHADOW';
   const closed=validPosition&&position.closedAt;
   const recentExit=closed&&now>=position.closedAt&&now-position.closedAt<=75000;
-  const shadowSide=engine?.decision;
   let action='SKIP',tone='skip',icon='—',mode='';
   if(recentExit){
    action=(position.reason==='TAKE_PROFIT'?'TAKE PROFIT ':position.reason==='STOP_LOSS'?'SELL FAST ':'SELL ')+position.side;
    tone=position.reason==='TAKE_PROFIT'?'profit':'sell';
-   icon=tone==='profit'?'◆':'✕';mode='PAPER';
+   icon=tone==='profit'?'◆':'✕';mode=positionMode;
   }else if(validPosition&&!closed){
-   const entry=now-position.at<30000;
+   const entry=now-position.at<(paperValid?30000:3500);
    action=(entry?'BUY ':'HOLD ')+position.side;
    tone=entry?position.side.toLowerCase():'hold';
-   icon=entry?(position.side==='UP'?'▲':'▼'):'Ⅱ';mode='PAPER';
-  }else if(['UP','DOWN'].includes(shadowSide)){
-   action='BUY '+shadowSide;tone=shadowSide.toLowerCase();
-   icon=shadowSide==='UP'?'▲':'▼';mode='SHADOW';
+   icon=entry?(position.side==='UP'?'▲':'▼'):'Ⅱ';mode=positionMode;
+  }
+  if(validPosition){
+   detail.textContent='Entry '+(position.ask*100).toFixed(1)+'%';
+   const book=scalperBooks.get(selectedCoin);
+   const liveBid=book?.ticker===position.ticker&&now-book.at<=5000?
+    (position.side==='UP'?book.yes:book.no).price:null;
+   if(Number.isFinite(position.bid)&&recentExit)detail.textContent+=' · exit '+(position.bid*100).toFixed(1)+'%';
+   else if(Number.isFinite(liveBid))detail.textContent+=' · bid '+(liveBid*100).toFixed(1)+'%';
+   else detail.textContent+=' · waiting for fresh exit bid';
+   if(Number.isFinite(position.net)&&(recentExit||Number.isFinite(liveBid)))detail.textContent+=' · modeled net '+(position.net*100).toFixed(1)+'¢';
   }
   const label=icon+' '+action+(mode?' · '+mode:'');
   const badgeKey=[selectedCoin,shared?.ticker,label].join('/');
@@ -439,7 +476,7 @@ async function scanShadow(){
   if(!market||!(left>0&&left<=900)){set('Waiting for an open '+coin+' round');return}
   const latest=trades.at(-1),recent=trades.filter(t=>t.time>=now-15000);
   const tapeReady=latest&&now-latest.time<=5000&&recent.length>=10&&latest.time-recent[0].time>=5000;
-  if(!tapeReady&&!shadowPosition&&!v6Position&&!predatorWatch){set('Waiting for fresh Coinbase trade flow');return}
+  if(!tapeReady&&!shadowPosition&&!v6Position&&!predatorWatch&&!Object.values(shadowRounds.get(coin)?.positions||{}).some(position=>position.ticker===market.ticker&&!position.closedAt)){set('Waiting for fresh Coinbase trade flow');return}
   bookBusy=true;
   try{
     const start=performance.now();
@@ -452,6 +489,8 @@ async function scanShadow(){
     const book=data.orderbook?.orderbook_fp??data.orderbook;
     const yes=bestBid(book,'yes'),no=bestBid(book,'no');
     if(!yes||!no||yes.price+no.price>=1){set('Waiting for a valid two-sided book');return}
+    scalperBooks.set(coin,{ticker:market.ticker,at:current,yes,no});
+    if(coin===selectedCoin)paintV8();
     const spread=1-yes.price-no.price,latency=Math.round(performance.now()-start);
     if(coin==='BTC')updatePredator({ticker:market.ticker,now:current,bookAt:Date.parse(data.fetched_at),remaining,yes,no});
     try{updateV6({market,yes,no,spread,current,remaining,latency})}
