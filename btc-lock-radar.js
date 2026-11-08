@@ -592,7 +592,21 @@ function mountScalper(){
   }
   const signalNotice=feed.nextElementSibling;
   if(signalNotice?.classList.contains('notice')&&signalNotice.nextElementSibling?.id==='liveTerminal')row.before(signalNotice);
-  row.append(feed,picker,box,scalper);
+  const terminal=document.getElementById('liveTerminal');
+  const contract=document.getElementById('premiumChart')?.closest('.premium-panel');
+  const spot=document.getElementById('btcSpotChart')?.closest('section');
+  if(terminal&&contract&&spot){
+    const column=(name,...panels)=>{
+      const group=document.createElement('div');
+      group.className='bt-command-column bt-command-'+name;
+      group.append(...panels);
+      return group;
+    };
+    row.classList.add('bt-command-stacked');
+    row.append(column('left',feed,terminal),picker,column('middle',box,contract),column('right',scalper,spot));
+  }else{
+    row.append(feed,picker,box,scalper);
+  }
   paintCoin();
   return true;
 }
