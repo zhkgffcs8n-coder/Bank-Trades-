@@ -15,16 +15,23 @@ if(!dir)throw Error('PREDATOR_STATE_DIR must point to a persistent writable dire
 await mkdir(dir,{recursive:true});
 const path=join(dir,'state.json');
 let state={positions:{},rounds:{},closed:[],rejections:{},totalClosed:0};
-let tape,ws,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false;
+let tape,ws,lastDepthAt=0,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false;
 const startedAt=Date.now();
 const base='https://external-api.kalshi.com';
+for(const [first,second] of [
+ ['PREDATOR_KALSHI_KEY_ID','PREDATOR_KALSHI_PRIVATE_KEY_FILE'],
+ ['PREDATOR_NETLIFY_SITE_ID','PREDATOR_NETLIFY_TOKEN']
+]){
+ if(Boolean(env[first])!==Boolean(env[second]))throw Error(first+' and '+second+' must be configured together');
+}
 const credentials=env.PREDATOR_KALSHI_KEY_ID&&env.PREDATOR_KALSHI_PRIVATE_KEY_FILE?
  {keyId:env.PREDATOR_KALSHI_KEY_ID,privateKeyPem:await readFile(env.PREDATOR_KALSHI_PRIVATE_KEY_FILE,'utf8')}:null;
 const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
- getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN}):null;
+ getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
+  fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;
 let previousEarlyBook=null;
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
-const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0};
+const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,heartbeatFailures:0};
 async function persist(){
  dirty=false;
  await writeFile(path+'.tmp',JSON.stringify(state),{mode:0o600});
@@ -49,6 +56,7 @@ function connect(){
   headers:signedHeaders(credentials,'GET','/trade-api/ws/v2'),handshakeTimeout:5000
  });
  ws=socket;
+ lastDepthAt=Date.now();
  socket.on('open',()=>socket.send(JSON.stringify({id:1,cmd:'subscribe',params:{channels:['orderbook_delta'],market_ticker:ticker}})));
  socket.on('message',bytes=>{
   if(socket!==ws||market?.ticker!==ticker)return;
@@ -57,8 +65,9 @@ function connect(){
    if(frame.type==='error'){socket.terminate();return;}
    const update=depth.apply(frame,Date.now());
    if(update.status==='GAP'){gaps++;book=null;socket.terminate();return;}
-   if(update.status==='INVALID_BOOK'){book=null;return;}
+   if(update.status==='INVALID_BOOK'){lastDepthAt=Date.now();book=null;return;}
    if(update.status==='READY'){
+    lastDepthAt=update.receivedAt;
     book=update;bookSource='KALSHI_WS';counters.events++;
     evaluate(tape.snapshot().tape,'KALSHI_WS',update.receivedAt);
    }
@@ -195,6 +204,11 @@ async function run(){
    nextDiscovery=now+5000;
    try{await discover(now)}catch{reject('DISCOVERY_FAILED');}
   }
+  if(ws?.readyState===WebSocket.OPEN&&Date.now()-lastDepthAt>10000){
+   counters.depthTimeouts++;
+   book=null;
+   ws.terminate();
+  }
   connect();
   if(market&&(!book||now-book.receivedAt>2500)&&now>=nextRest){
    nextRest=now+2500;
@@ -210,7 +224,11 @@ async function run(){
   if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
    lastPublish=now;
-   const health={version:16,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
+   const health={version:16,
+    feeds:{coinbase:tape.snapshot().connectedAt!==null,
+     kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
+     kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
@@ -241,7 +259,10 @@ async function run(){
     wins:state.closed.filter(row=>row.net>0).length,losses:state.closed.filter(row=>row.net<0).length,
     net:state.closed.reduce((sum,row)=>sum+row.net,0),rejections:state.rejections};
    console.log(JSON.stringify(health));
-   if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;}catch{publishError=true;}
+   if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;}catch(error){
+    publishError=true;counters.heartbeatFailures++;
+    console.error(JSON.stringify({event:'PREDATOR_HEARTBEAT_WRITE_FAILED',errorType:error?.name??'Error'}));
+   }
   }
   await new Promise(resolve=>setTimeout(resolve,100));
  }
