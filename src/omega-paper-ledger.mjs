@@ -1,13 +1,13 @@
 // OMEGA deterministic paper execution ledger. Does not submit real orders.
 const good=x=>typeof x==='number'&&Number.isFinite(x);
 const money=x=>Math.round(x*10000)/10000;
-export function paperEntry({signal,quote,stakeDollars=5,feesDollars,slippageDollars=0,nowMs}={}){
+export function paperEntry({signal,quote,roundId=quote?.ticker,stakeDollars=5,feesDollars,slippageDollars=0,nowMs}={}){
  const reasons=[];
  if(signal?.status!=='SHADOW_CANDIDATE'||signal.ordersAuthorized!==false)reasons.push('No approved shadow candidate');
  if(!['UP','DOWN'].includes(signal?.forecast?.consensus))reasons.push('No directional agreement');
  // A frozen paper forecast must belong to the exact Kalshi contract being
  // priced. Never let a different round's AI signal authorize a paper entry.
- if(signal?.marketTicker!==quote?.ticker||signal?.roundId!==quote?.ticker)
+ if(signal?.marketTicker!==quote?.ticker||signal?.roundId!==roundId||typeof roundId!=='string'||!roundId)
   reasons.push('Signal contract or round mismatch');
  const side=signal?.forecast?.consensus;
  const ask=side==='UP'?quote?.yesAskDollars:quote?.noAskDollars;

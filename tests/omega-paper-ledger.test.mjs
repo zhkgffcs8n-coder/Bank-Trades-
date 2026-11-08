@@ -22,6 +22,13 @@ test('paper entry binds its forecast to the exact quoted contract and round',()=
   assert.ok(result.reasons.includes('Signal contract or round mismatch'));
  }
 });
+test('explicit round identifiers remain valid when bound to the forecast',()=>{
+ const custom={...signal,roundId:'R1'};
+ const accepted=paperEntry({signal:custom,quote,roundId:'R1',stakeDollars:5,feesDollars:.1,nowMs:100000});
+ assert.equal(accepted.status,'PAPER_OPEN');
+ const rejected=paperEntry({signal:custom,quote,roundId:'R2',stakeDollars:5,feesDollars:.1,nowMs:100000});
+ assert.equal(rejected.status,'BLOCKED');
+});
 test('stale quotes and unknown fees block entry',()=>{
  assert.equal(paperEntry({signal,quote,feesDollars:.1,nowMs:105000}).status,'BLOCKED');
  assert.equal(paperEntry({signal,quote,nowMs:100000}).status,'BLOCKED');

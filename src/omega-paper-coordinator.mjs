@@ -36,7 +36,7 @@ export function advanceOmegaPaper({state={},signal,quote,roundId,feesDollars,now
  if(position)return {status:'BLOCKED',reason:'Market round already has a persisted position',state,realOrdersAuthorized:false};
  if(entered[key])return {status:'BLOCKED',reason:'Already entered this market round',state,realOrdersAuthorized:false};
  if(signal?.marketTicker!==ticker||signal?.roundId!==roundId)return {status:'BLOCKED',reason:'Signal contract or round mismatch',state,realOrdersAuthorized:false};
- const opened=paperEntry({signal,quote,feesDollars,slippageDollars,nowMs,stakeDollars});
+ const opened=paperEntry({signal,quote,roundId,feesDollars,slippageDollars,nowMs,stakeDollars});
  if(opened.status!=='PAPER_OPEN')return {status:'BLOCKED',reason:opened.reasons.join('; '),state,realOrdersAuthorized:false};
  const next={...state,entered:{...entered,[key]:true},positions:{...positions,[ticker]:{...opened.position,roundId}}};
  return {status:'PAPER_ENTRY',position:next.positions[ticker],state:next,realOrdersAuthorized:false};
