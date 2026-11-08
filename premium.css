@@ -153,7 +153,7 @@ body {
 .bt-command-grid>#btVerifiedAlertFeed{grid-area:history}
 .bt-command-grid>#btcLockDesk{grid-area:radar}
 .bt-command-grid>#btcProScalper{grid-area:scalper}
-.bt-command-grid>.bt-command-picker{
+.bt-command-grid .bt-command-picker{
  grid-area:picker!important;
  grid-template-columns:repeat(8,minmax(0,1fr))!important;
  gap:5px!important;
@@ -175,7 +175,7 @@ body {
 .bt-command-history>div{padding:2px 0;border-top:1px solid #334155;font-size:12px;line-height:1.35;overflow-wrap:anywhere}
 .bt-command-grid+#liveTerminal{margin-top:0}
 @media(max-width:1100px){
- .bt-command-grid>.bt-command-picker{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+ .bt-command-grid .bt-command-picker{grid-template-columns:repeat(4,minmax(0,1fr))!important}
 }
 @media(max-width:800px){
  .bt-command-grid{grid-template-columns:minmax(0,1fr);grid-template-areas:"picker" "radar" "scalper" "history";grid-template-rows:auto}
@@ -183,8 +183,14 @@ body {
 }
 
 .bt-command-stacked{
- grid-template-areas:"history picker picker" "history radar scalper";
- grid-template-columns:minmax(0,1.27fr) minmax(0,.88fr) minmax(0,1.05fr);
+ grid-template-rows:auto;
+ grid-template-areas:"history tools";
+ grid-template-columns:minmax(0,1.27fr) minmax(0,1.93fr);
+}
+.bt-command-tools{
+ grid-area:tools;display:grid;align-items:start;gap:8px;min-width:0;
+ grid-template-columns:minmax(0,.88fr) minmax(0,1.05fr);
+ grid-template-areas:"picker picker" "radar scalper";
 }
 .bt-command-column{display:grid;align-content:start;gap:8px;min-width:0}
 .bt-command-left{grid-area:history}
@@ -197,8 +203,8 @@ body {
 .bt-command-left #liveTerminal .between{flex-wrap:wrap;gap:6px}
 .bt-command-left #btBuildMarker{flex-basis:100%;margin-top:0!important}
 @media(max-width:800px){
- .bt-command-stacked{grid-template-columns:minmax(0,1fr);grid-template-areas:"picker" "radar" "scalper" "history"}
- .bt-command-column{display:contents}
+ .bt-command-stacked{grid-template-columns:minmax(0,1fr);grid-template-rows:auto}
+ .bt-command-column,.bt-command-tools{display:contents}
  .bt-command-stacked{grid-template-areas:"picker" "radar" "scalper" "history" "signals" "contract" "spot"}
  .bt-command-stacked #btcLockDesk{grid-area:radar}
  .bt-command-stacked #btcProScalper{grid-area:scalper}

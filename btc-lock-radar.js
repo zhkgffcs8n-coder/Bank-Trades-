@@ -606,7 +606,10 @@ function mountScalper(){
       return group;
     };
     row.classList.add('bt-command-stacked');
-    row.append(column('left',feed,terminal),picker,column('middle',box,contract),column('right',scalper,spot));
+    const tools=document.createElement('div');
+    tools.className='bt-command-tools';
+    tools.append(picker,column('middle',box,contract),column('right',scalper,spot));
+    row.append(column('left',feed,terminal),tools);
   }else{
     row.append(feed,picker,box,scalper);
   }
