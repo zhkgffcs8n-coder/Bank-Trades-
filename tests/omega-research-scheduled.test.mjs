@@ -194,6 +194,8 @@ test('a newly frozen, read-back verified forecast can still open paper-only entr
  assert.equal(report.status,'SHADOW_RESEARCH');
  assert.equal(report.paperStatus,'PAPER_ENTRY');
  assert.equal(db.values.get(db.key).freezeId.length>0,true);
+ assert.equal(db.values.get(db.key).expiresAtMs,sample.expiresAt);
+ assert.ok(db.values.get(db.key).recordedAtMs<db.values.get(db.key).expiresAtMs);
  assert.equal(db.values.get('omega/paper/v1/'+sample.ticker).state.positions[sample.ticker].status,'OPEN');
  assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
 });
