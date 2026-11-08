@@ -223,3 +223,44 @@ test('malformed previous provider heartbeat cannot interrupt paper position moni
   assert.equal(data.get('omega/heartbeat').ordersAuthorized,false);
  }
 });
+
+test('expired during live quote retrieval: skip providers and archive no forecast',async()=>{
+ const expired={...sample,expiresAt:now+500};
+ const data=new Map([['latest/'+asset,expired]]);
+ const db={get:async k=>data.get(k)??null,setJSON:async(k,v)=>data.set(k,v)};
+ let marketCalls=0,providerCalls=0;
+ const report=await runOmegaScheduled({nowMs:now,db,
+  env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},clock:()=>now+600,
+  fetchImpl:async url=>{
+   if(url.includes('/markets/')){
+    marketCalls++;
+    return {ok:true,json:async()=>({market:{ticker:expired.ticker,status:'active',
+     yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}})};
+   }
+   providerCalls++;
+   throw Error('Expired market must not call an AI provider');
+  }});
+ assert.equal(report.status,'NO_FRESH_MARKET_OBSERVATION');
+ assert.equal(marketCalls,1);
+ assert.equal(providerCalls,0);
+ assert.equal([...data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+ assert.equal(report.ordersAuthorized,false);
+});
+
+test('live quote receipt time remains prospective during provider research',async()=>{
+ const data=new Map([['latest/'+asset,sample]]);
+ const db={get:async k=>data.get(k)??null,setJSON:async(k,v)=>data.set(k,v)};
+ const receiptAt=now+1000;
+ const report=await runOmegaScheduled({nowMs:now,db,clock:()=>receiptAt,
+  env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},
+  fetchImpl:async url=>({ok:true,json:async()=>url.includes('/markets/')?
+   {market:{ticker:sample.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55}}:
+   {choices:[{message:{content:'{"upProbability":0.6}'}}]}})});
+ assert.equal(report.status,'SHADOW_RESEARCH');
+ assert.equal(report.observedAtMs,receiptAt);
+ const forecast=[...data.entries()].find(([k])=>k.startsWith('omega/predictions/'))?.[1];
+ assert.ok(forecast);
+ assert.equal(forecast.recordedAtMs,receiptAt);
+ assert.equal(forecast.observedAtMs,receiptAt);
+ assert.equal(report.ordersAuthorized,false);
+});
