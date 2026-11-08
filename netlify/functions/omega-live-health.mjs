@@ -64,9 +64,13 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   })(),
   paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
    ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.updatedAtMs:null,
-  // Entries have no realized P&L. A timestamped simulated exit or official
-  // settlement is still one action, never a cumulative verified total.
-  paperLastActionNetDollars:['PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)&&
+  // A standalone PAPER_SETTLED heartbeat is not independent official
+  // settlement evidence: the position and the separate outcomes/ticker
+  // record must agree before realized settlement P&L is reported. Only
+  // expose the last simulated bid-exit amount here. Official settlement
+  // P&L belongs to the independently reconciled omega-paper-summary.
+  // Neither figure is a cumulative trading result.
+  paperLastActionNetDollars:paperHeartbeat?.action==='PAPER_EXIT'&&
    Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
    Number.isFinite(paperHeartbeat?.netDollars)?paperHeartbeat.netDollars:null,
   forecastShadow:(()=>{
