@@ -59,6 +59,9 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
     conflictingTickers:Number.isSafeInteger(forecastResearch.conflictingTickers)?forecastResearch.conflictingTickers:null,
     notice:'Frozen hypothetical research with assumed costs, not actual fills or proven model improvement'};
   })(),
+  titanShadows:Object.fromEntries(Object.entries(forecastResearch?.titanReports??{}).filter(([asset,report])=>
+   /^(ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)$/.test(asset)&&report?.mode==='SETTLEMENT_SHADOW'&&
+   Number.isSafeInteger(report.at)&&report.at<=nowMs&&nowMs-report.at<=600000)),
   titanShadow:forecastResearch?.titan?.mode==='SETTLEMENT_SHADOW'&&
    Number.isSafeInteger(forecastResearch.titan.at)&&forecastResearch.titan.at<=nowMs&&nowMs-forecastResearch.titan.at<=420000
    ?forecastResearch.titan:null,

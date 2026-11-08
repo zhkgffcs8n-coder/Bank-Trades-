@@ -50,13 +50,14 @@ export async function readCollectorSeries(url,{fetchImpl=fetch,wait=ms=>new Prom
 }
 function expiry(m,now){return [m.expected_expiration_time,m.expiration_time,m.close_time].map(Date.parse).filter(x=>Number.isFinite(x)&&x>now).sort((a,b)=>a-b)[0]||null}
 const TITAN='titan/v7/';
+const titanPrefix=asset=>asset==='BTC'?TITAN:TITAN+asset+'/';
 const titanDay=at=>new Date(at).toISOString().slice(0,10);
 const titanCost=ask=>Math.ceil(7*ask*(1-ask))/100+.01;
 
-// A frozen BTC settlement challenger built from causal, same-contract quotes.
+// A frozen per-market settlement challenger built from causal, same-contract quotes.
 export function freezeTitan(record,history){
  const {ticker,observedAt:at,expiresAt,yesBid,yesAsk,noBid,noAsk}=record;
- if(record.asset!=='BTC'||!/^KXBTC15M-/.test(ticker)||![at,expiresAt,yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||
+ if(!Object.hasOwn(SERIES,record.asset)||!ticker?.startsWith(SERIES[record.asset]+'-')||![at,expiresAt,yesBid,yesAsk,noBid,noAsk].every(Number.isFinite)||
     expiresAt-at<90000||expiresAt-at>900000||yesBid<=0||noBid<=0||yesAsk>=1||noAsk>=1||yesBid>yesAsk||noBid>noAsk)return null;
  const byMinute=new Map(history.filter(row=>row.ticker===ticker&&Number.isFinite(row.t)&&
     Number.isFinite(row.observedAt)&&row.observedAt<at&&at-row.observedAt<=240000&&
@@ -151,10 +152,10 @@ export default async()=>{
   }catch(e){researchFailure('recent-snapshot',e,asset);console.warn('Recent snapshot update failed',asset,String(e));}
   await db.setJSON('telemetry/'+asset,{at:now,asset,ticker:m.ticker,sourceAgeMs:Date.now()-record.observedAt,sampleDuplicate:!!existing,quoteSpread:record.spread,valid:true,multiWindowResearch:multiWindowMomentum(recent,now)});
   collection.sampled.add(asset);
-  if(asset==='BTC'&&!existing){
+  if(!existing){
    try{
     const titan=freezeTitan(record,recent);
-    if(titan)await db.setJSON(TITAN+titanDay(titan.at)+'/'+m.ticker,titan,{onlyIfNew:true});
+    if(titan)await db.setJSON(titanPrefix(asset)+titanDay(titan.at)+'/'+m.ticker,titan,{onlyIfNew:true});
    }catch(e){researchFailure('titan-freeze',e,asset)}
   }
   // Freeze the first forecast before settlement. Never overwrite on later flips.
@@ -356,11 +357,15 @@ export default async()=>{
   try{
    const page=await blobWindow(db,{prefix:'forecast-shadow/v1/',limit:40});
    const rows=(await Promise.all(page.blobs.map(b=>db.get(b.key,{type:'json'})))).filter(Boolean);
-   let titan=null;
-   try{
-    titan=await db.get(TITAN+'report',{type:'json'});
-    if(!titan||now-titan.at>=300000){
-    const pages=await Promise.all([now,now-86400000].map(at=>blobWindow(db,{prefix:TITAN+titanDay(at)+'/',limit:100})));
+   const alternatives=Object.keys(SERIES).filter(asset=>asset!=='BTC');
+   const updateAsset=alternatives[Math.floor(now/60000)%alternatives.length];
+   const titanReports=Object.fromEntries(await Promise.all(Object.keys(SERIES).map(async asset=>{
+    const prefix=titanPrefix(asset);
+    let titan=null;
+    try{
+    titan=await db.get(prefix+'report',{type:'json'});
+    if((asset==='BTC'||asset===updateAsset)&&(!titan||now-titan.at>=300000)){
+    const pages=await Promise.all([now,now-86400000].map(at=>blobWindow(db,{prefix:prefix+titanDay(at)+'/',limit:100})));
     const titanRows=(await Promise.all(pages.flatMap(page=>page.blobs).map(async blob=>{
      const row=await db.get(blob.key,{type:'json'});
      if(row?.status!=='PENDING'||now<row.expiresAt+60000)return row;
@@ -371,10 +376,12 @@ export default async()=>{
      return scored;
     }))).filter(Boolean);
      titan=titanReport(titanRows,now,pages.some(page=>!!page.cursor));
-     await db.setJSON(TITAN+'report',titan);
+     await db.setJSON(prefix+'report',titan);
     }
-   }catch(e){researchFailure('titan-report',e,'BTC')}
-   await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor}),titan});
+    }catch(e){researchFailure('titan-report',e,asset)}
+    return [asset,titan];
+   })));
+   await db.setJSON('forecast-shadow/report-v1',{at:now,...summarizeForecastResearch(rows,{truncated:!!page.cursor}),titan:titanReports.BTC,titanReports});
   }catch(e){researchFailure('forecast-summary',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.

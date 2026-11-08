@@ -7,6 +7,9 @@ scalper.id='btcProScalper';
 scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.5vw,32px);border:2px solid #60a5fa;border-radius:16px;background:#0b1728;color:#f8fafc;overflow-wrap:anywhere';
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 box.before(scalper);
+const researchReadouts=document.createElement('div');
+scalper.append(researchReadouts);
+function createScalperBots(coin){
 const shadow=document.createElement('p');
 shadow.style.cssText='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
 const shadowSignal=document.createElement('strong');
@@ -14,12 +17,12 @@ shadowSignal.style.cssText='display:inline-block;margin:0 6px 4px 0;padding:3px 
 shadowSignal.hidden=true;
 shadowSignal.style.display='none';
 const shadowDetail=document.createElement('span');
-shadowDetail.textContent='V5 SHADOW · Waiting for BTC trades and executable depth';
+shadowDetail.textContent='V5 SHADOW · Waiting for '+coin+' trades and executable depth';
 shadow.append(shadowSignal,shadowDetail);
-const researchReadouts=document.createElement('div');
-researchReadouts.append(shadow);
-scalper.append(researchReadouts);
-const journalKey='banktrades:btc-v5-shadow-v1';
+const readouts=document.createElement('div');
+readouts.append(shadow);
+
+const journalKey='banktrades:'+coin.toLowerCase()+'-v5-shadow-v1';
 let journal=[],shadowPosition=null,shadowMarket=null,bookBusy=false,lastRound=null;
 try{
   const saved=JSON.parse(localStorage.getItem(journalKey)||'[]');
@@ -42,7 +45,7 @@ function connectTrades(){
   reconnectAt=Date.now()+5000;
   try{
     socket=new WebSocket('wss://advanced-trade-ws.coinbase.com');
-    socket.onopen=()=>socket.send(JSON.stringify({type:'subscribe',channel:'market_trades',product_ids:['BTC-USD']}));
+    socket.onopen=()=>socket.send(JSON.stringify({type:'subscribe',channel:'market_trades',product_ids:[coin+'-USD']}));
     socket.onmessage=({data})=>{
       let message;
       try{message=JSON.parse(data)}catch{return}
@@ -52,7 +55,7 @@ function connectTrades(){
         if(event.type!=='update')continue;
         for(const trade of event.trades||[]){
           const time=Date.parse(trade.time),price=Number(trade.price),size=Number(trade.size);
-          if(trade.product_id!=='BTC-USD'||time>now+2000||time<now-30000||
+          if(trade.product_id!==coin+'-USD'||time>now+2000||time<now-30000||
              !Number.isFinite(time)||!Number.isFinite(price)||price<=0||!Number.isFinite(size)||size<=0||
              !['BUY','SELL'].includes(trade.side)||!trade.trade_id||recentTradeIds.has(trade.trade_id)||
              (trades.length&&time<trades.at(-1).time))continue;
@@ -90,34 +93,8 @@ const cents=value=>Math.round(value*100)+'¢ / '+Math.round(value*100)+'%';
 const challenger=document.createElement('p');
 challenger.style.cssText=shadow.style.cssText;
 challenger.textContent='V6 SHADOW · Waiting for a shared market snapshot';
-researchReadouts.append(challenger);
-const titan=document.createElement('p');
-titan.style.cssText=shadow.style.cssText;
-titan.textContent='🤖 TITAN V7 · Waiting for server research';
-researchReadouts.append(titan);
-async function refreshTitan(){
-  if(document.hidden)return;
-  try{
-    const response=await fetch('/.netlify/functions/omega-live-health',{cache:'no-store',signal:AbortSignal.timeout(8000)});
-    if(!response.ok)throw Error('Research report unavailable');
-    const {titanShadow:report}=await response.json();
-    if(!report){titan.textContent='🤖 TITAN V7 · Waiting for a fresh server report';return}
-    const latest=report.latest;
-    if(latest){
-      window.dispatchEvent(new CustomEvent('banktrades:titan-observation',{detail:{
-        ticker:latest.ticker,at:latest.at,decision:latest.decision,scored:report.scored,trades:report.trades
-      }}));
-    }
-    titan.textContent='🤖 TITAN V7 SHADOW · '+(latest?latest.decision+' · '+latest.reason.replaceAll('_',' ').toLowerCase():'Collecting qualified BTC observations')+
-      ' · '+report.scored+' officially scored rounds · '+report.trades+' simulated trades'+
-      (report.scored?' · Titan / market Brier '+report.brier.toFixed(3)+' / '+report.marketBrier.toFixed(3):'')+
-      (report.trades?' · Simulated net '+(report.simulatedNetPnl*100).toFixed(1)+'¢':'');
-  }catch{titan.textContent='🤖 TITAN V7 · Server research unavailable'}
-}
-refreshTitan();
-setInterval(refreshTitan,60000);
-
-const v6Key='banktrades:btc-v6-forward-v1';
+readouts.append(challenger);
+const v6Key='banktrades:'+coin.toLowerCase()+'-v6-forward-v1';
 const horizons=[5,15,30,60,180];
 let v6Log=[],pending=[],priorBook=null,v6Position=null,lastForecast=0;
 try{
@@ -176,7 +153,7 @@ function updateV6({market,yes,no,spread,current,remaining,latency}){
   const thinning=previous&&(yes.size+no.size)<previous.size*.5;
   const widening=previous&&spread>previous.spread+.015;
   priorBook={ticker,at:current,implied,size:yes.size+no.size,spread};
-  const scale=Math.max(5,...rows.map(t=>Math.abs(t.price-(latest?.price??0))));
+  const scale=Math.max(coin==='BTC'?5:(latest?.price??1)*.00006,...rows.map(t=>Math.abs(t.price-(latest?.price??0))));
   const momentum=bounded(slow.move/scale);
   const acceleration=bounded(fast.flow-slow.flow);
   const tapeScore=bounded(.55*slow.flow+.25*momentum+.20*acceleration);
@@ -285,7 +262,7 @@ async function scanShadow(){
     record({event:'UNRESOLVED',ticker:shadowPosition.ticker,reason:'No fresh executable exit before rollover'});
     shadowPosition=null;
   }
-  if(!market||!(left>0&&left<=900)){set('Waiting for an open BTC round');return}
+  if(!market||!(left>0&&left<=900)){set('Waiting for an open '+coin+' round');return}
   const latest=trades.at(-1),recent=trades.filter(t=>t.time>=now-15000);
   const tapeReady=latest&&now-latest.time<=5000&&recent.length>=10&&latest.time-recent[0].time>=5000;
   if(!tapeReady&&!shadowPosition&&!v6Position){set('Waiting for fresh Coinbase trade flow');return}
@@ -333,7 +310,7 @@ async function scanShadow(){
     const momentum=latest.price-recent[0].price;
     const prices=recent.map(t=>t.price);
     const range=Math.max(...prices)-Math.min(...prices);
-    const horizon=Math.max(8,range*Math.sqrt(remaining/15));
+    const horizon=Math.max(coin==='BTC'?8:latest.price*.0001,range*Math.sqrt(remaining/15));
     // Heuristic fair value for research. This score is intentionally uncalibrated.
     const up=1/(1+Math.exp(-1.6*(latest.price-strike+momentum*.5)/horizon));
     const side=pressure>.2&&momentum>0?'UP':pressure<-.2&&momentum<0?'DOWN':null;
@@ -353,7 +330,47 @@ async function scanShadow(){
   }catch{set('Waiting for executable Kalshi depth')}
   finally{bookBusy=false}
 }
-setInterval(scanShadow,5000);
+setInterval(()=>{
+  if(coin==='BTC'||coin===selectedCoin||shadowPosition||v6Position)scanShadow();
+  else socket?.close();
+},5000);
+return {readouts,setMarket:market=>{shadowMarket=market}};
+
+
+}
+const bots=new Map();
+function botsFor(coin){
+  if(!bots.has(coin))bots.set(coin,createScalperBots(coin));
+  return bots.get(coin);
+}
+const titan=document.createElement('p');
+titan.style.cssText=shadow.style.cssText;
+titan.textContent='🤖 TITAN V7 · Waiting for server research';
+researchReadouts.append(titan);
+let titanRequest=0;
+async function refreshTitan(){
+  if(document.hidden)return;
+  const coin=selectedCoin,request=++titanRequest;
+  try{
+    const response=await fetch('/.netlify/functions/omega-live-health',{cache:'no-store',signal:AbortSignal.timeout(8000)});
+    if(!response.ok)throw Error('Research report unavailable');
+    const health=await response.json();
+    if(request!==titanRequest)return;
+    const report=coin==='BTC'?health.titanShadow:health.titanShadows?.[coin];
+    if(!report){titan.textContent='🤖 TITAN V7 · Waiting for a fresh server report';return}
+    const latest=report.latest;
+    if(latest&&coin==='BTC'){
+      window.dispatchEvent(new CustomEvent('banktrades:titan-observation',{detail:{
+        ticker:latest.ticker,at:latest.at,decision:latest.decision,scored:report.scored,trades:report.trades
+      }}));
+    }
+    titan.textContent='🤖 TITAN V7 SHADOW · '+(latest?latest.decision+' · '+latest.reason.replaceAll('_',' ').toLowerCase():'Collecting qualified '+coin+' observations')+
+      ' · '+report.scored+' officially scored rounds · '+report.trades+' simulated trades'+
+      (report.scored?' · Titan / market Brier '+report.brier.toFixed(3)+' / '+report.marketBrier.toFixed(3):'')+
+      (report.trades?' · Simulated net '+(report.simulatedNetPnl*100).toFixed(1)+'¢':'');
+  }catch{if(request===titanRequest)titan.textContent='🤖 TITAN V7 · Server research unavailable'}
+}
+
 
 const scalpAction=scalper.querySelector('[data-action]');
 const scalpIcon=scalper.querySelector('[data-icon]');
@@ -393,7 +410,7 @@ const buttons=easyCoinButtons.map(source=>{
 function paintCoin(){
   box.querySelector('h2').lastChild.textContent=' '+selectedCoin+' 15-MIN · LOCK & FLIP RADAR';
   scalper.querySelector('h2').textContent='⚡ '+selectedCoin+' 15-MIN PRO SCALPER';
-  researchReadouts.hidden=selectedCoin!=='BTC';
+  researchReadouts.replaceChildren(botsFor(selectedCoin).readouts,titan);
   for(const button of buttons){
     const active=button.dataset.coin===selectedCoin;
     button.setAttribute('aria-pressed',String(active));
@@ -408,7 +425,8 @@ function selectCoin(coin){
   localStorage.setItem('btProCoin',coin);
   selectionVersion++;
   paintCoin();
-  facts.textContent='';
+  titan.textContent='🤖 TITAN V7 · Checking '+coin+' research';
+  refreshTitan();
   waitForData('Checking '+coin+' market and spot feed');
   evaluate();
 }
@@ -560,7 +578,10 @@ async function evaluate(){
     if(version!==selectionVersion)return;
     const marketFor=asset=>markets.find(x=>x.asset===asset)?.market;
     const btcMarket=marketFor('BTC');
-    if(btcMarket?.ticker?.startsWith('KXBTC15M-'))shadowMarket=btcMarket;
+    for(const [asset,bot] of bots){
+      const market=marketFor(asset);
+      bot.setMarket(market?.ticker?.startsWith('KX'+asset+'15M-')?market:null);
+    }
     if(coin!=='BTC')assess('BTC',btcMarket,window.__BANK_TRADES_BTC_EVIDENCE__,false);
     assess(coin,marketFor(coin),e,true);
   }finally{
@@ -601,5 +622,7 @@ function assess(coin,market,e,visible){
   }
 }
 waitForData('Checking '+selectedCoin+' market and spot feed');
+botsFor('BTC');
+refreshTitan();setInterval(refreshTitan,60000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
