@@ -7,9 +7,10 @@ scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 const researchReadouts=document.createElement('div');
 scalper.append(researchReadouts);
+const researchRowStyle='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
 function createScalperBots(coin){
 const shadow=document.createElement('p');
-shadow.style.cssText='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
+shadow.style.cssText=researchRowStyle;
 const shadowSignal=document.createElement('strong');
 shadowSignal.style.cssText='display:inline-block;margin:0 6px 4px 0;padding:3px 8px;border:1px solid currentColor;border-radius:6px';
 shadowSignal.hidden=true;
@@ -342,7 +343,7 @@ function botsFor(coin){
   return bots.get(coin);
 }
 const titan=document.createElement('p');
-titan.style.cssText=shadow.style.cssText;
+titan.style.cssText=researchRowStyle;
 titan.textContent='🤖 TITAN V7 · Waiting for server research';
 researchReadouts.append(titan);
 let titanRequest=0;
