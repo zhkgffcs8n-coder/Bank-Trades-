@@ -107,3 +107,26 @@ test('public OMEGA collector health rejects extra duplicate samples, inconsisten
  assert.equal(omegaLiveHealth({...heartbeat,failedAssets:null},now).status,'NOT_VERIFIED');
  assert.equal(omegaLiveHealth({...heartbeat,sampledAssetCount:8,failedAssets:[]},now).status,'COLLECTOR_FRESH');
 });
+
+
+test('future or missing paper action timestamps cannot publish realized profit',()=>{
+ for(const invalid of [
+  {action:'PAPER_EXIT',netDollars:4},
+  {action:'PAPER_SETTLED',updatedAtMs:now+1,netDollars:4},
+  {action:'PAPER_EXIT',updatedAtMs:'not-a-time',netDollars:4},
+  {action:'UNKNOWN',updatedAtMs:now-1,netDollars:4}
+ ]){
+  const result=omegaLiveHealth(heartbeat,now,null,invalid);
+  assert.equal(result.paperLastAction,'NONE_VERIFIED');
+  assert.equal(result.paperLastActionAtMs,null);
+  assert.equal(result.paperLastActionNetDollars,null);
+ }
+ const entry=omegaLiveHealth(heartbeat,now,null,{action:'PAPER_ENTRY',updatedAtMs:now-1,netDollars:4});
+ assert.equal(entry.paperLastAction,'PAPER_ENTRY');
+ assert.equal(entry.paperLastActionNetDollars,null);
+ const exit=omegaLiveHealth(heartbeat,now,null,{action:'PAPER_EXIT',updatedAtMs:now-1,netDollars:-.42});
+ assert.equal(exit.paperLastAction,'PAPER_EXIT');
+ assert.equal(exit.paperLastActionAtMs,now-1);
+ assert.equal(exit.paperLastActionNetDollars,-.42);
+ assert.equal(exit.realOrdersAuthorized,false);
+});
