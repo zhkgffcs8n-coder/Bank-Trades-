@@ -4,6 +4,7 @@ export function auditScalpEntry(previous, snapshot, depth, checks, positions){
  const audit=structuredClone(previous??{ticker:snapshot.ticker,engines:{}});
  if(audit.at>=snapshot.at)return audit;
  audit.at=snapshot.at;
+ audit.telemetry=snapshot.entryTelemetry;
  for(const name of ['A','B','C']){
   const engine=audit.engines[name]??={sides:{}};
   const fill=positions[name];
@@ -18,11 +19,23 @@ export function auditScalpEntry(previous, snapshot, depth, checks, positions){
    const decisions=checks[name].filter(check=>check.side===side);
    const quote={at:snapshot.at,ask,spread:ask-bid.price,askSize:opposite.size,bidSize:bid.size};
    if(early||decisions.some(check=>Number.isFinite(check.ask)))row.firstSignal??={...quote,early,decisions};
-   if(decisions.some(check=>Number.isFinite(check.ask)))
+   const executable=decisions.some(check=>Number.isFinite(check.ask));
+   const bestEntry=row.bestExecutable??row.firstExecutable;
+   if(bestEntry&&snapshot.at>bestEntry.at&&bid.size>=1){
+    const gross=bid.price-bestEntry.ask;
+    const net=gross-modeledCost(bestEntry.ask)-modeledCost(bid.price);
+    if(net>(row.maximumObserved?.net??-Infinity))
+     row.maximumObserved={entry:bestEntry,exitAt:snapshot.at,bid:bid.price,gross,net};
+   }
+   if(executable){
     row.firstExecutable??=quote;
+    if(ask<(row.bestExecutable?.ask??Infinity))row.bestExecutable=quote;
+   }
+   row.latestReasons=decisions.map(check=>check.reason);
    const first=row.firstExecutable;
    if(first&&snapshot.at>first.at&&bid.size>=1&&bid.price>(row.bestLaterExit?.bid??0)){
     const gross=bid.price-first.ask;
+    if(gross>=.05-1e-9)row.firstFivePointMoveAt??=snapshot.at;
     row.bestLaterExit={at:snapshot.at,bid:bid.price,gross,net:gross-modeledCost(first.ask)-modeledCost(bid.price)};
    }
   }

@@ -171,8 +171,8 @@ export default async()=>{
     const diagnosticsKey='scalp-hunter/diagnostics/'+asset;
     if(!candidate)await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:'WAIT_SAME_ROUND_HISTORY'});
     if(asset==='BTC'||trackExit||candidate||Object.values(open||{}).some(position=>!position.closedAt)){
-     const tapeRead=['BTC','ETH'].includes(asset)?fetch('https://api.exchange.coinbase.com/products/'+asset+'-USD/trades?limit=100',
-      {signal:AbortSignal.timeout(1600)}).then(r=>r.ok?r.json():null).catch(()=>null):null;
+     const tapeRead=fetch('https://api.exchange.coinbase.com/products/'+asset+'-USD/trades?limit=100',
+      {signal:AbortSignal.timeout(1600)}).then(r=>r.ok?r.json():null).catch(()=>null);
      let depth=null,depthStatus='ORDERBOOK_UNAVAILABLE';
      try{
       const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
@@ -222,6 +222,9 @@ export default async()=>{
       const volume=trades.reduce((sum,row)=>sum+Math.abs(row.flow),0);
       const flow=trades.length>=4&&volume>0?trades.reduce((sum,row)=>sum+row.flow,0)/volume:null;
       snapshot.early=earlyScalpSignals(snapshot,flow);
+      snapshot.entryTelemetry={flow,spotTrades:trades.length,spotAgeMs:trades.length?snapshot.at-trades.at(-1).time:null,
+       spread:snapshot.spread,imbalance:snapshot.imbalance,velocity:snapshot.velocity,
+       acceleration:snapshot.acceleration,regime:snapshot.regime,remainingMs:snapshot.expiresAt-snapshot.at};
       const tapeKey='scalp-hunter/tape/'+asset;
       const tape=await db.get(tapeKey,{type:'json'})||[];
       const archiveKey='scalp-hunter/comparable-rounds/v1/'+asset;

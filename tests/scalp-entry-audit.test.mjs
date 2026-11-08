@@ -14,3 +14,16 @@ test('keeps first executable quote separate from fills and scores only later dep
  assert.ok(Math.abs(later.engines.A.sides.DOWN.bestLaterExit.net-.294)<1e-9);
  assert.equal(later.voltComparison.DOWN[0].unfilledOpportunity.bid,.904);
 });
+
+test('best observed opportunity only uses a buy quote from an earlier observation',()=>{
+ const snapshot={ticker:'KXETH15M-TEST',at:1};
+ const checks={A:[{side:'DOWN',ask:.56,reason:'INSUFFICIENT_COMPARABLE_ROUNDS'}],B:[],C:[]};
+ const first=auditScalpEntry(null,snapshot,{yes:{price:.44,size:3},no:{price:.54,size:3}},checks,{});
+ const cheap=auditScalpEntry(first,{...snapshot,at:2},{yes:{price:.69,size:3},no:{price:.30,size:3}},checks,{});
+ assert.ok(Math.abs(cheap.engines.A.sides.DOWN.bestExecutable.ask-.31)<1e-9);
+ assert.equal(cheap.engines.A.sides.DOWN.maximumObserved.entry.at,1);
+ const rally=auditScalpEntry(cheap,{...snapshot,at:3},{yes:{price:.08,size:3},no:{price:.904,size:3}},
+  {A:[],B:[],C:[]},{});
+ assert.equal(rally.engines.A.sides.DOWN.maximumObserved.entry.at,2);
+ assert.equal(rally.engines.A.sides.DOWN.firstFivePointMoveAt,3);
+});

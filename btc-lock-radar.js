@@ -20,6 +20,67 @@ legacyTitle.textContent='V5–V7 research details';
 legacyResearch.append(legacyTitle,researchReadouts);
 const predatorSlot=document.createElement('div');
 scalper.append(v8Readouts,predatorSlot,v8Scoreboard,legacyResearch);
+const superTracker=document.createElement('details');
+superTracker.className='bt-command-research';
+const trackerTitle=document.createElement('summary');
+const trackerBody=document.createElement('div');
+superTracker.append(trackerTitle,trackerBody);
+v8Scoreboard.before(superTracker);
+let trackerRequest=null, trackerAudit=null;
+const trackerPrice=price=>Number.isFinite(price)?(price*100).toFixed(1)+'%':'—';
+const trackerNet=net=>Number.isFinite(net)?(net*100).toFixed(1)+'¢':'—';
+function paintSuperTracker(){
+ const coin=selectedCoin;
+ const ticker=sharedV8.find(row=>row.asset===coin)?.ticker;
+ trackerTitle.textContent=coin+' · V15 SUPER TRACKER';
+ trackerBody.replaceChildren();
+ if(!ticker||trackerAudit?.ticker!==ticker){
+  trackerBody.textContent=ticker?'Waiting for this round’s research audit':'Waiting for a matching 15-minute contract';
+  return;
+ }
+ const audit=trackerAudit;
+ for(const [name,engine] of Object.entries(audit.engines)){
+  for(const [side,row] of Object.entries(engine.sides)){
+   const fill=engine.fill?.side===side?engine.fill:null;
+   const line=document.createElement('p');
+   const signal=row.firstSignal;
+   const best=row.bestExecutable??row.firstExecutable;
+   const move=row.firstFivePointMoveAt;
+   const bid=fill&&!fill.closedAt?currentScalpBid(coin,fill,Date.now()):null;
+   line.className='premium-foot';
+   line.textContent=name+' '+side+' · First signal '+trackerPrice(signal?.ask)+
+    ' · Best executable ask '+trackerPrice(best?.ask)+' · Paper fill '+trackerPrice(fill?.ask)+
+    ' · Live exit bid '+trackerPrice(bid)+' · Observed max net '+trackerNet(row.maximumObserved?.net)+
+    ' · Realized '+trackerNet(fill?.closedAt?fill.net:null)+
+    (signal&&move?' · Alert to +5pt bid '+((move-signal.at)/1000).toFixed(1)+'s':'')+
+    (!fill&&row.latestReasons?.length?' · No fill: '+[...new Set(row.latestReasons)].join(', ').replaceAll('_',' ').toLowerCase():'');
+   trackerBody.append(line);
+  }
+ }
+}
+async function refreshSuperTracker(){
+ if(document.hidden)return;
+ const coin=selectedCoin;
+ const ticker=sharedV8.find(row=>row.asset===coin)?.ticker;
+ if(!ticker||trackerRequest?.ticker===ticker)return;
+ const request={ticker};
+ trackerRequest=request;
+ try{
+  const response=await fetch('/.netlify/functions/scalp-hunter-report?ticker='+encodeURIComponent(ticker),
+   {cache:'no-store',signal:AbortSignal.timeout(6000)});
+  if(!response.ok)throw Error('Tracker unavailable');
+  const {audit}=await response.json();
+  if(trackerRequest===request&&selectedCoin===coin&&audit?.ticker===ticker){
+   trackerAudit=audit;
+   paintSuperTracker();
+  }
+ }catch{
+  if(trackerRequest===request&&selectedCoin===coin&&trackerAudit?.ticker!==ticker)
+   trackerBody.textContent='Waiting for the selected round’s tracker feed';
+ }finally{
+  if(trackerRequest===request)trackerRequest=null;
+ }
+}
 const predatorServerStatus=document.createElement('p');
 predatorServerStatus.className='premium-foot';
 predatorServerStatus.textContent='OMEGA PREDATOR · Waiting for server research';
@@ -168,7 +229,11 @@ function paintV8(){
   const positionMode=paperValid?'PAPER':'SHADOW';
   const closed=validPosition&&position.closedAt;
   const recentExit=closed&&now>=position.closedAt&&now-position.closedAt<=75000;
-  let action=['UP','DOWN'].includes(engine?.decision)?'WATCH '+engine.decision:'SKIP',tone='skip',icon='—',mode='';
+   const audit=trackerAudit&&trackerAudit.ticker===shared?.ticker?trackerAudit.engines[name]:null;
+  const watch=['UP','DOWN'].find(side=>audit?.sides[side]?.firstSignal?.early&&
+   now>=audit.sides[side].firstSignal.at&&now-audit.sides[side].firstSignal.at<=75000&&fresh);
+  let action=watch?'EARLY SCALP WATCH '+watch:['UP','DOWN'].includes(engine?.decision)?'WATCH '+engine.decision:'SKIP',
+   tone=watch?'hold':'skip',icon=watch?'◈':'—',mode='';
   if(recentExit){
    action=(position.reason==='TAKE_PROFIT'?'TAKE PROFIT ':['STOP_LOSS','TRAIL_EXIT','TRAILING_EXIT'].includes(position.reason)?'SELL FAST ':'SELL ')+position.side;
    tone=position.reason==='TAKE_PROFIT'?'profit':'sell';
@@ -188,6 +253,8 @@ function paintV8(){
    }else if(liveBid!==null){
     detail.textContent+=' · bid '+(liveBid*100).toFixed(1)+'% · modeled net '+(scalpNet(position,liveBid)*100).toFixed(1)+'¢';
    }else detail.textContent+=' · waiting for fresh exit bid';
+   if(!closed&&Number.isFinite(position.peakNet??position.peak))
+    detail.textContent+=' · peak net '+trackerNet(position.peakNet??position.peak);
   }
   const label=icon+' '+action+(mode?' · '+mode:'');
   const badgeKey=[selectedCoin,shared?.ticker,label].join('/');
@@ -532,7 +599,7 @@ async function scanShadow(){
     const yes=bestBid(book,'yes'),no=bestBid(book,'no');
     if(!yes||!no||yes.price+no.price>=1){set('Waiting for a valid two-sided book');return}
     scalperBooks.set(coin,{ticker:market.ticker,at:Date.parse(data.fetched_at),yes,no});
-    if(coin===selectedCoin)paintV8();
+    if(coin===selectedCoin){paintV8();if(superTracker.open)paintSuperTracker();}
     const spread=1-yes.price-no.price,latency=Math.round(performance.now()-start);
     if(coin==='BTC')updatePredator({ticker:market.ticker,now:current,bookAt:Date.parse(data.fetched_at),remaining,yes,no});
     try{updateV6({market,yes,no,spread,current,remaining,latency})}
@@ -587,7 +654,11 @@ async function scanShadow(){
   finally{bookBusy=false}
 }
 setInterval(()=>{
-  if(coin==='BTC'||coin===selectedCoin||shadowPosition||v6Position)scanShadow();
+  if(coin==='BTC'||coin===selectedCoin||shadowPosition||v6Position||
+    ['A','B','C'].some(name=>{
+     const position=hunterPositions.get(coin+'/'+name)??shadowRounds.get(coin)?.positions[name];
+     return position&&!position.closedAt&&Date.now()<position.expiresAt;
+    }))scanShadow();
   else socket?.close();
 },5000);
 return {readouts,predatorPanel:coin==='BTC'?predatorPanel:null,setMarket:market=>{shadowMarket=market}};
@@ -670,6 +741,8 @@ function paintCoin(){
   researchReadouts.replaceChildren(bot.readouts,titan);
   predatorSlot.replaceChildren(...(bot.predatorPanel?[bot.predatorPanel]:[]));
   paintV8();
+  paintSuperTracker();
+  refreshSuperTracker();
   for(const button of buttons){
     const active=button.dataset.coin===selectedCoin;
     button.setAttribute('aria-pressed',String(active));
@@ -869,6 +942,6 @@ botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
 refreshPredatorReport();setInterval(refreshPredatorReport,2000);
-setInterval(()=>{if(!document.hidden)paintV8()},15000);
+setInterval(()=>{if(!document.hidden){paintV8();paintSuperTracker();refreshSuperTracker();}},5000);
 evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
 })();
