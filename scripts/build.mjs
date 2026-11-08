@@ -6,6 +6,7 @@ for(const name of ['index.html','account.css','premium.css','arcade-theme.css','
 await build({entryPoints:['src/account-client.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/account-client.js'});
 await build({entryPoints:['src/dashboard-session.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/dashboard-session.js'});
 await build({entryPoints:['src/learning-lab.js'],bundle:true,minify:true,platform:'browser',target:['safari16','chrome110','firefox115'],outfile:'dist/learning-lab.js'});
+await build({entryPoints:['src/btc-predator.mjs'],bundle:true,minify:true,platform:'browser',format:'esm',target:'safari16',outfile:'dist/btc-predator.js'});
 if((await readdir('dist')).some(n=>/dashboard\.html|private|\.env|package/.test(n)))throw Error('Private file in public output');
 
 await writeFile('dist/build-version.json',JSON.stringify({version:process.env.COMMIT_REF||process.env.DEPLOY_ID||'local-build'}));

@@ -138,6 +138,51 @@ function connectTrades(){
 document.addEventListener('visibilitychange',()=>{
   if(document.hidden)socket?.close();
 });
+let predator, predatorWatch=null, predatorResults=[];
+const predatorPanel=document.createElement('p');
+if(coin==='BTC'){
+ predatorPanel.className='bt-v9-engine';
+ predatorPanel.textContent='BTC PREDATOR · Starting forward research';
+ readouts.prepend(predatorPanel);
+ try{predatorResults=JSON.parse(localStorage.getItem('bt:predator:v10')||'[]')}catch{}
+ if(!Array.isArray(predatorResults))predatorResults=[];
+ import('/btc-predator.js?v=10').then(module=>{predator=module}).catch(()=>{
+  predatorPanel.textContent='BTC PREDATOR · Research module unavailable';
+ });
+}
+function updatePredator(input){
+ if(!predator)return;
+ const observation=predator.predatorObservation({...input,trades});
+ if(!observation){predatorPanel.textContent='BTC PREDATOR · Waiting for fresh BTC tape and depth';return;}
+ if(predatorWatch&&predatorWatch.ticker!==observation.ticker)predatorWatch=null;
+ if(predatorWatch){
+  predatorWatch=predator.advancePredatorWatch(predatorWatch,observation);
+  if(predatorWatch.closedAt){
+   predatorResults=[...predatorResults,predatorWatch].slice(-160);
+   try{localStorage.setItem('bt:predator:v10',JSON.stringify(predatorResults))}catch{}
+   predatorPanel.dataset.direction=predatorWatch.side;
+   predatorPanel.textContent='BTC PREDATOR · '+predatorWatch.reason+' · SHADOW'+
+    (predatorWatch.reason==='UNSCORED_GAP'?'':' · modeled net '+(predatorWatch.net*100).toFixed(1)+'¢')+
+    (predatorWatch.leadMs===null||predatorWatch.leadMs===undefined?'':' · momentum lead '+(predatorWatch.leadMs/1000).toFixed(1)+'s');
+   predatorWatch=null;
+   return;
+  }
+  predatorPanel.textContent='BTC PREDATOR · HOLD · SHADOW · bid '+(predatorWatch.bid*100).toFixed(1)+
+   '% · modeled net '+(predatorWatch.net*100).toFixed(1)+'¢';
+  return;
+ }
+ if(!predatorResults.some(row=>row.ticker===observation.ticker))predatorWatch=predator.openPredatorWatch(observation);
+ if(!predatorWatch){
+  predatorPanel.dataset.direction='SKIP';
+  predatorPanel.textContent='BTC PREDATOR · WAIT · No early setup · '+predatorResults.length+' local research records';
+  return;
+ }
+ predatorPanel.dataset.direction=predatorWatch.side;
+ predatorPanel.textContent='BTC PREDATOR — EARLY OPPORTUNITY DETECTED · SHADOW '+predatorWatch.side+
+  ' · ask '+(predatorWatch.ask*100).toFixed(1)+'% ('+predatorWatch.quantity+' shown) · research target '+
+  (predatorWatch.target*100).toFixed(1)+'% · modeled target net '+(predatorWatch.estimatedNet*100).toFixed(1)+
+  '¢ · 30s trial · uncalibrated · Coinbase event-to-display '+(Date.now()-predatorWatch.sourceEventAt)+'ms';
+}
 function bestBid(book,side){
   const dollars=book?.[side+'_dollars'];
   const levels=dollars??book?.[side];
@@ -328,7 +373,7 @@ async function scanShadow(){
   if(!market||!(left>0&&left<=900)){set('Waiting for an open '+coin+' round');return}
   const latest=trades.at(-1),recent=trades.filter(t=>t.time>=now-15000);
   const tapeReady=latest&&now-latest.time<=5000&&recent.length>=10&&latest.time-recent[0].time>=5000;
-  if(!tapeReady&&!shadowPosition&&!v6Position){set('Waiting for fresh Coinbase trade flow');return}
+  if(!tapeReady&&!shadowPosition&&!v6Position&&!predatorWatch){set('Waiting for fresh Coinbase trade flow');return}
   bookBusy=true;
   try{
     const start=performance.now();
@@ -342,6 +387,7 @@ async function scanShadow(){
     const yes=bestBid(book,'yes'),no=bestBid(book,'no');
     if(!yes||!no||yes.price+no.price>=1){set('Waiting for a valid two-sided book');return}
     const spread=1-yes.price-no.price,latency=Math.round(performance.now()-start);
+    if(coin==='BTC')updatePredator({ticker:market.ticker,now:current,bookAt:Date.parse(data.fetched_at),remaining,yes,no});
     try{updateV6({market,yes,no,spread,current,remaining,latency})}
     catch{challenger.textContent='V6 SHADOW · Snapshot evaluation failed'}
     const position=shadowPosition;
