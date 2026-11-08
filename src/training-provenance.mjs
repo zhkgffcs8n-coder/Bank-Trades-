@@ -41,6 +41,9 @@ export function validCommittedTrainingMarker(marker,rec,result,intent){
   marker.globalUpdated===targets.global&&marker.assetUpdated===targets.asset&&
   intent.globalUpdated===targets.global&&intent.assetUpdated===targets.asset&&
   marker.observationDigest===digest&&intent.observationDigest===digest&&
+  // Legacy markers remain auditable, but new claimed intents must carry the
+  // same unique ownership token through the committed training marker.
+  (!intent.claimId||marker.claimId===intent.claimId)&&
   Number.isFinite(intent.startedAt)&&intent.startedAt>=rec.expiresAt&&
   marker.intentStartedAt===intent.startedAt&&
   Number.isFinite(marker.learnedAt)&&marker.learnedAt>=intent.startedAt&&
@@ -79,4 +82,23 @@ export function pendingTrainingReview(rec,outcome,reason,now=Date.now()){
   predictionAt:Number.isFinite(rec.at)?rec.at:null,expiresAt:Number.isFinite(rec.expiresAt)?rec.expiresAt:null,
   verifiedOutcome:outcome,reason,recordedAt:now,
   note:'Legacy training provenance unknown. Do not replay this prediction without an idempotent per-observation training ledger.'};
+}
+
+// A write-ahead intent alone is not an exclusive claim. Two overlapping
+// collectors can both observe an absent key before either writes. Netlify
+// Blobs' conditional create, followed by a strong-consistency read-back,
+// elects at most one owner for this contract. A failed claim must never
+// update model weights; an interrupted winner still requires reconciliation.
+export async function claimTrainingIntent(db,key,intent,claimId){
+ if(!/^training\\/intent\\/v1\\/[A-Z0-9-]{3,100}$/.test(key)||
+  !intent||intent.status!=='STARTED'||intent.version!==2||
+  key!=='training/intent/v1/'+intent.ticker||
+  typeof claimId!=='string'||!claimId||
+  typeof db?.setJSON!=='function'||typeof db?.get!=='function')
+  throw Error('Invalid training claim');
+ await db.setJSON(key,{...intent,claimId},{onlyIfNew:true});
+ const persisted=await db.get(key,{type:'json'});
+ return persisted?.claimId===claimId&&persisted?.status==='STARTED'&&
+  persisted?.ticker===intent.ticker&&persisted?.observationDigest===intent.observationDigest&&
+  persisted?.verifiedOutcome===intent.verifiedOutcome&&persisted?.startedAt===intent.startedAt;
 }
