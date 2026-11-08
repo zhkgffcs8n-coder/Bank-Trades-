@@ -186,3 +186,31 @@ test('OMEGA official settlement cannot validate post-expiry or unproven forecast
    item.ticker==='VALID-PRE-EXPIRY',item.ticker);
  }
 });
+
+
+test('OMEGA official score uses durable freeze time, never earlier provider observation, for forward eligibility',async()=>{
+ const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const ticker='BTC-FROZEN-TIME',recordedAtMs=95000,expiresAtMs=100000;
+ const forecast={ticker,status:'SHADOW_RESEARCH',recordedAtMs,expiresAtMs,baseline:.5,
+  accepted:[
+   {provider:'gpt',marketTicker:ticker,roundId:ticker,upProbability:.7,observedAtMs:90000},
+   {provider:'claude',marketTicker:ticker,roundId:ticker,upProbability:.6,observedAtMs:91000}
+  ]};
+ const key='omega/predictions/v1/'+ticker+'/1',scoreKey='omega/verified-scores/v1/'+ticker;
+ const data=new Map([[key,forecast],['outcomes/'+ticker,{ticker,result:'yes',
+  verification:SETTLEMENT_VERIFICATION,settledAt:new Date(110000).toISOString()}]]);
+ const db={
+  async get(k){return data.get(k)??null},
+  async setJSON(k,v){data.set(k,v)},
+  async *list({prefix}){yield {blobs:[...data.keys()].filter(k=>k.startsWith(prefix)).map(key=>({key}))}}
+ };
+ await scoreOmegaArchive(db);
+ const scored=data.get(scoreKey);
+ assert.equal(scored.status,'VERIFIED_SHADOW_SCORE');
+ assert.equal(scored.predictedAtMs,recordedAtMs);
+ assert.equal(scored.recordedAtMs,recordedAtMs);
+ assert.equal(scored.settledAtMs,110000);
+ assert.ok(scored.predictedAtMs>Math.max(...forecast.accepted.map(x=>x.observedAtMs)));
+ assert.equal(scored.ordersAuthorized,false);
+});
