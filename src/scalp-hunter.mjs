@@ -27,7 +27,7 @@ export function observeScalpHunter(tape,snapshot,depth,ideas={}){
   return ask===null?[]:[{name,side,ask}];
  }));
  return [...tape,{ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
-  yes:depth.yes,no:depth.no,setups,ideas}].slice(-240);
+  yes:depth.yes,no:depth.no,setups,ideas}].slice(-1440);
 }
 
 export function learnScalpHunter(tape,asOf){
@@ -37,8 +37,11 @@ export function learnScalpHunter(tape,asOf){
   for(const {name,side,ask} of entry.setups){
    for(const horizon of horizons){
     const target=entry.at+horizon*1000;
-    const exit=known.slice(index+1).find(row=>row.ticker===entry.ticker&&row.at>=target&&
-     row.at<=target+30000&&row.at<entry.expiresAt);
+    let exit;
+    for(let next=index+1;next<known.length&&known[next].at<=target+30000;next++){
+     const row=known[next];
+     if(row.ticker===entry.ticker&&row.at>=target&&row.at<entry.expiresAt){exit=row;break;}
+    }
     if(!exit)continue;
     const quote=leg(exit,side);
     const bid=quote.size>=1?quote.price:null;

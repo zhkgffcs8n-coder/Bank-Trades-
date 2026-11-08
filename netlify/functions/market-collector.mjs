@@ -1,3 +1,4 @@
+import {hunterEngines,openHunterPaper,monitorHunterPaper,settleHunterPaper} from '../../src/scalp-hunter-paper.mjs';
 import {observeScalpHunter,learnScalpHunter,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
 import {replayScalperExits} from '../../src/scalper-v8-exits.mjs';
 import {evaluateScalperV8,parseDepthV8,scoreScalperV8} from '../../src/scalper-v8.mjs';
@@ -161,7 +162,11 @@ export default async()=>{
     const pending=await db.get(v8Key,{type:'json'});
     const candidate=evaluateScalperV8(record,recent);
     const trackExit=pending&&['A','B','C'].some(name=>pending.engines[name].decision!=='SKIP');
-    if(trackExit||candidate){
+    const paperKey='scalp-hunter/paper/open/'+m.ticker;
+    const open=await db.get(paperKey,{type:'json'});
+    const diagnosticsKey='scalp-hunter/diagnostics/'+asset;
+    if(!candidate)await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:'WAIT_SAME_ROUND_HISTORY'});
+    if(trackExit||candidate||Object.values(open||{}).some(position=>!position.closedAt)){
      let depth=null;
      try{
       const response=await fetch(base+'/markets/'+encodeURIComponent(m.ticker)+'/orderbook?depth=1',
@@ -169,12 +174,33 @@ export default async()=>{
       if(response.ok)depth=parseDepthV8(await response.json(),m.ticker,Date.now(),record);
      }catch{} // Quotes without depth cannot be used to simulate an early fill.
      const snapshot=depth?evaluateScalperV8(record,recent,depth):candidate;
+     if(depth&&depth.at-record.observedAt<=5000&&depth.at<record.expiresAt){
+
+      if(open){
+       for(const [name,position] of Object.entries(open)){
+        if(position.closedAt)continue;
+        open[name]=monitorHunterPaper(position,depth);
+        if(open[name].closedAt)await db.setJSON('scalp-hunter/paper/closed/'+m.ticker+'/'+name,open[name],{onlyIfNew:true});
+       }
+       await db.setJSON('scalp-hunter/paper/open/'+m.ticker,open);
+      }
+     }
+     if(candidate&&(!depth||snapshot?.at!==depth.at))
+      await db.setJSON(diagnosticsKey,{at:Date.now(),ticker:m.ticker,stage:'WAIT_MATCHING_DEPTH'});
      if(snapshot&&depth&&snapshot.at===depth.at){
       const tapeKey='scalp-hunter/tape/'+asset;
       const tape=await db.get(tapeKey,{type:'json'})||[];
       const profile=learnScalpHunter(tape,snapshot.at);
       const ideas=forecastScalpHunter(snapshot,depth,profile);
+      await db.setJSON(diagnosticsKey,{at:snapshot.at,ticker:m.ticker,stage:'EVALUATED',
+       samples:tape.length,profileCells:Object.keys(profile).length,
+       matureCells:Object.values(profile).filter(cell=>cell.n>=12).length,qualified:hunterEngines.filter(name=>ideas[name])});
       if(Object.values(ideas).some(Boolean)){
+       const positions=open||{};
+       for(const name of hunterEngines){
+        if(ideas[name]&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name]);
+       }
+       await db.setJSON(paperKey,positions);
        await db.setJSON('scalp-hunter/predictions/'+m.ticker+'/'+bucket,
         {asset,ticker:m.ticker,at:snapshot.at,ideas},{onlyIfNew:true});
       }
@@ -439,6 +465,21 @@ export default async()=>{
     await db.delete(blob.key);
    });
   }catch(e){researchFailure('scalper-v8-scoring',e)}
+  try{
+   await scanBlobPage(db,{prefix:'scalp-hunter/paper/open/',cursorKey:'scan-cursors/scalp-hunter-paper',limit:16},async blob=>{
+    const positions=await db.get(blob.key,{type:'json'});
+    if(!positions)return;
+    const rows=Object.values(positions);
+    if(!rows.length||rows.some(row=>row.expiresAt>now))return;
+    const label=await db.get('outcomes/'+rows[0].ticker,{type:'json'});
+    for(const row of rows){
+     const closed=row.closedAt?row:settleHunterPaper(row,label,now);
+     if(!closed)return;
+     await db.setJSON('scalp-hunter/paper/closed/'+row.ticker+'/'+row.name,closed,{onlyIfNew:true});
+    }
+    await db.delete(blob.key);
+   });
+  }catch(e){researchFailure('scalp-hunter-paper-settlement',e)}
   // Label the first scheduled signal decision per contract against official outcomes.
   // WAIT is evaluated counterfactually, never counted as an executed trade.
   try{
