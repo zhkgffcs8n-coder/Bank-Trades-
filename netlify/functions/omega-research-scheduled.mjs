@@ -57,7 +57,11 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
    else paperMonitoring.unpriced++;
    return;
   }
-  const action=await advanceOmegaPaperStored({db,ticker,roundId:ticker,signal:null,quote,nowMs});
+  // The Kalshi quote is stamped when the HTTP response arrives. Use a
+  // post-receipt decision clock; the scheduler's start time predates the quote
+  // and would reject every legitimate simulated exit as future-dated.
+  const pricedAtMs=clock();
+  const action=await advanceOmegaPaperStored({db,ticker,roundId:ticker,signal:null,quote,nowMs:pricedAtMs});
   if(action.status==='PAPER_EXIT')paperMonitoring.exits++;
   else if(action.status==='PAPER_HOLD')paperMonitoring.holds++;
   else paperMonitoring.unpriced++;
