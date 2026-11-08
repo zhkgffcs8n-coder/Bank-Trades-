@@ -20,7 +20,7 @@ function setup(snapshot,depth,name,side){
  return supported?ask:null;
 }
 
-export function observeScalpHunter(tape,snapshot,depth,ideas={}){
+export function observeScalpHunter(tape,snapshot,depth,ideas={},experimental={}){
  if(!snapshot||!depth?.yes||!depth?.no||snapshot.at!==depth.at||snapshot.imbalance===null)return tape;
  if(tape.some(row=>row.at===snapshot.at&&row.ticker===snapshot.ticker))return tape;
  const setups=names.flatMap(name=>sides.flatMap(side=>{
@@ -28,10 +28,10 @@ export function observeScalpHunter(tape,snapshot,depth,ideas={}){
   return ask===null?[]:[{name,side,ask}];
  }));
  return [...tape,{ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
-  yes:depth.yes,no:depth.no,setups,ideas}].slice(-1440);
+  yes:depth.yes,no:depth.no,setups,ideas,experimental}].slice(-1440);
 }
 
-export function learnScalpHunter(tape,asOf){
+export function collectComparableRounds(tape,asOf){
  const bins=new Map();
  const known=tape.filter(row=>row.at<asOf).sort((a,b)=>a.at-b.at);
  for(const [index,entry] of known.entries()){
@@ -51,19 +51,39 @@ export function learnScalpHunter(tape,asOf){
     const round=bins.get(id);
     if(round.has(entry.ticker))continue;
     const net=bid===null?-ask-modeledCost(ask):bid-ask-modeledCost(ask)-modeledCost(bid);
-    round.set(entry.ticker,{net,move:bid===null?null:bid-ask});
+    round.set(entry.ticker,{ticker:entry.ticker,entryAt:entry.at,observedAt:exit.at,net,move:bid===null?null:bid-ask});
    }
   }
  }
- return Object.fromEntries([...bins].map(([id,round])=>{
-  const rows=[...round.values()],n=rows.length,wins=rows.filter(row=>row.net>0).length;
+ return Object.fromEntries([...bins].map(([id,round])=>[id,[...round.values()]]));
+}
+
+export function mergeComparableRounds(previous, additions, asOf){
+ return Object.fromEntries([...new Set([...Object.keys(previous),...Object.keys(additions)])].map(id=>{
+  const rounds=new Map();
+  for(const row of [...(previous[id]||[]),...(additions[id]||[])]){
+   if(!(row.entryAt<row.observedAt&&row.observedAt<asOf))continue;
+   const saved=rounds.get(row.ticker);
+   if(!saved||row.entryAt<saved.entryAt)rounds.set(row.ticker,row);
+  }
+  return [id,[...rounds.values()].sort((a,b)=>a.entryAt-b.entryAt).slice(-128)];
+ }));
+}
+
+export function profileComparableRounds(archive){
+ return Object.fromEntries(Object.entries(archive).map(([id,rows])=>{
+  const n=rows.length,wins=rows.filter(row=>row.net>0).length;
   const priced=rows.filter(row=>row.move!==null);
   return [id,{n,wins,meanNet:rows.reduce((sum,row)=>sum+row.net,0)/n,
    meanMove:priced.length?priced.reduce((sum,row)=>sum+row.move,0)/priced.length:null}];
  }));
 }
 
-export function forecastScalpHunter(snapshot,depth,profile,diagnostics={}){
+export function learnScalpHunter(tape,asOf){
+ return profileComparableRounds(collectComparableRounds(tape,asOf));
+}
+
+export function forecastScalpHunter(snapshot,depth,profile,diagnostics={},experimental={}){
  if(!snapshot||!depth||snapshot.at!==depth.at||snapshot.imbalance===null)return {};
  return Object.fromEntries(names.map(name=>{
   const checks=diagnostics[name]=[];
@@ -75,7 +95,17 @@ export function forecastScalpHunter(snapshot,depth,profile,diagnostics={}){
     const evidence={side,ask,horizonSeconds:horizon,sampleSize:sample?.n??0};
     let reason;
     if(snapshot.expiresAt-snapshot.at<(horizon+30)*1000)reason='INSUFFICIENT_TIME';
-    else if(!sample||sample.n<12)reason='INSUFFICIENT_COMPARABLE_ROUNDS';
+    else if(!sample||sample.n<12){
+     reason='INSUFFICIENT_COMPARABLE_ROUNDS';
+     if(sample?.n>0&&sample.meanNet>.015&&Number.isFinite(sample.meanMove)){
+      const target=Math.min(.99,ask+sample.meanMove);
+      if(target-ask-modeledCost(ask)-modeledCost(target)>.015){
+       const watch={...evidence,target,estimatedNet:sample.meanNet,
+        observedHitRate:sample.wins/sample.n,mode:'EXPERIMENTAL_SHADOW'};
+       if(!experimental[name]||watch.estimatedNet>experimental[name].estimatedNet)experimental[name]=watch;
+      }
+     }
+    }
     else if(sample.meanNet<=.015||sample.wins/sample.n<.65||!Number.isFinite(sample.meanMove))
      reason='INSUFFICIENT_HISTORICAL_EDGE';
     if(reason){checks.push({...evidence,reason});return [];}
@@ -92,9 +122,9 @@ export function forecastScalpHunter(snapshot,depth,profile,diagnostics={}){
  }));
 }
 
-export function scoreScalpHunter(tape,exit){
+export function scoreScalpHunter(tape,exit,field='ideas'){
  return tape.filter(entry=>entry.ticker===exit.ticker&&entry.at<exit.at&&exit.at<entry.expiresAt)
-  .flatMap(entry=>Object.entries(entry.ideas||{}).flatMap(([name,idea])=>{
+  .flatMap(entry=>Object.entries(entry[field]||{}).flatMap(([name,idea])=>{
    if(!idea)return [];
    const targetAt=entry.at+idea.horizonSeconds*1000;
    if(exit.at<targetAt-sampleJitterMs||exit.at>targetAt+30000)return [];

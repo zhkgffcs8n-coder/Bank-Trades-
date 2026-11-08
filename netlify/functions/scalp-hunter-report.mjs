@@ -4,11 +4,13 @@ import {blobWindow} from '../../src/blob-window.mjs';
 export default async req=>{
  if(req.method!=='GET')return new Response(null,{status:405});
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
- const [predictions,outcomes,paper,open,diagnostics]=await Promise.all([
+ const [predictions,outcomes,paper,open,experimental,experimentalOutcomes,diagnostics]=await Promise.all([
   blobWindow(db,{prefix:'scalp-hunter/predictions/',limit:60}),
   blobWindow(db,{prefix:'scalp-hunter/outcomes/',limit:60}),
   blobWindow(db,{prefix:'scalp-hunter/paper/closed/',limit:60}),
   blobWindow(db,{prefix:'scalp-hunter/paper/open/',limit:60}),
+  blobWindow(db,{prefix:'scalp-hunter/experimental/predictions/',limit:60}),
+  blobWindow(db,{prefix:'scalp-hunter/experimental/outcomes/',limit:60}),
   Promise.all(['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'].map(async asset=>
    [asset,await db.get('scalp-hunter/diagnostics/'+asset,{type:'json'})]))
 
@@ -57,7 +59,8 @@ export default async req=>{
  }
  for(const engine of Object.values(paperEngines))
   engine.averageDurationMs=engine.closed?engine.totalDurationMs/engine.closed:null;
- return Response.json({paper:{scope:paper.cursor||open.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines:paperEngines},
+ return Response.json({experimental:{predictionRecords:experimental.blobs.length,outcomeRecords:experimentalOutcomes.blobs.length,
+  scope:experimental.cursor||experimentalOutcomes.cursor?'FIRST_PAGE_ONLY':'COMPLETE'},paper:{scope:paper.cursor||open.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines:paperEngines},
   diagnostics:Object.fromEntries(diagnostics),mode:'SHADOW_ONLY',scope:predictions.cursor||outcomes.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines},
   {headers:{'cache-control':'public, max-age=60'}});
 };

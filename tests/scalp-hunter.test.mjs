@@ -38,3 +38,21 @@ test('learning accepts collector jitter without reading observations at or after
  forecastScalpHunter(setup(ticker,10000),quote(ticker,10000),{},checks);
  assert.ok(checks.A.some(check=>check.reason==='INSUFFICIENT_COMPARABLE_ROUNDS'));
 });
+
+test('persistent comparable-round archive deduplicates and keeps only observations known before forecast',async()=>{
+ const {collectComparableRounds,mergeComparableRounds,profileComparableRounds}=await import('../src/scalp-hunter.mjs');
+ const ticker='ARCHIVE';
+ const start=observeScalpHunter([],setup(ticker,10000),quote(ticker,10000));
+ const tape=observeScalpHunter(start,setup(ticker,70000),{...quote(ticker,70000),yes:{price:.2,size:5},no:{price:.79,size:5}});
+ const incoming=collectComparableRounds(tape,71000);
+ const archive=mergeComparableRounds({},incoming,71000);
+ const id=Object.keys(archive)[0];
+ assert.equal(mergeComparableRounds(archive,incoming,72000)[id].length,1);
+ assert.equal(mergeComparableRounds(archive,{},72000)[id].length,1);
+ assert.equal(mergeComparableRounds({},incoming,70000)[id].length,0);
+ const experimental={};
+ const ideas=forecastScalpHunter(setup('NEXT',72000),quote('NEXT',72000),profileComparableRounds(archive),{},experimental);
+ assert.equal(ideas.A,null);
+ assert.equal(experimental.A.mode,'EXPERIMENTAL_SHADOW');
+ assert.equal(experimental.A.sampleSize,1);
+});

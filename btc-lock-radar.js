@@ -55,9 +55,10 @@ function paintV8(){
   line.dataset.direction=engine?.decision||'SKIP';
   detail.textContent=(engine?engine.decision+' · modeled edge '+
    (engine.edge*100).toFixed(1)+'¢ · SHADOW':'Waiting for evidence');
-  const idea=hunter&&Date.now()-hunter.at<=30000?hunter.ideas[name]:null;
+  const freshHunter=hunter&&Date.now()-hunter.at<=30000?hunter:null;
+  const idea=freshHunter?.ideas?.[name]||freshHunter?.experimental?.[name];
   if(idea){
-   detail.textContent+=' · '+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
+   detail.textContent+=' · '+(idea.mode==='EXPERIMENTAL_SHADOW'?'EXPERIMENTAL · ':'')+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
     (idea.target*100).toFixed(1)+'% · '+idea.horizonSeconds+'s · historical hit rate '+
     Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds) · modeled net '+
     (idea.estimatedNet*100).toFixed(1)+'¢ per contract';

@@ -1,5 +1,5 @@
 import {hunterEngines,openHunterPaper,monitorHunterPaper,settleHunterPaper} from '../../src/scalp-hunter-paper.mjs';
-import {observeScalpHunter,learnScalpHunter,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
+import {observeScalpHunter,collectComparableRounds,mergeComparableRounds,profileComparableRounds,forecastScalpHunter,scoreScalpHunter} from '../../src/scalp-hunter.mjs';
 import {replayScalperExits} from '../../src/scalper-v8-exits.mjs';
 import {evaluateScalperV8,parseDepthV8,scalperQuoteFromDepth,scoreScalperV8} from '../../src/scalper-v8.mjs';
 import {blobWindow} from '../../src/blob-window.mjs';
@@ -198,18 +198,32 @@ export default async()=>{
      if(bookQuote&&snapshot?.imbalance!==null&&snapshot?.at===depth.at){
       const tapeKey='scalp-hunter/tape/'+asset;
       const tape=await db.get(tapeKey,{type:'json'})||[];
-      const profile=learnScalpHunter(tape,snapshot.at);
-      const checks={};
-      const ideas=forecastScalpHunter(snapshot,depth,profile,checks);
+      const archiveKey='scalp-hunter/comparable-rounds/v1/'+asset;
+      const saved=await db.get(archiveKey,{type:'json'});
+      const history=saved?tape.filter(row=>row.at>=snapshot.at-480000):tape;
+      const archive=mergeComparableRounds(saved?.cells||{},collectComparableRounds(history,snapshot.at),snapshot.at);
+      const profile=profileComparableRounds(archive);
+      await db.setJSON(archiveKey,{at:snapshot.at,cells:archive});
+      const checks={},experimental={};
+      const ideas=forecastScalpHunter(snapshot,depth,profile,checks,experimental);
+      if(Object.keys(experimental).length){
+       await db.setJSON('scalp-hunter/experimental/predictions/'+m.ticker+'/'+bucket,
+        {asset,ticker:m.ticker,at:snapshot.at,experimental},{onlyIfNew:true});
+      }
+      for(const outcome of scoreScalpHunter(tape,depth,'experimental')){
+       await db.setJSON('scalp-hunter/experimental/outcomes/'+outcome.ticker+'/'+outcome.entryAt+'/'+outcome.name,
+        outcome,{onlyIfNew:true});
+      }
       const assessment={at:snapshot.at,ticker:m.ticker,stage:'EVALUATED',
-       samples:tape.length,profileCells:Object.keys(profile).length,
+       samples:tape.length,archiveRows:Object.values(archive).reduce((sum,rows)=>sum+rows.length,0),
+       experimental:Object.keys(experimental),profileCells:Object.keys(profile).length,
        matureCells:Object.values(profile).filter(cell=>cell.n>=12).length,qualified:hunterEngines.filter(name=>ideas[name]),checks};
       await db.setJSON(diagnosticsKey,assessment);
       await db.setJSON('scalp-hunter/assessments/'+m.ticker+'/'+bucket,assessment,{onlyIfNew:true});
       if(Object.values(ideas).some(Boolean)){
        const positions=open||{};
        for(const name of hunterEngines){
-        if(ideas[name]&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name]);
+        if(ideas[name]?.mode==='SHADOW_ONLY'&&ideas[name].sampleSize>=12&&!positions[name])positions[name]=openHunterPaper(name,snapshot,ideas[name]);
        }
        await db.setJSON(paperKey,positions);
        await db.setJSON('scalp-hunter/predictions/'+m.ticker+'/'+bucket,
@@ -219,8 +233,8 @@ export default async()=>{
        await db.setJSON('scalp-hunter/outcomes/'+outcome.ticker+'/'+outcome.entryAt+'/'+outcome.name,
         outcome,{onlyIfNew:true});
       }
-      await db.setJSON(tapeKey,observeScalpHunter(tape,snapshot,depth,ideas));
-      await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas});
+      await db.setJSON(tapeKey,observeScalpHunter(tape,snapshot,depth,ideas,experimental));
+      await db.setJSON('scalp-hunter/latest/'+asset,{ticker:m.ticker,at:snapshot.at,ideas,experimental});
      }
      if(!pending&&snapshot&&!await db.get('scalper-v8/resolved/'+m.ticker,{type:'json'})){
       await db.setJSON(v8Key,snapshot,{onlyIfNew:true});
