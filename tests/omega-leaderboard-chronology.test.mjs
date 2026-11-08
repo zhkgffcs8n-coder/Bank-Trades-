@@ -63,3 +63,22 @@ test('official OMEGA scoring retains frozen expiry needed by the public chronolo
  assert.equal(report.scores.find(x=>x.provider==='omega_consensus').verifiedRounds,1);
  assert.equal(report.realOrdersAuthorized,false);
 });
+
+test('OMEGA scoring waits for official settlement time instead of trusting a future-dated label',async()=>{
+ const ticker='BTC-FUTURE-LABEL',recordedAtMs=95000,expiresAtMs=100000,settledAtMs=121000;
+ const forecast={ticker,status:'SHADOW_RESEARCH',recordedAtMs,expiresAtMs,baseline:.5,
+  accepted:[{provider:'gpt',upProbability:.8,observedAtMs:90000},
+   {provider:'claude',upProbability:.7,observedAtMs:91000}]};
+ const db=store([
+  ['omega/predictions/v1/'+ticker+'/1',forecast],
+  ['outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,
+   settledAt:new Date(settledAtMs).toISOString()}]
+ ]);
+ await scoreOmegaArchive(db,{nowMs:settledAtMs-1});
+ assert.equal(db.values.has('omega/verified-scores/v1/'+ticker),false);
+ await scoreOmegaArchive(db,{nowMs:settledAtMs});
+ const scored=db.values.get('omega/verified-scores/v1/'+ticker);
+ assert.equal(scored?.status,'VERIFIED_SHADOW_SCORE');
+ assert.equal(scored.settledAtMs,settledAtMs);
+ assert.equal(scored.ordersAuthorized,false);
+});
