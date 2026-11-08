@@ -90,7 +90,7 @@ export function pendingTrainingReview(rec,outcome,reason,now=Date.now()){
 // elects at most one owner for this contract. A failed claim must never
 // update model weights; an interrupted winner still requires reconciliation.
 export async function claimTrainingIntent(db,key,intent,claimId){
- if(!/^training\\/intent\\/v1\\/[A-Z0-9-]{3,100}$/.test(key)||
+ if(!/^training\/intent\/v1\/[A-Z0-9-]{3,100}$/.test(key)||
   !intent||intent.status!=='STARTED'||intent.version!==2||
   key!=='training/intent/v1/'+intent.ticker||
   typeof claimId!=='string'||!claimId||
