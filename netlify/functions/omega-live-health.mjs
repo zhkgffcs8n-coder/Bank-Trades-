@@ -59,9 +59,9 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   // paper action. Never surface its net dollars as realized paper profit.
   paperLastAction:(()=>{
    const at=paperHeartbeat?.updatedAtMs;
-   return Number.isSafeInteger(at)&&at>0&&at<=nowMs&&
-    ['PAPER_ENTRY','PAPER_EXIT'].includes(paperHeartbeat?.action)?paperHeartbeat.action:
-    paperHeartbeat?.action==='PAPER_SETTLED'?'PAPER_SETTLEMENT_UNVERIFIED':'NONE_VERIFIED';
+   if(!Number.isSafeInteger(at)||at<=0||at>nowMs)return 'NONE_VERIFIED';
+   if(['PAPER_ENTRY','PAPER_EXIT'].includes(paperHeartbeat?.action))return paperHeartbeat.action;
+   return paperHeartbeat?.action==='PAPER_SETTLED'?'PAPER_SETTLEMENT_UNVERIFIED':'NONE_VERIFIED';
   })(),
   paperLastActionAtMs:Number.isSafeInteger(paperHeartbeat?.updatedAtMs)&&paperHeartbeat.updatedAtMs>0&&paperHeartbeat.updatedAtMs<=nowMs&&
    ['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLED'].includes(paperHeartbeat?.action)?paperHeartbeat.updatedAtMs:null,
