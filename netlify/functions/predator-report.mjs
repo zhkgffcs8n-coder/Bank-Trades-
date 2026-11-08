@@ -5,8 +5,13 @@ export default async req=>{
  if(req.method!=='GET')return new Response(null,{status:405});
  const db=getStore({name:'bank-trades-market-history',consistency:'strong'});
  if(new URL(req.url).searchParams.get('mode')==='worker'){
-  const worker=await db.get('predator-v13/health',{type:'json'});
-  return Response.json({worker:worker?{...worker,fresh:Date.now()-worker.at>=0&&Date.now()-worker.at<=45000}:null},
+  const [worker,burst]=await Promise.all([
+   db.get('predator-v13/health',{type:'json'}),
+   db.get('predator-v12/health',{type:'json'})
+  ]);
+  const now=Date.now();
+  return Response.json({worker:worker?{...worker,fresh:now-worker.at>=0&&now-worker.at<=45000}:null,
+   fallback:burst?{...burst,fresh:now-burst.completedAt>=0&&now-burst.completedAt<=120000}:null},
    {headers:{'cache-control':'no-store'}});
  }
  const [samples,results,latest,stream,streamSamples,streamResults,worker]=await Promise.all([

@@ -38,6 +38,11 @@ test('V8 scores a frozen comparison only after verified settlement and reports m
  const report=summarizeScalperV8([scored]);
  assert.equal(report.A.wins,1);
  assert.equal(report.A.sampleSize,1);
+ assert.equal(report.A.trades,1);
+ assert.equal(report.A.skips,0);
+ assert.equal(report.Market.sampleSize,1);
+ assert.equal(report.Market.trades,0);
+ assert.equal(report.Market.skips,1);
  assert.equal(report.A.simulatedNetDollars,1-row.engines.A.ask-row.engines.A.cost);
  assert.equal(report.Market.simulatedNetDollars,0);
 });

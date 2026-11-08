@@ -41,7 +41,7 @@ export default async req=>{
   }
  }
  for(const engine of Object.values(engines))engine.averageNet=engine.modeledExits?engine.net/engine.modeledExits:null;
- const paperEngines=Object.fromEntries(['A','B','C'].map(name=>[name,{open:0,closed:0,wins:0,losses:0,net:0,totalEntry:0,totalDurationMs:0,drawdown:0}]));
+ const paperEngines=Object.fromEntries(['A','B','C'].map(name=>[name,{open:0,closed:0,wins:0,losses:0,net:0,modeledFees:0,totalEntry:0,totalDurationMs:0,drawdown:0}]));
  const completed=[];
  for(let i=0;i<paper.blobs.length;i+=10){
   const rows=await Promise.all(paper.blobs.slice(i,i+10).map(blob=>db.get(blob.key,{type:'json'})));
@@ -51,6 +51,7 @@ export default async req=>{
  for(const row of completed.sort((a,b)=>a.closedAt-b.closedAt||a.ticker.localeCompare(b.ticker))){
    const engine=paperEngines[row.name];
    engine.closed++;engine.net+=row.net;engine.totalEntry+=row.ask;
+   engine.modeledFees+=(row.entryCost??0)+(row.exitCost??0);
    engine.wins+=Number(row.net>0);engine.losses+=Number(row.net<0);
    engine.totalDurationMs+=row.closedAt-row.at;
    peaks[row.name]=Math.max(peaks[row.name],engine.net);
@@ -68,6 +69,7 @@ export default async req=>{
   engine.averageDurationMs=engine.closed?engine.totalDurationMs/engine.closed:null;
   engine.averageEntry=engine.closed?engine.totalEntry/engine.closed:null;
   engine.winRate=engine.closed?engine.wins/engine.closed:null;
+  engine.netAfterOneCentReserve=engine.net-.01*engine.closed;
  }
  return Response.json({experimental:{predictionRecords:experimental.blobs.length,outcomeRecords:experimentalOutcomes.blobs.length,
   scope:experimental.cursor||experimentalOutcomes.cursor?'FIRST_PAGE_ONLY':'COMPLETE'},paper:{scope:paper.cursor||open.cursor?'FIRST_PAGE_ONLY':'COMPLETE',engines:paperEngines},

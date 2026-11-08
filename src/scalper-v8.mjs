@@ -70,7 +70,7 @@ export function summarizeScalperV8(rows){
    net+=result.net;peak=Math.max(peak,net);drawdown=Math.max(drawdown,peak-net);
    brier+=result.brier;correct+=Number(Number(result.probability>=.5)===row.outcome);
   }
-  return [name,{sampleSize:ordered.length,wins,losses,winRate:wins+losses?wins/(wins+losses):null,
+  return [name,{sampleSize:ordered.length,trades:wins+losses,skips:ordered.length-wins-losses,wins,losses,winRate:wins+losses?wins/(wins+losses):null,
    simulatedNetDollars:net,maxDrawdown:drawdown,brier:ordered.length?brier/ordered.length:null,
    accuracy:ordered.length?correct/ordered.length:null}];
  }));

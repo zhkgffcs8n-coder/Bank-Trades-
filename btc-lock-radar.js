@@ -93,14 +93,17 @@ async function refreshPredatorReport(){
   const response=await fetch('/.netlify/functions/predator-report?mode=worker',{signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('Predator report unavailable');
   const report=await response.json();
-  predatorServerStatus.textContent='BTC PREDATOR · Waiting for a V15 worker heartbeat';
+  const burst=report.fallback;
+  const fallback=burst?.fresh?' · Scheduled research '+String(burst.stage).replaceAll('_',' ').toLowerCase()+
+   ' · '+burst.samples+' samples in last burst':'';
+  predatorServerStatus.textContent='BTC PREDATOR · Persistent worker heartbeat unavailable'+fallback;
   const worker=report.worker;
   if(worker?.version===15){
    const stats=worker.voltV15;
    const position=worker.latest?.position;
    const watch=worker.latest?.watch;
    predatorServerStatus.textContent='V15 BTC PREDATOR ULTRA · VOLT B · '+
-    (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale');
+    (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale'+fallback);
    if(worker.fresh&&position){
     const age=Date.now()-worker.latest.decisionAt;
     const action=position.closedAt?(position.reason==='TAKE PROFIT'?'TAKE PROFIT ':'SELL FAST '):
@@ -130,9 +133,10 @@ async function refreshV8Scoreboard(){
   const response=await fetch('/.netlify/functions/scalper-v8-report',{signal:AbortSignal.timeout(10000)});
   if(!response.ok)throw Error('V8 report unavailable');
   const report=await response.json();
-  v8Scoreboard.textContent='V8 settlement shadow · '+['A','B','C'].map(name=>{
+  v8Scoreboard.textContent='V8 settlement shadow · '+report.engines.B.sampleSize+' scored rounds · '+['A','B','C'].map(name=>{
    const row=report.engines[name];
-   return name+' '+row.wins+'W/'+row.losses+'L ('+row.sampleSize+' scored)';
+   return name+' '+row.wins+'W/'+row.losses+'L · '+(row.trades??row.wins+row.losses)+' trades · '+
+    (row.skips??row.sampleSize-row.wins-row.losses)+' skips';
   }).join(' · ')+(report.scope==='COMPLETE'?'':' · Partial archive');
  }catch{
   v8Scoreboard.textContent='V8 server scoreboard · Unavailable';

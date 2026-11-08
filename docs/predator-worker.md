@@ -1,4 +1,4 @@
-# Predator V13 worker
+# Predator V15 worker
 
 Run a single Node.js 22.15+ process on a Linux host with outbound HTTPS/WSS and a persistent writable volume. Run `npm ci --omit=dev` from the repository checkout. Configure a service manager to restart on failure, deliver SIGTERM on stop, and run:
 
@@ -17,5 +17,7 @@ Use a private state directory with mode 0700. Back up state.json. The ledger is 
 | PREDATOR_NETLIFY_SITE_ID | Optional Netlify site ID for publishing health |
 | PREDATOR_NETLIFY_TOKEN | Optional Netlify credential with access to the site's Blobs store |
 | PREDATOR_ENABLE_EXPERIMENTAL_PAPER | Set to true to opt into one-contract forward research simulations |
+
+A Netlify web deploy installs the scheduled burst collector and health endpoint. Start the persistent process separately on its Linux host. Supply both Netlify publishing settings to write the heartbeat. The status endpoint reports a missing or stale heartbeat separately from the scheduled burst, which has gaps between invocations.
 
 The worker uses public Kalshi REST depth when the authenticated book is unavailable and never submits exchange orders. The existing Netlify collectors continue independently. If configured, health appears under worker at /.netlify/functions/predator-report. Confirm that the heartbeat stays fresh across round boundaries, evaluations advance, bookSource is KALSHI_WS, and Coinbase and Kalshi event ages are present before claiming authenticated streaming. REST snapshots have no exchange-event timestamp. A gap invalidates the incremental book until a new snapshot arrives.
