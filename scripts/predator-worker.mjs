@@ -90,7 +90,7 @@ async function settle(now){
    if(!result)continue;
    const payout=(position.side==='UP')===(result==='yes')?1:0;
    const entryCost=Math.ceil(7*position.ask*(1-position.ask))/100+.01;
-   closePosition(position,{...position,reason:'OFFICIAL_SETTLEMENT',closedAt:now,net:payout-position.ask-entryCost});
+   closePosition(position,{...position,bid:null,payout,reason:'OFFICIAL_SETTLEMENT',closedAt:now,net:payout-position.ask-entryCost});
   }catch{counters.settlementErrors++;}
  }
 }
@@ -124,7 +124,7 @@ async function run(){
     (!Number.isFinite(book.eventAt)||decisionAt-book.eventAt>=0&&decisionAt-book.eventAt<=4000)?
     predatorObservation({ticker:market.ticker,now:decisionAt,bookAt:book.receivedAt,
      remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades:spot.tape,monitoring:Number.isFinite(state.positions[market.ticker]?.warningMs)}):null;
-   latest.quoteFresh=Boolean(observation);
+   latest.quoteFresh=Boolean(observation&&decisionAt-observation.bookAt<=1500);
    const round=state.rounds[market.ticker];
    if(round&&!round.voltV16Profile){round.voltV16Profile=structuredClone(state.voltV16Cells);dirty=true;}
    const position=state.positions[market.ticker];
@@ -132,7 +132,7 @@ async function run(){
    if(round?.v15Filled&&!position&&state.closed.at(-1)?.ticker===market.ticker)latest.position=state.closed.at(-1);
    if(position){
     latest.position=position;
-    if(observation){
+    if(observation&&decisionAt-observation.bookAt<=1500){
      const next=advancePredatorWatch(position,observation);
      if(next.closedAt&&next.reason!=='UNSCORED_GAP'){
       closePosition(position,next);latest.position=next;lastPublish=0;await persist();
@@ -147,7 +147,8 @@ async function run(){
      round.v15Expired=(round.v15Expired||0)+1;
      delete round.v15Watch;dirty=true;
     }
-    const candidate=confirmPredatorEntry(round.v15Watch,observation);
+    const candidate=decisionAt-observation.bookAt<=1500 &&
+     confirmPredatorEntry(round.v15Watch,observation);
     if(candidate){
      latest.horizons=forecastVoltHorizons(round.voltV16Profile,candidate,observation.remaining);
      if(!round.voltV16Probe){
@@ -158,7 +159,7 @@ async function run(){
     const forecast=latest.horizons?.filter(row=>row.qualified).sort((a,b)=>b.rank-a.rank)[0];
     if(candidate&&forecast&&env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
      const bid=(candidate.side==='UP'?observation.yes:observation.no).price;
-     state.positions[market.ticker]={...candidate,version:16,forecast,target:forecast.bid,deadline:candidate.at+forecast.seconds*1000,expiresAt,bid,
+     state.positions[market.ticker]={...candidate,version:16,quantity:1,forecast,target:forecast.bid,deadline:candidate.at+forecast.seconds*1000,expiresAt,bid,
       net:bid-candidate.ask-candidate.entryCost-(Math.ceil(7*bid*(1-bid))/100+.01)};
      round.v15Filled=true;
      latest.position=state.positions[market.ticker];
