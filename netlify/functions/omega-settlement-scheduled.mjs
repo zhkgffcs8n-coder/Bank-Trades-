@@ -3,7 +3,8 @@ import {scanBlobPage} from '../../src/paged-blob-scan.mjs';
 import {trustedStoredFinalizedOutcome} from '../../src/official-settlement.mjs';
 import {scoreVerifiedRound} from '../../src/omega-learning.mjs';
 
-export async function scoreOmegaArchive(db){
+export async function scoreOmegaArchive(db,{nowMs=Date.now()}={}){
+ if(!Number.isSafeInteger(nowMs)||nowMs<=0)throw Error('Invalid OMEGA settlement scoring time');
  return scanBlobPage(db,{prefix:'omega/predictions/v1/',cursorKey:'omega/score-cursor/v1',limit:16},async ({key})=>{
   const [, , ,ticker]=key.split('/');
   if(!ticker)return;
@@ -17,7 +18,10 @@ export async function scoreOmegaArchive(db){
   // prove pre-close timing and must remain unscored.
   if(!outcome||forecast?.ticker!==ticker||!Number.isSafeInteger(forecast.recordedAtMs)||
    !Number.isSafeInteger(forecast.expiresAtMs)||forecast.expiresAtMs<=forecast.recordedAtMs||
-   forecast.expiresAtMs>settledAtMs||forecast.recordedAtMs>=settledAtMs||
+   // A stored verification marker cannot prove an outcome was already available
+    // if its settlement timestamp is still in the future.
+    !Number.isSafeInteger(settledAtMs)||settledAtMs>nowMs||
+    forecast.expiresAtMs>settledAtMs||forecast.recordedAtMs>=settledAtMs||
    !Array.isArray(forecast.accepted)||forecast.accepted.length<2||
    forecast.accepted.some(x=>!Number.isSafeInteger(x?.observedAtMs)||x.observedAtMs>forecast.recordedAtMs||
     typeof x.upProbability!=='number'||!Number.isFinite(x.upProbability)||x.upProbability<0||x.upProbability>1)||
