@@ -80,8 +80,10 @@ test('leaderboard endpoint only reports verified archived scores and never autho
  const {omegaLeaderboard}=await import('../netlify/functions/omega-leaderboard.mjs');
  const values=new Map();
  for(let i=0;i<52;i++)values.set('omega/verified-scores/v1/BTC-'+i,{
-  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC',roundId:'BTC-'+i,
-  predictedAtMs:1000+i*1000,settledAtMs:1100+i*1000,
+  status:'VERIFIED_SHADOW_SCORE',marketTicker:'BTC-'+i,roundId:'BTC-'+i,
+  predictedAtMs:1000+i*1000,recordedAtMs:1000+i*1000,
+  expiresAtMs:1050+i*1000,settledAtMs:1100+i*1000,
+  forecastKey:'omega/predictions/v1/BTC-'+i+'/1',
   scores:[{provider:'omega_consensus',brier:.1},{provider:'kalshi_baseline',brier:.3}]});
  values.set('omega/verified-scores/v1/UNVERIFIED',{status:'BLOCKED',scores:[]});
  const db={async *list(){yield {blobs:[...values.keys()].sort().map(key=>({key}))}},
