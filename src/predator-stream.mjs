@@ -16,7 +16,7 @@ export function appendPredatorTrades(tape,message,now){
  return [...byId.values()].sort((a,b)=>a.time-b.time).slice(-5000);
 }
 
-export function openPredatorTape({Socket=WebSocket,clock=Date.now}={}){
+export function openPredatorTape({Socket=WebSocket,clock=Date.now,onTrades}={}){
  let socket,tape=[],stopped=false,retry,attempts=0,errors=0,lastReceivedAt=null,connectedAt=null;
  let generation=0;
  function connect(){
@@ -34,8 +34,10 @@ export function openPredatorTape({Socket=WebSocket,clock=Date.now}={}){
    try{
     const message=JSON.parse(event.data);
     const next=appendPredatorTrades(tape,message,clock());
-    if(next.at(-1)?.id&&next.at(-1)?.id!==tape.at(-1)?.id)lastReceivedAt=clock();
+    const changed=next.at(-1)?.id&&next.at(-1)?.id!==tape.at(-1)?.id;
+    if(changed)lastReceivedAt=clock();
     tape=next;
+    if(changed)onTrades?.(tape,lastReceivedAt);
    }catch{errors++}
   });
   ws.addEventListener('error',()=>{errors++});

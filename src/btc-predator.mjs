@@ -55,9 +55,13 @@ export function advancePredatorWatch(watch,observation){
  const weakening=watch.warningMs!==undefined&&net>0&&(
   1-observation.yes.price-observation.no.price>.050001||
   observation.sourceEventAt&&observation.side!==watch.side&&Math.abs(observation.flow)>=.45);
+ const micro=watch.strategyVersion===18;
+ const reserve=micro?.01:0;
+ const peakGiveback=bounds(.015,.04,peakNet*.35);
+ const protectProfit=micro&&peakNet>reserve+.015&&peakNet-net>=peakGiveback;
  const stop=Number.isFinite(watch.entryBid)?bid-watch.entryBid<=-.07+1e-9:net<=-.07;
  const reason=bid>=watch.target&&net>(watch.version===16?.01:0)?'TAKE PROFIT':stop?'SELL FAST':
-  weakening||peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
+  (weakening&&net>reserve)||protectProfit||!micro&&peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
  return {...watch,peakNet,baseline,bid,net,...(reason?{reason,closedAt:now,
   baselineNet:baseline?netAt(baseline.ask,bid):null,leadMs:baseline?baseline.at-watch.at:null}:{})};
 }

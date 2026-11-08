@@ -99,10 +99,10 @@ async function refreshPredatorReport(){
   predatorServerStatus.textContent='BTC PREDATOR · Persistent worker heartbeat unavailable'+fallback;
   const worker=report.worker;
   if(worker?.version===15||worker?.version===16){
-   const stats=worker.version===16?worker.voltV16:worker.voltV15;
+   const stats=worker.strategyVersion===18?worker.voltV18:worker.version===16?worker.voltV16:worker.voltV15;
    const position=worker.latest?.position;
    const watch=worker.latest?.watch;
-   predatorServerStatus.textContent='V'+worker.version+' BTC PREDATOR · VOLT B · '+
+   predatorServerStatus.textContent='V'+(worker.strategyVersion??worker.version)+' BTC PREDATOR · VOLT B · '+
     (worker.fresh?'Worker heartbeat current':'Worker heartbeat stale'+fallback);
    if(worker.fresh&&position){
     const modeledNet=position.net-(position.version===16?.01:0);
@@ -125,6 +125,15 @@ async function refreshPredatorReport(){
      (position.warningMs/1000).toFixed(2)+'s';
    }else if(worker.fresh&&watch&&Date.now()-watch.at<=10000){
     predatorServerStatus.textContent+=' · WATCH '+watch.side;
+   }
+   const timing=worker.latest;
+   if(worker.fresh&&worker.strategyVersion===18&&timing){
+    const elapsed=Math.max(0,Date.now()-timing.decisionAt);
+    const age=Number.isFinite(timing.quoteAgeMs)?timing.quoteAgeMs+elapsed:null;
+    predatorServerStatus.textContent+=' · Quote '+(age===null?'unavailable':age+'ms old')+
+     ' · Feed '+(timing.kalshiEventAgeMs??'unavailable')+
+     ' · Compute '+timing.computeUs+'µs · Decision age '+elapsed+'ms'+
+     (timing.quoteFresh&&age!==null&&age<=1500?' · Fresh book':' · Executability unconfirmed');
    }
    if(stats)predatorServerStatus.textContent+=' · '+stats.wins+'W/'+stats.losses+'L · modeled net $'+stats.net.toFixed(2);
   }

@@ -1,4 +1,4 @@
-import {observeVoltHorizons,forecastVoltHorizons} from '../src/volt-horizons.mjs';
+import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import WebSocket from 'ws';
@@ -15,7 +15,7 @@ if(!dir)throw Error('PREDATOR_STATE_DIR must point to a persistent writable dire
 await mkdir(dir,{recursive:true});
 const path=join(dir,'state.json');
 let state={positions:{},rounds:{},closed:[],rejections:{},totalClosed:0};
-let tape,ws,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false,lastEval=0,lastTapeId;
+let tape,ws,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false;
 const startedAt=Date.now();
 const base='https://external-api.kalshi.com';
 const credentials=env.PREDATOR_KALSHI_KEY_ID&&env.PREDATOR_KALSHI_PRIVATE_KEY_FILE?
@@ -25,9 +25,10 @@ const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
 const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0};
 async function persist(){
+ dirty=false;
  await writeFile(path+'.tmp',JSON.stringify(state),{mode:0o600});
  await rename(path+'.tmp',path);
- dirty=false;lastPersist=Date.now();
+ lastPersist=Date.now();
 }
 const reject=reason=>{
  latest={...latest,reason};
@@ -58,6 +59,7 @@ function connect(){
    if(update.status==='INVALID_BOOK'){book=null;return;}
    if(update.status==='READY'){
     book=update;bookSource='KALSHI_WS';counters.events++;
+    evaluate(tape.snapshot().tape,'KALSHI_WS',update.receivedAt);
    }
   }catch{book=null;socket.terminate();}
  });
@@ -94,48 +96,31 @@ async function settle(now){
   }catch{counters.settlementErrors++;}
  }
 }
-async function run(){
- try{state=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error;}
- state.voltV16Cells??={};
- tape=openPredatorTape();
- while(!stopping){
-  const now=Date.now(),spot=tape.snapshot();
-  if(now>=nextDiscovery||market&&Date.parse(market.close_time)<=now){
-   nextDiscovery=now+5000;
-   try{await discover(now)}catch{reject('DISCOVERY_FAILED');}
-  }
-  connect();
-  if(market&&(!book||now-book.receivedAt>2500)&&now>=nextRest){
-   nextRest=now+2500;
-   try{
-    const depth=parseDepthV8(await get('/markets/'+encodeURIComponent(market.ticker)+'/orderbook?depth=1'),market.ticker,Date.now());
-    if(depth&&(!book||Date.now()-book.receivedAt>2500)){
-     book={...depth,receivedAt:depth.at,eventAt:null};bookSource='KALSHI_REST';counters.restSamples++;
-    }
-   }catch{reject('REST_DEPTH_FAILED');}
-  }
-  const decisionAt=Date.now(),event=spot.tape.at(-1);
-  if(market&&decisionAt-lastEval>=250&&(event?.id!==lastTapeId||book?.receivedAt>lastEval||decisionAt-lastEval>=1000)){
-   lastEval=decisionAt;lastTapeId=event?.id;counters.evaluations++;
+function evaluate(trades,trigger,receivedAt){
+ if(!market||stopping)return;
+ const started=performance.now();
+ const decisionAt=Date.now(),event=trades.at(-1);
+ try{
+   counters.evaluations++;
    const expiresAt=Date.parse(market.close_time);
    latest={ticker:market.ticker,decisionAt,bookSource,coinbaseAgeMs:event?decisionAt-event.time:null,
     kalshiEventAgeMs:Number.isFinite(book?.eventAt)?decisionAt-book.eventAt:null};
    const observation=book?.ticker===market.ticker&&
     (!Number.isFinite(book.eventAt)||decisionAt-book.eventAt>=0&&decisionAt-book.eventAt<=4000)?
     predatorObservation({ticker:market.ticker,now:decisionAt,bookAt:book.receivedAt,
-     remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades:spot.tape,monitoring:Number.isFinite(state.positions[market.ticker]?.warningMs)}):null;
+     remaining:(expiresAt-decisionAt)/1000,yes:book.yes,no:book.no,trades,monitoring:Number.isFinite(state.positions[market.ticker]?.warningMs)}):null;
    latest.quoteFresh=Boolean(observation&&decisionAt-observation.bookAt<=1500);
    const round=state.rounds[market.ticker];
-   if(round&&!round.voltV16Profile){round.voltV16Profile=structuredClone(state.voltV16Cells);dirty=true;}
+   if(round&&!round.voltV18Profile){round.voltV18Profile=structuredClone(state.voltV18Cells);dirty=true;}
    const position=state.positions[market.ticker];
-   if(round&&observation&&observeVoltHorizons(round,state.voltV16Cells,observation))dirty=true;
+   if(round&&observation&&observeVoltHorizons({voltV16Probe:round.voltV18Probe},state.voltV18Cells,observation,voltV18Horizons))dirty=true;
    if(round?.v15Filled&&!position&&state.closed.at(-1)?.ticker===market.ticker)latest.position=state.closed.at(-1);
    if(position){
     latest.position=position;
     if(observation&&decisionAt-observation.bookAt<=1500){
      const next=advancePredatorWatch(position,observation);
      if(next.closedAt&&next.reason!=='UNSCORED_GAP'){
-      closePosition(position,next);latest.position=next;lastPublish=0;await persist();
+      closePosition(position,next);latest.position=next;lastPublish=0;
      }else if(!next.closedAt){
       state.positions[market.ticker]=next;latest.position=next;dirty=true;
      }
@@ -150,38 +135,66 @@ async function run(){
     const candidate=decisionAt-observation.bookAt<=1500 &&
      confirmPredatorEntry(round.v15Watch,observation);
     if(candidate){
-     latest.horizons=forecastVoltHorizons(round.voltV16Profile,candidate,observation.remaining);
-     if(!round.voltV16Probe){
-      round.voltV16Probe={ticker:candidate.ticker,side:candidate.side,at:candidate.at,ask:candidate.ask,scored:{}};
+     latest.horizons=forecastVoltHorizons(round.voltV18Profile,candidate,observation.remaining,voltV18Horizons);
+     if(!round.voltV18Probe){
+      round.voltV18Probe={ticker:candidate.ticker,side:candidate.side,at:candidate.at,ask:candidate.ask,scored:{}};
       dirty=true;
      }
     }
     const forecast=latest.horizons?.filter(row=>row.qualified).sort((a,b)=>b.rank-a.rank)[0];
     if(candidate&&forecast&&env.PREDATOR_ENABLE_EXPERIMENTAL_PAPER==='true'){
      const bid=(candidate.side==='UP'?observation.yes:observation.no).price;
-     state.positions[market.ticker]={...candidate,version:16,quantity:1,forecast,target:forecast.bid,deadline:candidate.at+forecast.seconds*1000,expiresAt,bid,
+     state.positions[market.ticker]={...candidate,version:16,strategyVersion:18,quantity:1,forecast,target:forecast.bid,deadline:candidate.at+forecast.seconds*1000,expiresAt,bid,
       net:bid-candidate.ask-candidate.entryCost-(Math.ceil(7*bid*(1-bid))/100+.01)};
      round.v15Filled=true;
      latest.position=state.positions[market.ticker];
      latest.reason='VOLT_PAPER_FILL';lastPublish=0;
-     dirty=true;await persist();
+     dirty=true;
     }else{
      if(!round.v15Watch&&observation.early){
       const watch=openPredatorWatch(observation);
-      if(watch){round.v15Watch=watch;lastPublish=0;dirty=true;await persist();}
+      if(watch){round.v15Watch=watch;lastPublish=0;dirty=true;}
      }
      latest.watch=round.v15Watch??null;
      if(latest.watch)latest.reason='VOLT_WATCH';
      else reject('NO_QUALIFIED_EARLY_WATCH');
     }
    }
+ }finally{
+  latest.trigger=trigger;
+  latest.quoteAgeMs=book?decisionAt-book.receivedAt:null;
+  latest.receiveToDecisionMs=Date.now()-receivedAt;
+  latest.computeUs=Math.round((performance.now()-started)*1000);
+ }
+}
+async function run(){
+ try{state=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error;}
+ state.voltV18Cells??={};
+ tape=openPredatorTape({onTrades:(trades,at)=>evaluate(trades,'COINBASE_WS',at)});
+ while(!stopping){
+  const now=Date.now();
+  tape.snapshot();
+  if(now>=nextDiscovery||market&&Date.parse(market.close_time)<=now){
+   nextDiscovery=now+5000;
+   try{await discover(now)}catch{reject('DISCOVERY_FAILED');}
+  }
+  connect();
+  if(market&&(!book||now-book.receivedAt>2500)&&now>=nextRest){
+   nextRest=now+2500;
+   try{
+    const depth=parseDepthV8(await get('/markets/'+encodeURIComponent(market.ticker)+'/orderbook?depth=1'),market.ticker,Date.now());
+    if(depth&&(!book||Date.now()-book.receivedAt>2500)){
+     book={...depth,receivedAt:depth.at,eventAt:null};bookSource='KALSHI_REST';counters.restSamples++;
+     evaluate(tape.snapshot().tape,'KALSHI_REST',depth.at);
+    }
+   }catch{reject('REST_DEPTH_FAILED');}
   }
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
-  if(dirty&&now-lastPersist>=3000)await persist();
+  if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
    lastPublish=now;
    const health={version:16,mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
-    horizonResearch:state.voltV16Cells,
+    strategyVersion:18,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
      stats.net+=row.net;stats.warningMs+=row.warningMs;stats.entryTotal+=row.ask;
@@ -190,7 +203,15 @@ async function run(){
      stats.drawdown=Math.max(stats.drawdown,stats.peak-stats.net);
      return stats;
     },{trades:0,wins:0,losses:0,net:0,warningMs:0,entryTotal:0,fees:0,peak:0,drawdown:0}),
-    voltV16:state.closed.filter(row=>row.version===16).reduce((stats,row)=>{
+    voltV16:state.closed.filter(row=>row.version===16&&row.strategyVersion!==18).reduce((stats,row)=>{
+     stats.trades++;stats.wins+=Number(row.net>.01);stats.losses+=Number(row.net<.01);
+     stats.net+=row.net-.01;
+     stats.holdMs+=row.closedAt-row.at;
+     stats.peak=Math.max(stats.peak,stats.net);
+     stats.drawdown=Math.max(stats.drawdown,stats.peak-stats.net);
+     return stats;
+    },{trades:0,wins:0,losses:0,net:0,holdMs:0,peak:0,drawdown:0}),
+    voltV18:state.closed.filter(row=>row.strategyVersion===18).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>.01);stats.losses+=Number(row.net<.01);
      stats.net+=row.net-.01;
      stats.holdMs+=row.closedAt-row.at;

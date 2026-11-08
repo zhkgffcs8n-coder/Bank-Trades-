@@ -15,3 +15,13 @@ test('VOLT requires new same-contract depth and counts each prospective horizon 
  assert.equal(report[0].samples,1);
  assert.equal(report[0].qualified,false);
 });
+
+test('V18 rejects a late quote for its one-second horizon',async()=>{
+ const {voltV18Horizons}=await import('../src/volt-horizons.mjs');
+ const round={voltV16Probe:{ticker:'BTC',at:10000,side:'UP',ask:.5,scored:{}}};
+ const cells={};
+ const depth={ticker:'BTC',now:11400,bookAt:11400,yes:{price:.64,size:1}};
+ assert.equal(observeVoltHorizons(round,cells,depth,voltV18Horizons),false);
+ assert.equal(observeVoltHorizons(round,cells,{...depth,bookAt:11200},voltV18Horizons),true);
+ assert.equal(cells['UP/1'].count,1);
+});
