@@ -8,8 +8,13 @@ export default async req=>{
  if(ticker!==null){
   if(!/^KX(?:BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)15M-[A-Z0-9-]{1,55}$/.test(ticker))
    return Response.json({error:'INVALID_TICKER'},{status:400});
-  const audit=await db.get('scalp-hunter/entry-audit/v15/'+ticker,{type:'json'});
-  return Response.json({ticker,audit,mode:'PAPER_ONLY'},{headers:{'cache-control':'no-store'}});
+  const [audit,open,closedVolt]=await Promise.all([
+   db.get('scalp-hunter/entry-audit/v15/'+ticker,{type:'json'}),
+   db.get('scalp-hunter/paper/open/'+ticker,{type:'json'}),
+   db.get('scalp-hunter/paper/closed/'+ticker+'/B',{type:'json'})
+  ]);
+  const voltPosition=closedVolt??open?.B??audit?.engines?.B?.fill??null;
+  return Response.json({ticker,audit,voltPosition,mode:'PAPER_ONLY'},{headers:{'cache-control':'no-store'}});
  }
  const [predictions,outcomes,paper,open,experimental,experimentalOutcomes,diagnostics]=await Promise.all([
   blobWindow(db,{prefix:'scalp-hunter/predictions/',limit:60}),

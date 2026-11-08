@@ -4,7 +4,7 @@ import {trustedStoredFinalizedOutcome} from './official-settlement.mjs';
 export const hunterEngines=['A','B','C'];
 export function openHunterPaper(name,snapshot,idea,depth){
  const entryBid=idea.side==='UP'?depth?.yes?.price:depth?.no?.price;
- return {name,entryBid,ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
+ return {name,asset:snapshot.asset,quantity:1,entryBid,bid:entryBid,peakBid:entryBid,ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
   side:idea.side,ask:idea.ask,target:idea.target,entryCost:modeledCost(idea.ask),
   horizonSeconds:idea.horizonSeconds,peakNet:0,lastAt:snapshot.at};
 }
@@ -24,7 +24,7 @@ export function monitorHunterPaper(position,depth){
  const reason=net>0&&bid>=position.target?'TAKE_PROFIT':
   stop?'STOP_LOSS':liquidityReversal||peakNet>=.05&&peakNet-net>=.04?'TRAILING_EXIT':
   depth.at>=position.at+position.horizonSeconds*1000?'TIME_EXIT':null;
- return {...position,peakNet,bid,net,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
+ return {...position,peakNet,peakBid:Math.max(position.peakBid??position.entryBid??bid,bid),bid,net,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
 }
 export function settleHunterPaper(position,label,now){
  const outcome=trustedStoredFinalizedOutcome(label,position.ticker);

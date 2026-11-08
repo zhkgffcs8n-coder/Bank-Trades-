@@ -63,13 +63,21 @@ async function refreshSuperTracker(){
  const coin=selectedCoin;
  const ticker=sharedV8.find(row=>row.asset===coin)?.ticker;
  if(!ticker||trackerRequest?.ticker===ticker)return;
+ const retained=hunterPositions.get(coin+'/B');
+ const pendingTicker=retained&&!retained.closedAt&&retained.ticker!==ticker?retained.ticker:null;
  const request={ticker};
  trackerRequest=request;
  try{
-  const response=await fetch('/.netlify/functions/scalp-hunter-report?ticker='+encodeURIComponent(ticker),
-   {cache:'no-store',signal:AbortSignal.timeout(6000)});
-  if(!response.ok)throw Error('Tracker unavailable');
-  const {audit}=await response.json();
+  const read=async id=>{
+   const response=await fetch('/.netlify/functions/scalp-hunter-report?ticker='+encodeURIComponent(id),
+    {cache:'no-store',signal:AbortSignal.timeout(6000)});
+   if(!response.ok)throw Error('Tracker unavailable');
+   return response.json();
+  };
+  const [current,previous]=await Promise.all([read(ticker),pendingTicker?read(pendingTicker).catch(()=>null):null]);
+  if(previous?.ticker===pendingTicker)rememberHunterPosition(coin,'B',previous.voltPosition,pendingTicker,Date.now());
+  if(current.ticker===ticker)rememberHunterPosition(coin,'B',current.voltPosition,ticker,Date.now());
+  const {audit}=current;
   if(trackerRequest===request&&selectedCoin===coin&&audit?.ticker===ticker){
    trackerAudit=audit;
    paintSuperTracker();
@@ -164,6 +172,29 @@ const engineBadges=new Map();
 const shadowRounds=new Map();
 const scalperBooks=new Map();
 const hunterPositions=new Map();
+const voltPositionCache='bt:volt:confirmed-paper';
+try{
+ const saved=JSON.parse(localStorage.getItem(voltPositionCache)||'[]');
+ for(const [coin,position] of saved)rememberHunterPosition(coin,'B',position,position?.ticker,Date.now(),false);
+}catch{}
+
+function rememberHunterPosition(coin,name,position,ticker,now,cache=true){
+ if(!position||position.ticker!==ticker||!['UP','DOWN'].includes(position.side)||
+    !Number.isFinite(position.at)||position.at>now)return;
+ const key=coin+'/'+name;
+ const saved=hunterPositions.get(key);
+ if(saved?.ticker===ticker){
+  if(saved.closedAt&&(!position.closedAt||position.closedAt<saved.closedAt))return;
+  if(!position.closedAt&&(position.lastAt??position.at)<(saved.lastAt??saved.at))return;
+ }else if(saved&&(saved.at>=position.at||name==='B'&&!saved.closedAt))return;
+ hunterPositions.set(key,position);
+ if(name==='B'&&cache){
+  try{
+   const rows=[...hunterPositions].filter(([id])=>id.endsWith('/B')).map(([id,row])=>[id.slice(0,-2),row]);
+   localStorage.setItem(voltPositionCache,JSON.stringify(rows));
+  }catch{}
+ }
+}
 const modeledScalpCost=price=>Math.ceil(7*price*(1-price))/100+.01;
 function currentScalpBid(coin,position,now){
  const book=scalperBooks.get(coin);
@@ -236,31 +267,28 @@ function paintV8(){
   }
   const now=Date.now();
   const paperKey=selectedCoin+'/'+name;
-  const reported=hunter?.positions?.[name];
-  if(reported?.ticker===shared?.ticker&&['UP','DOWN'].includes(reported?.side)&&hunter.at<=now){
-   const saved=hunterPositions.get(paperKey);
-   if(saved?.ticker!==reported.ticker||!saved.closedAt||reported.closedAt>=saved.closedAt)
-    hunterPositions.set(paperKey,reported);
-  }
+  if(hunter?.at<=now)rememberHunterPosition(selectedCoin,name,hunter.positions?.[name],shared?.ticker,now);
   const paperPosition=hunterPositions.get(paperKey);
-  const paperValid=paperPosition&&now<paperPosition.expiresAt;
+  const paperValid=paperPosition&&(now<paperPosition.expiresAt||
+   name==='B'&&(!paperPosition.closedAt||now-paperPosition.closedAt<=75000));
   const position=paperValid?paperPosition:trackShadowEngine(selectedCoin,shared?.ticker,name,name==='B'?null:engine,snapshot,now);
-  const validPosition=position&&now<position.expiresAt;
+  const validPosition=position&&(paperValid||now<position.expiresAt);
   const positionMode=paperValid?'PAPER':'SHADOW';
   const closed=validPosition&&position.closedAt;
   const recentExit=closed&&now>=position.closedAt&&now-position.closedAt<=75000;
    const audit=trackerAudit&&trackerAudit.ticker===shared?.ticker?trackerAudit.engines[name]:null;
   const watch=['UP','DOWN'].find(side=>audit?.sides[side]?.firstSignal?.early&&
    now>=audit.sides[side].firstSignal.at&&now-audit.sides[side].firstSignal.at<=75000&&fresh);
-  let action=watch?'EARLY SCALP WATCH '+watch:['UP','DOWN'].includes(engine?.decision)?'WATCH '+engine.decision:'SKIP',
+  let action=watch?'EARLY SCALP WATCH '+watch:['UP','DOWN'].includes(idea?.side??engine?.decision)?'WATCH '+(idea?.side??engine.decision):'SKIP',
    tone=watch?'hold':'skip',icon=watch?'◈':'—',mode='';
   if(recentExit){
    action=(position.reason==='TAKE_PROFIT'?'TAKE PROFIT ':['STOP_LOSS','TRAIL_EXIT','TRAILING_EXIT'].includes(position.reason)?'SELL FAST ':'SELL ')+position.side;
    tone=position.reason==='TAKE_PROFIT'?'profit':'sell';
    icon=tone==='profit'?'◆':'✕';mode=positionMode;
   }else if(validPosition&&!closed){
-   const entry=now-position.at<(paperValid?30000:3500);
-   action=(entry?'BUY ':'HOLD ')+position.side;
+   const awaitingSettlement=now>=position.expiresAt;
+   const entry=!awaitingSettlement&&now-position.at<(paperValid?30000:3500);
+   action=(entry?'BUY ':'HOLD ')+position.side+(awaitingSettlement?' · AWAITING SETTLEMENT':'');
    tone=entry?position.side.toLowerCase():'hold';
    icon=entry?(position.side==='UP'?'▲':'▼'):'Ⅱ';mode=positionMode;
   }
@@ -274,11 +302,12 @@ function paintV8(){
     detail.textContent+=' · bid '+(liveBid*100).toFixed(1)+'% · modeled net '+(scalpNet(position,liveBid)*100).toFixed(1)+'¢';
    }else detail.textContent+=' · waiting for fresh exit bid';
    if(paperValid&&now>=position.at)detail.textContent+=' · fill age '+((now-position.at)/1000).toFixed(1)+'s';
+   if(paperValid&&Number.isFinite(position.peakBid))detail.textContent+=' · best bid '+trackerPrice(position.peakBid);
    if(!closed&&Number.isFinite(position.peakNet??position.peak))
     detail.textContent+=' · peak net '+trackerNet(position.peakNet??position.peak);
   }
   const label=icon+' '+action+(mode?' · '+mode:'');
-  const badgeKey=[selectedCoin,shared?.ticker,label].join('/');
+  const badgeKey=[selectedCoin,position?.ticker??shared?.ticker,label].join('/');
   let badge=engineBadges.get(name);
   if(badge?.dataset.key!==badgeKey){
    badge=document.createElement('strong');

@@ -20,8 +20,11 @@ test('ordinary entry costs cannot trigger an immediate protective exit on a flat
  const flat=monitorHunterPaper(row,{...depth,at:2});
  assert.ok(flat.net<-.07);
  assert.equal(flat.closedAt,undefined);
+ assert.equal(flat.quantity,1);
+ assert.equal(flat.peakBid,.45);
  const adverse=monitorHunterPaper(flat,{...depth,at:3,yes:{price:.38,size:5}});
  assert.equal(adverse.reason,'STOP_LOSS');
+ assert.equal(adverse.peakBid,.45);
  assert.ok(adverse.net<-.10);
  assert.equal(monitorHunterPaper(adverse,{...depth,at:4}),adverse);
 });
