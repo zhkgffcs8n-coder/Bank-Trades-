@@ -15,10 +15,13 @@ export function monitorHunterPaper(position,depth){
  const exitCost=modeledCost(bid);
  const net=bid-position.ask-position.entryCost-exitCost;
  const peakNet=Math.max(position.peakNet,net);
+ const opposite=position.side==='UP'?depth.no:depth.yes;
+ const liquidityReversal=position.name==='B'&&net>0&&peakNet-net>=.02&&
+  opposite?.size>=level.size*2;
  const reason=net>0&&bid>=position.target?'TAKE_PROFIT':
-  net<=-.07?'STOP_LOSS':peakNet>=.05&&peakNet-net>=.04?'TRAILING_EXIT':
+  net<=-.07?'STOP_LOSS':liquidityReversal||peakNet>=.05&&peakNet-net>=.04?'TRAILING_EXIT':
   depth.at>=position.at+position.horizonSeconds*1000?'TIME_EXIT':null;
- return {...position,peakNet,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
+ return {...position,peakNet,bid,net,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
 }
 export function settleHunterPaper(position,label,now){
  const outcome=trustedStoredFinalizedOutcome(label,position.ticker);

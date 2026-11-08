@@ -56,3 +56,18 @@ test('persistent comparable-round archive deduplicates and keeps only observatio
  assert.equal(experimental.A.mode,'EXPERIMENTAL_SHADOW');
  assert.equal(experimental.A.sampleSize,1);
 });
+
+test('VOLT ranks supported setups by net return relative to observed downside',()=>{
+ const ticker='NEXT',at=12000000;
+ const snapshot={...setup(ticker,at),spread:.02,velocity:.04,breakout:.03};
+ const depth={ticker,at,yes:{price:.83,size:5},no:{price:.15,size:5}};
+ const profile={
+  'B/UP/8/60':{n:12,wins:9,meanNet:.07,meanMove:.12,downside:.025},
+  'B/UP/8/120':{n:12,wins:9,meanNet:.08,meanMove:.12,downside:.08}
+ };
+ const idea=forecastScalpHunter(snapshot,depth,profile).B;
+ assert.equal(idea.ask,.85);
+ assert.equal(idea.horizonSeconds,60);
+ assert.ok(Math.abs(idea.estimatedNet-.06)<1e-9);
+ assert.equal(forecastScalpHunter(snapshot,depth,{'B/UP/8/60':{...profile['B/UP/8/60'],meanMove:.04}}).B,null);
+});

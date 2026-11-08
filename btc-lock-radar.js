@@ -212,7 +212,8 @@ function paintV8(){
    detail.textContent+=' · '+(idea.mode==='EXPERIMENTAL_SHADOW'?'EXPERIMENTAL · ':'')+idea.side+' scalp watch '+(idea.ask*100).toFixed(1)+'% → '+
     (idea.target*100).toFixed(1)+'% · '+idea.horizonSeconds+'s · historical hit rate '+
     Math.round(idea.observedHitRate*100)+'% ('+idea.sampleSize+' rounds) · modeled net '+
-    (idea.estimatedNet*100).toFixed(1)+'¢ per contract';
+    (idea.estimatedNet*100).toFixed(1)+'¢ per contract'+
+    (name==='B'&&Number.isFinite(idea.downside)?' · modeled downside '+trackerNet(idea.downside):'');
   }
   const now=Date.now();
   const paperKey=selectedCoin+'/'+name;
@@ -224,7 +225,7 @@ function paintV8(){
   }
   const paperPosition=hunterPositions.get(paperKey);
   const paperValid=paperPosition&&now<paperPosition.expiresAt;
-  const position=paperValid?paperPosition:trackShadowEngine(selectedCoin,shared?.ticker,name,engine,snapshot,now);
+  const position=paperValid?paperPosition:trackShadowEngine(selectedCoin,shared?.ticker,name,name==='B'?null:engine,snapshot,now);
   const validPosition=position&&now<position.expiresAt;
   const positionMode=paperValid?'PAPER':'SHADOW';
   const closed=validPosition&&position.closedAt;
@@ -253,6 +254,7 @@ function paintV8(){
    }else if(liveBid!==null){
     detail.textContent+=' · bid '+(liveBid*100).toFixed(1)+'% · modeled net '+(scalpNet(position,liveBid)*100).toFixed(1)+'¢';
    }else detail.textContent+=' · waiting for fresh exit bid';
+   if(paperValid&&now>=position.at)detail.textContent+=' · fill age '+((now-position.at)/1000).toFixed(1)+'s';
    if(!closed&&Number.isFinite(position.peakNet??position.peak))
     detail.textContent+=' · peak net '+trackerNet(position.peakNet??position.peak);
   }

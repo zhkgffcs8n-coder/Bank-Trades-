@@ -36,8 +36,8 @@ export function openPredatorWatch(observation){
  if(!observation?.early)return null;
  const {side,now,ticker}=observation;
  const ask=askFor(observation,side);
- if(ask<.01-1e-9||ask>.99+1e-9)return null;
- const target=ask+bounds(.045,.12,.035+Math.abs(observation.flow)*.045+Math.abs(observation.imbalance)*.03);
+ if(!(ask>0&&ask<1))return null;
+ const target=Math.min(.999,ask+bounds(.045,.12,.035+Math.abs(observation.flow)*.045+Math.abs(observation.imbalance)*.03));
  if(target>=1||netAt(ask,target)<.015)return null;
  return {ticker,side,at:now,sourceEventAt:observation.sourceEventAt,ask,target,
   quantity:priceFor(observation,side==='UP'?'DOWN':'UP').size,
@@ -69,9 +69,9 @@ export function confirmPredatorEntry(watch, observation){
     observation.remaining<35||observation.side!==watch.side)return null;
  const sign=watch.side==='UP'?1:-1;
  const ask=askFor(observation,watch.side);
- if(ask<.15-1e-9||ask>.95+1e-9||ask-watch.ask>.020001||
+ if(!(ask>0&&ask<1)||
     Math.abs(observation.flow)<.45||sign*observation.imbalance<.12||
-    sign*observation.acceleration<=0||netAt(ask,watch.target)<.015)return null;
+    sign*observation.acceleration<=0||netAt(ask,watch.target)<.025)return null;
  return {...watch,ask,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,
   warningMs:observation.now-watch.at,deadline:observation.now+30000,
   entryCost:cost(ask),estimatedNet:netAt(ask,watch.target)};

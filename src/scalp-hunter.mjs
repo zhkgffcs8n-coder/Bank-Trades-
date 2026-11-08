@@ -13,7 +13,7 @@ function setup(snapshot,depth,name,side,early=false){
  const sign=side==='UP'?1:-1;
  const ask=1-opposite(depth,side).price;
  const bid=leg(depth,side).price;
- if(ask<.01-1e-9||ask>.99+1e-9||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
+ if(!(ask>0&&ask<1)||name!=='B'&&(ask<.01-1e-9||ask>.99+1e-9)||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
  const supported=early?snapshot.early?.[name]?.[side]:name==='A'?sign*snapshot.imbalance>=.2&&sign*snapshot.acceleration>=.01:
   name==='B'?sign*snapshot.velocity>=.02&&sign*snapshot.breakout>0:
   snapshot.radar===side+' FLIP WATCH';
@@ -74,7 +74,7 @@ export function profileComparableRounds(archive){
  return Object.fromEntries(Object.entries(archive).map(([id,rows])=>{
   const n=rows.length,wins=rows.filter(row=>row.net>0).length;
   const priced=rows.filter(row=>row.move!==null);
-  return [id,{n,wins,meanNet:rows.reduce((sum,row)=>sum+row.net,0)/n,
+  return [id,{n,wins,downside:rows.reduce((sum,row)=>sum+Math.max(0,-row.net),0)/n,meanNet:rows.reduce((sum,row)=>sum+row.net,0)/n,
    meanMove:priced.length?priced.reduce((sum,row)=>sum+row.move,0)/priced.length:null}];
  }));
 }
@@ -93,32 +93,37 @@ export function forecastScalpHunter(snapshot,depth,profile,diagnostics={},experi
    return horizons.flatMap(horizon=>{
     const sample=profile[key(early?name+'-early':name,side,ask,horizon)];
     const evidence={side,ask,early,horizonSeconds:horizon,sampleSize:sample?.n??0};
+    // Reserve one cent for adverse execution beyond the displayed quotes.
+    const reserve=name==='B'?.01:0;
+    const expectedNet=sample?.meanNet-reserve;
+    const downside=(sample?.downside??0)+reserve;
+    const rank=name==='B'?expectedNet/Math.max(.015,downside):expectedNet;
     let reason;
     if(snapshot.expiresAt-snapshot.at<(horizon+30)*1000)reason='INSUFFICIENT_TIME';
     else if(!sample||sample.n<12){
      reason='INSUFFICIENT_COMPARABLE_ROUNDS';
-     if(sample?.n>0&&sample.meanNet>.015&&Number.isFinite(sample.meanMove)){
-      const target=Math.min(.99,ask+sample.meanMove);
-      if(target-ask-modeledCost(ask)-modeledCost(target)>.015){
-       const watch={...evidence,target,estimatedNet:sample.meanNet,
+     if(sample?.n>0&&expectedNet>.015&&Number.isFinite(sample.meanMove)){
+      const target=Math.min(name==='B'?.999:.99,ask+sample.meanMove);
+      if(target-ask-modeledCost(ask)-modeledCost(target)-reserve>.015){
+       const watch={...evidence,target,estimatedNet:expectedNet,downside,rank,
         observedHitRate:sample.wins/sample.n,mode:'EXPERIMENTAL_SHADOW'};
-       if(!experimental[name]||watch.estimatedNet>experimental[name].estimatedNet)experimental[name]=watch;
+       if(!experimental[name]||watch.rank>experimental[name].rank)experimental[name]=watch;
       }
      }
     }
-    else if(sample.meanNet<=.015||sample.wins/sample.n<.65||!Number.isFinite(sample.meanMove))
+    else if(expectedNet<=.015||sample.wins/sample.n<.65||!Number.isFinite(sample.meanMove))
      reason='INSUFFICIENT_HISTORICAL_EDGE';
     if(reason){checks.push({...evidence,reason});return [];}
-    const target=Math.min(.99,ask+sample.meanMove);
-    if(target-ask-modeledCost(ask)-modeledCost(target)<=.015){
+    const target=Math.min(name==='B'?.999:.99,ask+sample.meanMove);
+    if(target-ask-modeledCost(ask)-modeledCost(target)-reserve<=.015){
      checks.push({...evidence,reason:'INSUFFICIENT_NET_TARGET'});return [];
     }
     checks.push({...evidence,reason:'QUALIFIED'});
     return [{side,ask,target,early,horizonSeconds:horizon,observedHitRate:sample.wins/sample.n,
-     sampleSize:sample.n,estimatedNet:sample.meanNet,mode:'SHADOW_ONLY'}];
+     sampleSize:sample.n,estimatedNet:expectedNet,downside,rank,mode:'SHADOW_ONLY'}];
    });
   }));
-  return [name,ideas.sort((a,b)=>b.estimatedNet-a.estimatedNet)[0]??null];
+  return [name,ideas.sort((a,b)=>b.rank-a.rank||b.estimatedNet-a.estimatedNet)[0]??null];
  }));
 }
 
