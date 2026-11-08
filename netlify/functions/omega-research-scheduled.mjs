@@ -40,13 +40,23 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  // Only active contracts with independently fetched executable quotes can be exited.
  const paperMonitoring={open:0,exits:0,holds:0,settled:0,unpriced:0,backfilled:0};
  const monitoredTickers=new Set();
- async function monitorOpenTicker(ticker){
+ async function monitorOpenTicker(ticker,{indexed=false}={}){
   if(typeof ticker!=='string'||!/^[A-Z0-9-]{3,100}$/.test(ticker)||monitoredTickers.has(ticker))return;
   monitoredTickers.add(ticker);
   const stored=await db.get('omega/paper/v1/'+ticker,{type:'json'});
-  if(stored?.state?.positions?.[ticker]?.status!=='OPEN'){
-   // A stale index marker must not resurrect a closed position.
-   if(typeof db.delete==='function')await db.delete('omega/paper/open/v1/'+ticker);
+  const position=stored?.state?.positions?.[ticker];
+  if(!position){
+   // A missing/unreadable ledger is not evidence of a closed position.
+   // Keep its durable open marker for a later retry or reconciliation.
+   if(indexed)paperMonitoring.unpriced++;
+   return;
+  }
+  if(position.status!=='OPEN'){
+   // Clear the marker only after observing a persisted terminal position.
+   // Malformed states are not proof of closure and must remain recoverable.
+   if(['CLOSED','SETTLED'].includes(position.status)&&typeof db.delete==='function')
+    await db.delete('omega/paper/open/v1/'+ticker);
+   else if(indexed)paperMonitoring.unpriced++;
    return;
   }
   paperMonitoring.open++;
@@ -70,7 +80,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  // keep scheduled function costs predictable; cursors resume on later minutes.
  if(typeof db.list==='function'){
   await scanBlobPage(db,{prefix:'omega/paper/open/v1/',cursorKey:'omega/paper/scan/open-v1',limit:4},
-   async ({key})=>monitorOpenTicker(key.slice('omega/paper/open/v1/'.length)));
+   async ({key})=>monitorOpenTicker(key.slice('omega/paper/open/v1/'.length),{indexed:true}));
   // Recover positions opened before the marker index was introduced (or before
   // an interrupted marker write). Never mark them closed without a valid quote.
   await scanBlobPage(db,{prefix:'omega/paper/v1/',cursorKey:'omega/paper/scan/backfill-v1',limit:2},

@@ -316,3 +316,31 @@ test('slow provider responses cannot freeze stale forecasts or open paper positi
  assert.equal([...data.keys()].some(k=>k.startsWith('omega/paper/v1/')),false);
  assert.equal(data.get('omega/heartbeat').ordersAuthorized,false);
 });
+
+
+test('unreadable indexed OMEGA paper ledger retains its marker for later exit recovery',async()=>{
+ const ticker='KXBTC15M-RETRY',marker='omega/paper/open/v1/'+ticker;
+ const db=indexedPaperStore([
+  ['latest/'+asset,sample],
+  [marker,{ticker,realOrdersAuthorized:false}]
+ ]);
+ let quoteRequests=0;
+ const fetchImpl=async()=>{
+  quoteRequests++;
+  return {ok:true,json:async()=>({market:{ticker,status:'active',
+   yes_bid_dollars:'0.90',yes_ask_dollars:'0.91',no_bid_dollars:'0.08',no_ask_dollars:'0.09'}})};
+ };
+ const first=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl});
+ assert.equal(first.paperMonitoring.open,0);
+ assert.equal(first.paperMonitoring.unpriced,1);
+ assert.equal(quoteRequests,0);
+ assert.equal(db.values.has(marker),true,'missing ledger must not erase open marker');
+ db.values.set('omega/paper/v1/'+ticker,olderPaperPosition(ticker));
+ const second=await runOmegaScheduled({nowMs:now+60000,db,env:{},fetchImpl});
+ assert.equal(second.paperMonitoring.open,1);
+ assert.equal(second.paperMonitoring.exits,1);
+ assert.equal(quoteRequests,1);
+ assert.equal(db.values.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'CLOSED');
+ assert.equal(db.values.has(marker),false,'confirmed closed ledger may clear marker');
+ assert.equal(second.ordersAuthorized,false);
+});
