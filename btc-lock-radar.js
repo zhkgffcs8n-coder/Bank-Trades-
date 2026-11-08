@@ -63,8 +63,8 @@ async function refreshSuperTracker(){
  const coin=selectedCoin;
  const ticker=sharedV8.find(row=>row.asset===coin)?.ticker;
  if(!ticker||trackerRequest?.ticker===ticker)return;
- const retained=hunterPositions.get(coin+'/B');
- const pendingTicker=retained&&!retained.closedAt&&retained.ticker!==ticker?retained.ticker:null;
+ const pendingTickers=new Set(scalperEngines.map(name=>hunterPositions.get(coin+'/'+name))
+  .filter(position=>position&&!position.closedAt&&position.ticker!==ticker).map(position=>position.ticker));
  const request={ticker};
  trackerRequest=request;
  try{
@@ -74,9 +74,13 @@ async function refreshSuperTracker(){
    if(!response.ok)throw Error('Tracker unavailable');
    return response.json();
   };
-  const [current,previous]=await Promise.all([read(ticker),pendingTicker?read(pendingTicker).catch(()=>null):null]);
-  if(previous?.ticker===pendingTicker)rememberHunterPosition(coin,'B',previous.voltPosition,pendingTicker,Date.now());
-  if(current.ticker===ticker)rememberHunterPosition(coin,'B',current.voltPosition,ticker,Date.now());
+  const [current,...previous]=await Promise.all([read(ticker),...[...pendingTickers].map(id=>read(id).catch(()=>null))]);
+  for(const report of [...previous,current]){
+   if(!report||report.ticker!==ticker&&!pendingTickers.has(report.ticker))continue;
+   for(const name of scalperEngines)
+    rememberHunterPosition(coin,name,report.positions?.[name]??(name==='B'?report.voltPosition:null),report.ticker,Date.now());
+  }
+  if(selectedCoin===coin)paintV8();
   const {audit}=current;
   if(trackerRequest===request&&selectedCoin===coin&&audit?.ticker===ticker){
    trackerAudit=audit;
@@ -172,10 +176,15 @@ const engineBadges=new Map();
 const shadowRounds=new Map();
 const scalperBooks=new Map();
 const hunterPositions=new Map();
+const scalperEngines=['A','B','C'];
+const paperPositionCache='bt:scalper:confirmed-paper';
 const voltPositionCache='bt:volt:confirmed-paper';
 try{
  const saved=JSON.parse(localStorage.getItem(voltPositionCache)||'[]');
  for(const [coin,position] of saved)rememberHunterPosition(coin,'B',position,position?.ticker,Date.now(),false);
+ const cached=JSON.parse(localStorage.getItem(paperPositionCache)||'[]');
+ for(const [coin,name,position] of cached)
+  if(scalperEngines.includes(name))rememberHunterPosition(coin,name,position,position?.ticker,Date.now(),false);
 }catch{}
 
 function rememberHunterPosition(coin,name,position,ticker,now,cache=true){
@@ -186,12 +195,12 @@ function rememberHunterPosition(coin,name,position,ticker,now,cache=true){
  if(saved?.ticker===ticker){
   if(saved.closedAt&&(!position.closedAt||position.closedAt<saved.closedAt))return;
   if(!position.closedAt&&(position.lastAt??position.at)<(saved.lastAt??saved.at))return;
- }else if(saved&&(saved.at>=position.at||name==='B'&&!saved.closedAt))return;
+ }else if(saved&&(saved.at>=position.at||!saved.closedAt))return;
  hunterPositions.set(key,position);
- if(name==='B'&&cache){
+ if(cache){
   try{
-   const rows=[...hunterPositions].filter(([id])=>id.endsWith('/B')).map(([id,row])=>[id.slice(0,-2),row]);
-   localStorage.setItem(voltPositionCache,JSON.stringify(rows));
+   const rows=[...hunterPositions].map(([id,row])=>[...id.split('/'),row]);
+   localStorage.setItem(paperPositionCache,JSON.stringify(rows));
   }catch{}
  }
 }
@@ -270,7 +279,7 @@ function paintV8(){
   if(hunter?.at<=now)rememberHunterPosition(selectedCoin,name,hunter.positions?.[name],shared?.ticker,now);
   const paperPosition=hunterPositions.get(paperKey);
   const paperValid=paperPosition&&(now<paperPosition.expiresAt||
-   name==='B'&&(!paperPosition.closedAt||now-paperPosition.closedAt<=75000));
+   !paperPosition.closedAt||now-paperPosition.closedAt<=75000);
   const position=paperValid?paperPosition:trackShadowEngine(selectedCoin,shared?.ticker,name,name==='B'?null:engine,snapshot,now);
   const validPosition=position&&(paperValid||now<position.expiresAt);
   const positionMode=paperValid?'PAPER':'SHADOW';
@@ -282,8 +291,10 @@ function paintV8(){
   let action=watch?'EARLY SCALP WATCH '+watch:['UP','DOWN'].includes(idea?.side??engine?.decision)?'WATCH '+(idea?.side??engine.decision):'SKIP',
    tone=watch?'hold':'skip',icon=watch?'◈':'—',mode='';
   if(recentExit){
-   action=(position.reason==='TAKE_PROFIT'?'TAKE PROFIT ':['STOP_LOSS','TRAIL_EXIT','TRAILING_EXIT'].includes(position.reason)?'SELL FAST ':'SELL ')+position.side;
-   tone=position.reason==='TAKE_PROFIT'?'profit':'sell';
+   const settled=position.reason==='OFFICIAL_SETTLEMENT';
+   const profitable=position.net>0;
+   action=(settled?'SETTLED ':profitable?'TAKE PROFIT ':'SELL FAST ')+position.side;
+   tone=profitable?'profit':'sell';
    icon=tone==='profit'?'◆':'✕';mode=positionMode;
   }else if(validPosition&&!closed){
    const awaitingSettlement=now>=position.expiresAt;

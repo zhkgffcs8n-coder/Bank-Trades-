@@ -17,14 +17,18 @@ export function monitorHunterPaper(position,depth){
  const net=bid-position.ask-position.entryCost-exitCost;
  const peakNet=Math.max(position.peakNet,net);
  const opposite=position.side==='UP'?depth.no:depth.yes;
- const liquidityReversal=position.name==='B'&&net>0&&peakNet-net>=.02&&
-  opposite?.size>=level.size*2;
+ const giveback=peakNet-net;
+ const liquidityReversal=net>0&&giveback>=.02&&opposite?.size>=level.size*2;
+ const trailing=peakNet>=.05&&giveback>=Math.min(.04,peakNet*.4);
+ const bidDrop=Number.isFinite(position.entryBid)?position.entryBid-bid:-net;
+ const supportedPullback=level.size>=opposite?.size*2&&bidDrop<.10-1e-9&&
+  !position.supportedPullback;
  // A spread and two modeled fees can put a new position below -7¢ even on a flat book.
- const stop=Number.isFinite(position.entryBid)?bid-position.entryBid<=-.07+1e-9:net<=-.07;
+ const stop=bidDrop>=.07-1e-9&&!supportedPullback;
  const reason=net>0&&bid>=position.target?'TAKE_PROFIT':
-  stop?'STOP_LOSS':liquidityReversal||peakNet>=.05&&peakNet-net>=.04?'TRAILING_EXIT':
+  stop?'STOP_LOSS':liquidityReversal||trailing?'TRAILING_EXIT':
   depth.at>=position.at+position.horizonSeconds*1000?'TIME_EXIT':null;
- return {...position,peakNet,peakBid:Math.max(position.peakBid??position.entryBid??bid,bid),bid,net,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
+ return {...position,supportedPullback:bidDrop>=.07-1e-9&&supportedPullback,peakNet,peakBid:Math.max(position.peakBid??position.entryBid??bid,bid),bid,net,lastAt:depth.at,...(reason?{reason,bid,exitCost,net,closedAt:depth.at}:{})};
 }
 export function settleHunterPaper(position,label,now){
  const outcome=trustedStoredFinalizedOutcome(label,position.ticker);

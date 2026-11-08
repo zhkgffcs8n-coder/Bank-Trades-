@@ -28,3 +28,17 @@ test('ordinary entry costs cannot trigger an immediate protective exit on a flat
  assert.ok(adverse.net<-.10);
  assert.equal(monitorHunterPaper(adverse,{...depth,at:4}),adverse);
 });
+
+test('each engine allows one supported pullback observation and protects against deeper losses',()=>{
+ for(const name of ['A','B','C']){
+  const book={ticker:'T',at:1,yes:{price:.50,size:20},no:{price:.47,size:5}};
+  const row=openHunterPaper(name,{ticker:'T',at:1,expiresAt:90000},
+   {side:'UP',ask:.53,target:.80,horizonSeconds:60},book);
+  const dip={...book,at:2,yes:{price:.43,size:20}};
+  const held=monitorHunterPaper(row,dip);
+  assert.equal(held.closedAt,undefined);
+  assert.equal(monitorHunterPaper(held,{...dip,at:3}).reason,'STOP_LOSS');
+  assert.equal(monitorHunterPaper(row,{...dip,yes:{price:.39,size:20}}).reason,'STOP_LOSS');
+  assert.equal(monitorHunterPaper(held,{...book,at:3,yes:{price:.52,size:20}}).supportedPullback,false);
+ }
+});

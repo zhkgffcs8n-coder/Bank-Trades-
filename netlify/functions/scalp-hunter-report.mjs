@@ -1,4 +1,5 @@
 import {getStore} from '@netlify/blobs';
+import {hunterEngines} from '../../src/scalp-hunter-paper.mjs';
 import {blobWindow} from '../../src/blob-window.mjs';
 
 export default async req=>{
@@ -8,13 +9,15 @@ export default async req=>{
  if(ticker!==null){
   if(!/^KX(?:BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)15M-[A-Z0-9-]{1,55}$/.test(ticker))
    return Response.json({error:'INVALID_TICKER'},{status:400});
-  const [audit,open,closedVolt]=await Promise.all([
+  const [audit,open,closed]=await Promise.all([
    db.get('scalp-hunter/entry-audit/v15/'+ticker,{type:'json'}),
    db.get('scalp-hunter/paper/open/'+ticker,{type:'json'}),
-   db.get('scalp-hunter/paper/closed/'+ticker+'/B',{type:'json'})
+   Promise.all(hunterEngines.map(name=>db.get('scalp-hunter/paper/closed/'+ticker+'/'+name,{type:'json'})))
   ]);
-  const voltPosition=closedVolt??open?.B??audit?.engines?.B?.fill??null;
-  return Response.json({ticker,audit,voltPosition,mode:'PAPER_ONLY'},{headers:{'cache-control':'no-store'}});
+  const positions=Object.fromEntries(hunterEngines.map((name,index)=>
+   [name,closed[index]??open?.[name]??audit?.engines?.[name]?.fill??null]));
+  const voltPosition=positions.B;
+  return Response.json({ticker,audit,positions,voltPosition,mode:'PAPER_ONLY'},{headers:{'cache-control':'no-store'}});
  }
  const [predictions,outcomes,paper,open,experimental,experimentalOutcomes,diagnostics]=await Promise.all([
   blobWindow(db,{prefix:'scalp-hunter/predictions/',limit:60}),
