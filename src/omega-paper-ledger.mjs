@@ -5,6 +5,10 @@ export function paperEntry({signal,quote,stakeDollars=5,feesDollars,slippageDoll
  const reasons=[];
  if(signal?.status!=='SHADOW_CANDIDATE'||signal.ordersAuthorized!==false)reasons.push('No approved shadow candidate');
  if(!['UP','DOWN'].includes(signal?.forecast?.consensus))reasons.push('No directional agreement');
+ // A frozen paper forecast must belong to the exact Kalshi contract being
+ // priced. Never let a different round's AI signal authorize a paper entry.
+ if(signal?.marketTicker!==quote?.ticker||signal?.roundId!==quote?.ticker)
+  reasons.push('Signal contract or round mismatch');
  const side=signal?.forecast?.consensus;
  const ask=side==='UP'?quote?.yesAskDollars:quote?.noAskDollars;
  if(!quote?.ticker||!good(ask)||ask<=0||ask>=1)reasons.push('No executable side-specific ask');

@@ -1,13 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {paperEntry,paperExit} from '../src/omega-paper-ledger.mjs';
-const signal={status:'SHADOW_CANDIDATE',ordersAuthorized:false,forecast:{consensus:'UP'}};
+const signal={status:'SHADOW_CANDIDATE',ordersAuthorized:false,marketTicker:'BTC-R1',roundId:'BTC-R1',forecast:{consensus:'UP'}};
 const quote={ticker:'BTC-R1',yesAskDollars:.55,noAskDollars:.48,asOfMs:99000};
 test('paper entry stays within $5 and never authorizes real orders',()=>{
  const r=paperEntry({signal,quote,stakeDollars:5,feesDollars:.1,nowMs:100000});
  assert.equal(r.status,'PAPER_OPEN');assert.equal(r.realOrdersAuthorized,false);assert.ok(r.position.entryCostDollars<=5);
  const e=paperExit({position:r.position,quote:{ticker:'BTC-R1',yesBidDollars:.6,noBidDollars:.4,asOfMs:100001},feesDollars:.1,nowMs:101000});
  assert.equal(e.status,'PAPER_CLOSED');assert.equal(e.realOrdersAuthorized,false);
+});
+test('paper entry binds its forecast to the exact quoted contract and round',()=>{
+ for(const candidate of [
+  {...signal,marketTicker:'ETH-R1'},
+  {...signal,roundId:'BTC-R2'},
+  {...signal,marketTicker:undefined},
+  {...signal,roundId:undefined}
+ ]){
+  const result=paperEntry({signal:candidate,quote,stakeDollars:5,feesDollars:.1,nowMs:100000});
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.realOrdersAuthorized,false);
+  assert.ok(result.reasons.includes('Signal contract or round mismatch'));
+ }
 });
 test('stale quotes and unknown fees block entry',()=>{
  assert.equal(paperEntry({signal,quote,feesDollars:.1,nowMs:105000}).status,'BLOCKED');
@@ -21,7 +34,7 @@ test('wrong ticker prevents paper exit',()=>{
 });
 
 test('DOWN entry and exit use NO quotes, not YES quotes',()=>{
- const down={...signal,forecast:{consensus:'DOWN'}};
+ const down={...signal,marketTicker:'BTC-R2',roundId:'BTC-R2',forecast:{consensus:'DOWN'}};
  const r=paperEntry({signal:down,quote:{ticker:'BTC-R2',yesAskDollars:.9,noAskDollars:.2,asOfMs:99000},stakeDollars:5,feesDollars:0,nowMs:100000});
  assert.equal(r.status,'PAPER_OPEN');assert.equal(r.position.side,'DOWN');assert.equal(r.position.quantity,25);
  const e=paperExit({position:r.position,quote:{ticker:'BTC-R2',yesBidDollars:.1,noBidDollars:.4,asOfMs:100001},feesDollars:0,nowMs:101000});
