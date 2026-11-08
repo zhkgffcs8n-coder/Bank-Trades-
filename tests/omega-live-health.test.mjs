@@ -74,3 +74,18 @@ test('OMEGA external provider activity requires two distinct fresh successful ch
  assert.equal(omegaLiveHealth(heartbeat,now,{...omega,providerStatus:[successful[0],stale]}).omegaExternalProvidersRunning,false);
  assert.equal(omegaLiveHealth(heartbeat,now,{...omega,checkedAt:new Date(now-180000).toISOString()}).omegaExternalProvidersRunning,false);
 });
+
+test('malformed persisted provider diagnostics do not crash public OMEGA health',()=>{
+ const checkedAt=new Date(now-1000).toISOString();
+ const omega={checkedAt,status:'SHADOW_RESEARCH',providersConfigured:2,providerStatus:[
+  null,false,'corrupt',[],{provider:'claude',status:'RESEARCH_FORECAST',checkedAt},
+  {provider:'gpt',status:'PROVIDER_ERROR',checkedAt,httpStatus:429}
+ ]};
+ const result=omegaLiveHealth(heartbeat,now,omega);
+ assert.equal(result.status,'COLLECTOR_FRESH');
+ assert.equal(result.omegaLiveResearchRunning,true);
+ assert.equal(result.omegaExternalProvidersRunning,false);
+ assert.equal(result.omegaProviderStatus.length,2);
+ assert.deepEqual(result.omegaProviderStatus.map(x=>x.provider),['claude','gpt']);
+ assert.equal(result.realOrdersAuthorized,false);
+});
