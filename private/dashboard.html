@@ -509,9 +509,30 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=13"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=alerts-persist-20261102"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=11-layout"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=primal-race-20261101-2"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
+</script><script defer src="/kaibot.js?v=13"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=alerts-persist-20261102"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=11-layout-2"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=primal-race-20261101-2"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
+const feedKey='banktrades:verified-alert-feed-v1';
+function readCommandHistory(){
+ try{const saved=JSON.parse(localStorage.getItem(feedKey)||'[]');return Array.isArray(saved)?saved:[]}catch{return []}
+}
+function renderCommandHistory(feed){
+let feedPanel=document.getElementById('btVerifiedAlertFeed');
+if(!feedPanel){feedPanel=document.createElement('section');feedPanel.id='btVerifiedAlertFeed';feedPanel.style.cssText='margin:12px 0;padding:12px;border:1px solid #334155;border-radius:12px;background:#101e30;color:#e2e8f0';strip.insertAdjacentElement('afterend',feedPanel);}
+const historyScroll=feedPanel.querySelector('.bt-command-history')?.scrollTop||0;
+feedPanel.replaceChildren();
+const feedTitle=document.createElement('strong');feedTitle.textContent='⚡ LIVE CALL & FLIP HISTORY · '+feed.length+' events';feedPanel.append(feedTitle);
+const note=document.createElement('div');note.style.cssText='font-size:11px;opacity:.75;margin:5px 0';note.textContent='Only observed signal changes are recorded. EARLY forecasts are not qualified BUY entries. Alerts are visible while this page is open.';feedPanel.append(note);
+const historyList=document.createElement('div');
+historyList.className='bt-command-history';
+historyList.tabIndex=0;
+historyList.setAttribute('role','region');
+historyList.setAttribute('aria-label','Live call and flip history events');
+for(const event of feed){const line=document.createElement('div');line.textContent=new Date(event.at).toLocaleTimeString()+' · '+event.asset+' · '+event.type+' · '+event.detail;historyList.append(line)}
+feedPanel.append(historyList);
+historyList.scrollTop=historyScroll;
+}
+renderCommandHistory(readCommandHistory());
 let busy=false,previousFallback=false;
 const cents=(m,side)=>{const dollars=m?.[side+'_dollars'];if(dollars!=null&&Number.isFinite(Number(dollars)))return Number(dollars)*100;const raw=m?.[side];return raw!=null&&Number.isFinite(Number(raw))?Number(raw):null};
 async function recover(){
@@ -582,20 +603,7 @@ tbody.append(tr);if(m)open++;
 }
 previousFallback=true;
 try{sessionStorage.setItem('banktrades:previous-round-calls-v1',JSON.stringify(nextPrevious));localStorage.setItem(feedKey,JSON.stringify(feed))}catch{}
-let feedPanel=document.getElementById('btVerifiedAlertFeed');
-if(!feedPanel){feedPanel=document.createElement('section');feedPanel.id='btVerifiedAlertFeed';feedPanel.style.cssText='margin:12px 0;padding:12px;border:1px solid #334155;border-radius:12px;background:#101e30;color:#e2e8f0';strip.insertAdjacentElement('afterend',feedPanel);}
-const historyScroll=feedPanel.querySelector('.bt-command-history')?.scrollTop||0;
-feedPanel.replaceChildren();
-const feedTitle=document.createElement('strong');feedTitle.textContent='⚡ LIVE CALL & FLIP HISTORY · '+feed.length+' events';feedPanel.append(feedTitle);
-const note=document.createElement('div');note.style.cssText='font-size:11px;opacity:.75;margin:5px 0';note.textContent='Only observed signal changes are recorded. EARLY forecasts are not qualified BUY entries. Alerts are visible while this page is open.';feedPanel.append(note);
-const historyList=document.createElement('div');
-historyList.className='bt-command-history';
-historyList.tabIndex=0;
-historyList.setAttribute('role','region');
-historyList.setAttribute('aria-label','Live call and flip history events');
-for(const event of feed){const line=document.createElement('div');line.textContent=new Date(event.at).toLocaleTimeString()+' · '+event.asset+' · '+event.type+' · '+event.detail;historyList.append(line)}
-feedPanel.append(historyList);
-historyList.scrollTop=historyScroll;
+renderCommandHistory(feed);
 strip.textContent=open+' Kalshi contracts received · '+(signals.length?'Primal response received':'Primal '+signalError);
 badge.textContent=signals.length?'● FALLBACK LIVE DATA':'● QUOTES ONLY · PRIMAL UNAVAILABLE';
 let trainingLine=document.getElementById('btTrainingHealth');

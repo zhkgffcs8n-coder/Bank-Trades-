@@ -590,6 +590,8 @@ function mountScalper(){
       {transform:'rotate(-12deg) scale(1)'}
     ],{duration:1800,iterations:Infinity,easing:'ease-in-out'});
   }
+  const signalNotice=feed.nextElementSibling;
+  if(signalNotice?.classList.contains('notice')&&signalNotice.nextElementSibling?.id==='liveTerminal')row.before(signalNotice);
   row.append(feed,picker,box,scalper);
   paintCoin();
   return true;
