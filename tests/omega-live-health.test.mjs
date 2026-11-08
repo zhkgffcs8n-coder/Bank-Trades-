@@ -138,3 +138,17 @@ test('future or missing paper action timestamps cannot publish realized profit',
  assert.equal(exit.paperLastActionNetDollars,-.42);
  assert.equal(exit.realOrdersAuthorized,false);
 });
+
+
+test('settlement heartbeat alone never publishes independently unverified paper profit',()=>{
+ const settled={action:'PAPER_SETTLED',updatedAtMs:now-1000,netDollars:12.34,
+  ticker:'KXBTC15M-UNRECONCILED',officiallySettled:true,realOrdersAuthorized:false};
+ const result=omegaLiveHealth(heartbeat,now,null,settled);
+ assert.equal(result.paperLastAction,'PAPER_SETTLED');
+ assert.equal(result.paperLastActionAtMs,now-1000);
+ assert.equal(result.paperLastActionNetDollars,null,
+  'a self-reported settlement marker is not independent official outcome evidence');
+ const simulatedExit=omegaLiveHealth(heartbeat,now,null,{...settled,action:'PAPER_EXIT',netDollars:-.42});
+ assert.equal(simulatedExit.paperLastActionNetDollars,-.42);
+ assert.equal(result.realOrdersAuthorized,false);
+});
