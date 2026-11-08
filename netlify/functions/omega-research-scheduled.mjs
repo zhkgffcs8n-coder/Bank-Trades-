@@ -1,6 +1,7 @@
 // Scheduled, server-side OMEGA shadow research over the existing Kalshi collector.
 // At most two configured providers and one asset per minute to bound API spending.
 // Research is stored before settlement; no real or paper orders are executed.
+import {randomUUID} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
 import {runOmegaResearchRound} from '../../src/omega-orchestrator.mjs';
 import {omegaProviderStatus} from '../../src/omega-provider-adapters.mjs';
@@ -103,14 +104,24 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   // Persist the prospective forecast before attempting simulated execution.
   if(result.status==='SHADOW_RESEARCH'&&latest.expiresAt>report.recordedAtMs){
    const key='omega/predictions/v1/'+observation.marketTicker+'/'+minute;
-   await db.setJSON(key,report,{onlyIfNew:true});
-   const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs:clock(),fetchImpl});
-   const executionAtMs=clock();
-   if(quote&&executionAtMs<latest.expiresAt){
-    const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,
-     signal:omegaPaperSignal(result,quote),quote,nowMs:executionAtMs});
-    report.paperStatus=paper.status;
-   }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
+   // The immutable prospective forecast must be durably visible before paper
+   // execution. A duplicate scheduled invocation must not trade against its
+   // new, unrecorded forecast if another invocation already froze this minute.
+   const frozen={...report,freezeId:randomUUID()};
+   await db.setJSON(key,frozen,{onlyIfNew:true});
+   const persisted=await db.get(key,{type:'json'});
+   if(persisted?.freezeId!==frozen.freezeId||persisted?.ticker!==frozen.ticker||
+    persisted?.recordedAtMs!==frozen.recordedAtMs){
+    report.paperStatus='FORECAST_NOT_NEWLY_PERSISTED';
+   }else{
+    const quote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs:clock(),fetchImpl});
+    const executionAtMs=clock();
+    if(quote&&executionAtMs<latest.expiresAt){
+     const paper=await advanceOmegaPaperStored({db,ticker:observation.marketTicker,roundId:observation.roundId,
+      signal:omegaPaperSignal(result,quote),quote,nowMs:executionAtMs});
+     report.paperStatus=paper.status;
+    }else report.paperStatus='NO_FRESH_EXECUTABLE_QUOTE';
+   }
   }
  }
  // Keep the last actual provider check visible on runs that skip forecasts.
