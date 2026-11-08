@@ -197,3 +197,27 @@ test('a newly frozen, read-back verified forecast can still open paper-only entr
  assert.equal(db.values.get('omega/paper/v1/'+sample.ticker).state.positions[sample.ticker].status,'OPEN');
  assert.equal(db.values.get('omega/paper/latest').realOrdersAuthorized,false);
 });
+
+test('malformed previous provider heartbeat cannot interrupt paper position monitoring',async()=>{
+ const ticker=sample.ticker;
+ for(const providerStatus of [{invalid:'object'},[null,{status:'FAILED'},42]]){
+  const state={positions:{[ticker]:{status:'OPEN',roundId:ticker,side:'YES',entryCostDollars:2.25}},entered:{}};
+  const data=new Map([
+   ['latest/'+asset,sample],
+   ['omega/heartbeat',{providerStatus}],
+   ['omega/paper/v1/'+ticker,{state}]
+  ]);
+  const db={get:async key=>data.get(key)??null,setJSON:async(key,value)=>data.set(key,value)};
+  let quoteRequests=0;
+  const report=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl:async()=>{
+   quoteRequests++;return {ok:false};
+  }});
+  assert.equal(report.status,'PROVIDERS_UNCONFIGURED');
+  assert.equal(report.paperMonitoring.open,1);
+  assert.equal(report.paperMonitoring.unpriced,1);
+  assert.equal(quoteRequests,1);
+  assert.deepEqual(report.providerStatus,[]);
+  assert.equal(data.get('omega/paper/v1/'+ticker).state.positions[ticker].status,'OPEN');
+  assert.equal(data.get('omega/heartbeat').ordersAuthorized,false);
+ }
+});
