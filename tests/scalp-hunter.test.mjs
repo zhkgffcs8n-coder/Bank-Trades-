@@ -27,3 +27,14 @@ test('learns executable one-percent entries only from distinct completed rounds'
  assert.equal(scoreScalpHunter(pending,exit)[0].status,'INSUFFICIENT_EXIT_DEPTH');
  assert.equal(scoreScalpHunter(pending,{...exit,ticker:'OTHER'}).length,0);
 });
+
+test('learning accepts collector jitter without reading observations at or after prediction time',()=>{
+ const ticker='JITTER';
+ const entry=observeScalpHunter([],setup(ticker,10000),quote(ticker,10000));
+ const tape=observeScalpHunter(entry,setup(ticker,68000),quote(ticker,68000));
+ assert.equal(Object.keys(learnScalpHunter(tape,68000)).length,0);
+ assert.ok(Object.keys(learnScalpHunter(tape,68001)).length>0);
+ const checks={};
+ forecastScalpHunter(setup(ticker,10000),quote(ticker,10000),{},checks);
+ assert.ok(checks.A.some(check=>check.reason==='INSUFFICIENT_COMPARABLE_ROUNDS'));
+});

@@ -133,7 +133,9 @@ export default async()=>{
   if(!d)throw Error('Kalshi series list unavailable');
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
   const selection=selectEligibleRound(markets,now);
-  if(!selection){await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:markets.length?'No eligible contract with executable binary quote':'No verified open contract'});return;}
+  if(!selection){
+   await db.setJSON('scalp-hunter/diagnostics/'+asset,{at:Date.now(),stage:markets.length?'NO_EXECUTABLE_CONTRACT':'NO_OPEN_CONTRACT'});
+   await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:markets.length?'No eligible contract with executable binary quote':'No verified open contract'});return;}
   const {market:m,yesBid,yesAsk,noBid,noAsk}=selection;
   const record={asset,ticker:m.ticker,t:bucket,observedAt:Date.now(),expiresAt:m._expiry,yesBid,yesAsk,noBid,noAsk,yesMid:(yesBid+yesAsk)/2,spread:Math.max(yesAsk-yesBid,noAsk-noBid),source:'Kalshi public API scheduled sample'};
   // Include the contract ticker in the immutable sample key. Two contracts
@@ -197,10 +199,13 @@ export default async()=>{
       const tapeKey='scalp-hunter/tape/'+asset;
       const tape=await db.get(tapeKey,{type:'json'})||[];
       const profile=learnScalpHunter(tape,snapshot.at);
-      const ideas=forecastScalpHunter(snapshot,depth,profile);
-      await db.setJSON(diagnosticsKey,{at:snapshot.at,ticker:m.ticker,stage:'EVALUATED',
+      const checks={};
+      const ideas=forecastScalpHunter(snapshot,depth,profile,checks);
+      const assessment={at:snapshot.at,ticker:m.ticker,stage:'EVALUATED',
        samples:tape.length,profileCells:Object.keys(profile).length,
-       matureCells:Object.values(profile).filter(cell=>cell.n>=12).length,qualified:hunterEngines.filter(name=>ideas[name])});
+       matureCells:Object.values(profile).filter(cell=>cell.n>=12).length,qualified:hunterEngines.filter(name=>ideas[name]),checks};
+      await db.setJSON(diagnosticsKey,assessment);
+      await db.setJSON('scalp-hunter/assessments/'+m.ticker+'/'+bucket,assessment,{onlyIfNew:true});
       if(Object.values(ideas).some(Boolean)){
        const positions=open||{};
        for(const name of hunterEngines){

@@ -1,6 +1,7 @@
 import {modeledCost} from './scalper-v8.mjs';
 
 const horizons=[60,120];
+const sampleJitterMs=5000;
 const sides=['UP','DOWN'];
 const names=['A','B','C'];
 const key=(name,side,ask,horizon)=>[name,side,Math.min(9,Math.floor(ask*10)),horizon].join('/');
@@ -40,7 +41,7 @@ export function learnScalpHunter(tape,asOf){
     let exit;
     for(let next=index+1;next<known.length&&known[next].at<=target+30000;next++){
      const row=known[next];
-     if(row.ticker===entry.ticker&&row.at>=target&&row.at<entry.expiresAt){exit=row;break;}
+     if(row.ticker===entry.ticker&&row.at>=target-sampleJitterMs&&row.at<entry.expiresAt){exit=row;break;}
     }
     if(!exit)continue;
     const quote=leg(exit,side);
@@ -62,18 +63,27 @@ export function learnScalpHunter(tape,asOf){
  }));
 }
 
-export function forecastScalpHunter(snapshot,depth,profile){
+export function forecastScalpHunter(snapshot,depth,profile,diagnostics={}){
  if(!snapshot||!depth||snapshot.at!==depth.at||snapshot.imbalance===null)return {};
  return Object.fromEntries(names.map(name=>{
+  const checks=diagnostics[name]=[];
   const ideas=sides.flatMap(side=>{
    const ask=setup(snapshot,depth,name,side);
-   if(ask===null)return [];
+   if(ask===null){checks.push({side,reason:'NO_EXECUTABLE_SETUP'});return [];}
    return horizons.flatMap(horizon=>{
     const sample=profile[key(name,side,ask,horizon)];
-    if(!sample||sample.n<12||sample.meanNet<=.015||sample.wins/sample.n<.65||
-       !Number.isFinite(sample.meanMove)||snapshot.expiresAt-snapshot.at<(horizon+30)*1000)return [];
+    const evidence={side,ask,horizonSeconds:horizon,sampleSize:sample?.n??0};
+    let reason;
+    if(snapshot.expiresAt-snapshot.at<(horizon+30)*1000)reason='INSUFFICIENT_TIME';
+    else if(!sample||sample.n<12)reason='INSUFFICIENT_COMPARABLE_ROUNDS';
+    else if(sample.meanNet<=.015||sample.wins/sample.n<.65||!Number.isFinite(sample.meanMove))
+     reason='INSUFFICIENT_HISTORICAL_EDGE';
+    if(reason){checks.push({...evidence,reason});return [];}
     const target=Math.min(.99,ask+sample.meanMove);
-    if(target-ask-modeledCost(ask)-modeledCost(target)<=.015)return [];
+    if(target-ask-modeledCost(ask)-modeledCost(target)<=.015){
+     checks.push({...evidence,reason:'INSUFFICIENT_NET_TARGET'});return [];
+    }
+    checks.push({...evidence,reason:'QUALIFIED'});
     return [{side,ask,target,horizonSeconds:horizon,observedHitRate:sample.wins/sample.n,
      sampleSize:sample.n,estimatedNet:sample.meanNet,mode:'SHADOW_ONLY'}];
    });
@@ -87,7 +97,7 @@ export function scoreScalpHunter(tape,exit){
   .flatMap(entry=>Object.entries(entry.ideas||{}).flatMap(([name,idea])=>{
    if(!idea)return [];
    const targetAt=entry.at+idea.horizonSeconds*1000;
-   if(exit.at<targetAt||exit.at>targetAt+30000)return [];
+   if(exit.at<targetAt-sampleJitterMs||exit.at>targetAt+30000)return [];
    const quote=leg(exit,idea.side);
    const bid=quote.size>=1?quote.price:null;
    return [{ticker:entry.ticker,name,entryAt:entry.at,observedAt:exit.at,bid,idea,
