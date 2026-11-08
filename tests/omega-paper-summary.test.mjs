@@ -13,12 +13,15 @@ function record(ticker,overrides={}){
  const p={ticker,roundId:ticker,side:'UP',status:'OPEN',quantity:2,entryCostDollars:1.1,openedAtMs:1000,...overrides};
  return ['omega/paper/v1/'+ticker,{state:{positions:{[ticker]:p}}}];
 }
+const official=(ticker,result,settledAtMs)=>['outcomes/'+ticker,{ticker,result,
+ verification:SETTLEMENT_VERIFICATION,settledAt:new Date(settledAtMs).toISOString()}];
 test('read-only OMEGA accounting separates open, simulated exits and official settlements',async()=>{
  const db=store([
   record('BTC-OPEN'),
   record('BTC-CLOSED',{status:'CLOSED',closedAtMs:2000,netDollars:-.2}),
   record('BTC-SETTLED',{status:'SETTLED',settledAtMs:3000,netDollars:.9,
-   payoutDollars:2,outcome:'yes',settlementVerification:SETTLEMENT_VERIFICATION})
+   payoutDollars:2,outcome:'yes',settlementVerification:SETTLEMENT_VERIFICATION}),
+  official('BTC-SETTLED','yes',3000)
  ]);
  const r=await summarizeOmegaPaper(db);
  assert.equal(r.status,'COMPLETE_INSPECTED_ARCHIVE');
@@ -108,6 +111,7 @@ test('future-dated OMEGA paper events cannot count as realized PnL',async()=>{
   record('BTC-FUTURE-EXIT',{status:'CLOSED',closedAtMs:6000,netDollars:.5}),
   record('BTC-FUTURE-SETTLE',{status:'SETTLED',settledAtMs:6000,netDollars:.9,
    payoutDollars:2,outcome:'yes',settlementVerification:SETTLEMENT_VERIFICATION}),
+  official('BTC-FUTURE-SETTLE','yes',6000),
   record('BTC-VALID-EXIT',{status:'CLOSED',closedAtMs:3000,netDollars:.5})
  ]);
  const r=await summarizeOmegaPaper(db,{nowMs:5000});
@@ -128,4 +132,27 @@ test('OMEGA accounting rejects invalid report clocks',async()=>{
  const r=await summarizeOmegaPaper(db,{nowMs:5000});
  assert.equal(r.status,'COMPLETE_INSPECTED_ARCHIVE');
  assert.equal(r.realizedNetDollars,.5);
+});
+
+test('OMEGA settlement accounting requires independently stored matching official outcomes',async()=>{
+ const ticker='BTC-OFFICIAL',position=record(ticker,{status:'SETTLED',settledAtMs:3000,
+  outcome:'yes',payoutDollars:2,netDollars:.9,settlementVerification:SETTLEMENT_VERIFICATION});
+ for(const labels of [
+  [],
+  [official(ticker,'no',3000)],
+  [official(ticker,'yes',4000)],
+  [['outcomes/'+ticker,{ticker,result:'yes',verification:'UNVERIFIED',settledAt:new Date(3000).toISOString()}]],
+  [['outcomes/'+ticker,{ticker:'OTHER',result:'yes',verification:SETTLEMENT_VERIFICATION,settledAt:new Date(3000).toISOString()}]]
+ ]){
+  const r=await summarizeOmegaPaper(store([position,...labels]),{nowMs:5000});
+  assert.equal(r.invalidPositions,1);
+  assert.equal(r.officiallySettledPositions,0);
+  assert.equal(r.realizedNetDollars,null);
+  assert.equal(r.status,'INCOMPLETE_PAPER_HISTORY');
+  assert.equal(r.ordersAuthorized,false);
+ }
+ const valid=await summarizeOmegaPaper(store([position,official(ticker,'yes',3000)]),{nowMs:5000});
+ assert.equal(valid.invalidPositions,0);
+ assert.equal(valid.officiallySettledPositions,1);
+ assert.equal(valid.realizedNetDollars,.9);
 });
