@@ -2,7 +2,7 @@
 // No Kalshi order APIs, no owner credentials, no fabricated live fills.
 import {getStore} from '@netlify/blobs';
 import {blobWindow} from '../../src/blob-window.mjs';
-import {SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
+import {SETTLEMENT_VERIFICATION,trustedStoredFinalizedOutcome} from '../../src/official-settlement.mjs';
 
 const validMoney=x=>typeof x==='number'&&Number.isFinite(x);
 const validTime=x=>Number.isSafeInteger(x)&&x>0;
@@ -40,13 +40,21 @@ export async function summarizeOmegaPaper(db,{limit=80,nowMs=Date.now()}={}){
    p.netDollars>p.quantity-p.entryCostDollars+.00011||
    p.netDollars< -p.entryCostDollars-.05011
   )){invalid++;continue;}
-  if(p.status==='SETTLED'&&(
-   p.settlementVerification!==SETTLEMENT_VERIFICATION||
-   !['yes','no'].includes(p.outcome)||!validMoney(p.payoutDollars)||
-   p.payoutDollars!==((p.side==='UP'&&p.outcome==='yes')||
-    (p.side==='DOWN'&&p.outcome==='no')?p.quantity:0)||
-   Math.abs(p.netDollars-(p.payoutDollars-p.entryCostDollars))>.00011
-  )){invalid++;continue;}
+  if(p.status==='SETTLED'){
+   // A copied verification marker in a paper position is not independent
+   // settlement evidence. Require the separately persisted official outcome
+   // to agree on ticker, result and settlement timestamp before counting P&L.
+   const official=await db.get('outcomes/'+ticker,{type:'json'});
+   const officialAt=Date.parse(official?.settledAt||'');
+   if(p.settlementVerification!==SETTLEMENT_VERIFICATION||
+    trustedStoredFinalizedOutcome(official,ticker)!==p.outcome||
+    !Number.isSafeInteger(officialAt)||officialAt!==at||
+    !validMoney(p.payoutDollars)||
+    p.payoutDollars!==((p.side==='UP'&&p.outcome==='yes')||
+     (p.side==='DOWN'&&p.outcome==='no')?p.quantity:0)||
+    Math.abs(p.netDollars-(p.payoutDollars-p.entryCostDollars))>.00011
+   ){invalid++;continue;}
+  }
   if(p.status==='SETTLED')officiallySettled++;
   else closed++;
   events.push({ticker,at,net:p.netDollars});
