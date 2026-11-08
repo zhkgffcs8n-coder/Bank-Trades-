@@ -35,7 +35,10 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
   body={contents:[{parts:[{text:instruction+'\n'+message}]}],generationConfig:{responseMimeType:'application/json',temperature:0}};
  }else if(provider==='claude'){
   headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';
-  body={model:cfg.model,max_tokens:256,system:instruction,messages:[{role:'user',content:message}]};
+  body={model:cfg.model,max_tokens:256,system:instruction,messages:[{role:'user',content:message}],
+   output_config:{format:{type:'json_schema',schema:{
+    type:'object',properties:{upProbability:{type:'number'}},required:['upProbability'],additionalProperties:false
+   }}}};
  }else{
   headers.authorization='Bearer '+key;
   body={model:cfg.model,temperature:0,max_tokens:100,messages:[{role:'system',content:instruction},{role:'user',content:message}]};
@@ -51,6 +54,9 @@ export async function fetchOmegaResearchForecast({provider,marketTicker,roundId,
    return {status:'PROVIDER_ERROR',provider,httpStatus:response.status,...(known.includes(reason)?{errorCode:reason}:known.includes(code)?{errorCode:code}:{})};
   }
   const data=await response.json();
+  if(provider==='claude'&&['refusal','max_tokens'].includes(data?.stop_reason)){
+   return {status:'INVALID_RESPONSE',provider,errorCode:data.stop_reason==='refusal'?'CLAUDE_REFUSAL':'CLAUDE_TRUNCATED'};
+  }
   const raw=provider==='gemini'?data?.candidates?.[0]?.content?.parts?.filter(p=>typeof p.text==='string'&&p.thought!==true).map(p=>p.text).join(''):
    provider==='claude'?data?.content?.filter(p=>p.type==='text').map(p=>p.text).join(''):data?.choices?.[0]?.message?.content;
   if(typeof raw!=='string'||raw.length>2000)return {status:'INVALID_RESPONSE',provider};

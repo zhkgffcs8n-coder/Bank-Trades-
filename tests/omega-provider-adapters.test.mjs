@@ -38,3 +38,16 @@ test('Gemini credentials stay out of URLs and recognized API failure reasons are
  }});
  assert.equal(result.errorCode,'API_KEY_INVALID');assert.ok(!JSON.stringify(result).includes('secret'));
 });
+
+test('Claude requests structured forecasts and rejects refusal or truncated responses',async()=>{
+ for(const [reason,errorCode] of [['refusal','CLAUDE_REFUSAL'],['max_tokens','CLAUDE_TRUNCATED'],['end_turn',null]]){
+  const result=await fetchOmegaResearchForecast({...base,provider:'claude',env:{ANTHROPIC_API_KEY:'test'},fetchImpl:async(url,options)=>{
+   const format=JSON.parse(options.body).output_config.format;
+   assert.equal(format.type,'json_schema');
+   assert.deepEqual(format.schema.required,['upProbability']);
+   return {ok:true,json:async()=>({stop_reason:reason,content:[{type:'text',text:'{"upProbability":0.62}'}]})};
+  }});
+  assert.equal(result.status,errorCode?'INVALID_RESPONSE':'RESEARCH_FORECAST');
+  assert.equal(result.errorCode,errorCode??undefined);
+ }
+});
