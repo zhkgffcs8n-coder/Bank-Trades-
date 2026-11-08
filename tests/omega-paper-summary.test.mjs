@@ -100,3 +100,32 @@ test('a valid zero-proceeds paper exit includes its fixed exit fee',async()=>{
  assert.equal(r.realizedNetDollars,-1.15);
  assert.equal(r.maxRealizedDrawdownDollars,1.15);
 });
+
+
+test('future-dated OMEGA paper events cannot count as realized PnL',async()=>{
+ const db=store([
+  record('BTC-FUTURE-OPEN',{openedAtMs:6000}),
+  record('BTC-FUTURE-EXIT',{status:'CLOSED',closedAtMs:6000,netDollars:.5}),
+  record('BTC-FUTURE-SETTLE',{status:'SETTLED',settledAtMs:6000,netDollars:.9,
+   payoutDollars:2,outcome:'yes',settlementVerification:SETTLEMENT_VERIFICATION}),
+  record('BTC-VALID-EXIT',{status:'CLOSED',closedAtMs:3000,netDollars:.5})
+ ]);
+ const r=await summarizeOmegaPaper(db,{nowMs:5000});
+ assert.equal(r.invalidPositions,3);
+ assert.equal(r.simulatedBidExits,1);
+ assert.equal(r.officiallySettledPositions,0);
+ assert.equal(r.status,'INCOMPLETE_PAPER_HISTORY');
+ assert.equal(r.realizedNetDollars,null);
+ assert.equal(r.maxRealizedDrawdownDollars,null);
+ assert.equal(r.ordersAuthorized,false);
+});
+
+test('OMEGA accounting rejects invalid report clocks',async()=>{
+ const db=store([record('BTC-VALID-EXIT',{status:'CLOSED',closedAtMs:3000,netDollars:.5})]);
+ for(const nowMs of [0,-1,NaN,Infinity,'5000',1.5]){
+  await assert.rejects(summarizeOmegaPaper(db,{nowMs}),/Invalid paper accounting time/);
+ }
+ const r=await summarizeOmegaPaper(db,{nowMs:5000});
+ assert.equal(r.status,'COMPLETE_INSPECTED_ARCHIVE');
+ assert.equal(r.realizedNetDollars,.5);
+});
