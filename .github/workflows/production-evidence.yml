@@ -1,0 +1,37 @@
+name: Independent production evidence snapshot
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '37 * * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-evidence.yml'
+      - 'scripts/probe-production-evidence.mjs'
+      - 'tests/production-evidence-probe.test.mjs'
+permissions:
+  contents: read
+concurrency:
+  group: production-evidence
+  cancel-in-progress: true
+jobs:
+  read-only-probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Regression tests for fail-closed evidence reporting
+        run: node --test tests/production-evidence-probe.test.mjs
+      - name: Capture public Netlify read-only evidence
+        run: node scripts/probe-production-evidence.mjs
+      - name: Retain sanitized snapshot for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-evidence-snapshot
+          path: evidence/production-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
