@@ -34,7 +34,12 @@ export function predatorObservation({ticker,now,bookAt,remaining,yes,no,trades,m
 }
 
 export function openPredatorWatch(observation){
- if(!observation?.early)return null;
+ // A research watch must originate from a fresh, causally available book.
+ // predatorObservation tolerates up to 4s for general monitoring, but a
+ // prospective early-entry watch must meet the stricter 1.5s entry gate.
+ if(!observation?.early||!Number.isSafeInteger(observation.now)||
+  !Number.isSafeInteger(observation.bookAt)||observation.bookAt>observation.now||
+  observation.now-observation.bookAt>1500)return null;
  const {side,now,ticker}=observation;
  const ask=askFor(observation,side);
  if(!(ask>0&&ask<1))return null;
