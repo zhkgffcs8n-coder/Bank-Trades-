@@ -13,7 +13,8 @@ export function openHunterPaper(name,snapshot,idea,depth){
 export function monitorHunterPaper(position,depth){
  if(position.closedAt||!depth||depth.ticker!==position.ticker||depth.at<=position.lastAt||depth.at>=position.expiresAt)return position;
  const level=position.side==='UP'?depth.yes:depth.no;
- if(!level||level.size<1)return position;
+ if(!level||!Number.isFinite(depth.at)||!Number.isFinite(level.size)||level.size<1||
+  !Number.isFinite(level.price)||level.price<=0||level.price>=1)return position;
  const bid=level.price;
  const exitCost=modeledCost(bid);
  const net=bid-position.ask-position.entryCost-exitCost;
