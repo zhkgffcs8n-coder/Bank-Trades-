@@ -23,6 +23,48 @@ test('unconfigured providers do not create invented predictions',async()=>{
  assert.equal(data.get('omega/heartbeat').ordersAuthorized,false);
  assert.equal([...data.keys()].some(x=>x.startsWith('omega/predictions/')),false);
 });
+test('missing rotating asset uses a valid next asset without forcing a paper entry',async()=>{
+ const assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
+ const fallback=assets[(assets.indexOf(asset)+1)%assets.length];
+ const alternate={...sample,asset:fallback,ticker:'KXFALLBACK15M-TEST'};
+ const data=new Map([['latest/'+fallback,alternate]]);
+ const db={get:async key=>data.get(key)??null,setJSON:async(key,value)=>data.set(key,value)};
+ const report=await runOmegaScheduled({nowMs:now,db,env:{},fetchImpl:async()=>{throw Error('No provider or quote request expected')}});
+ assert.equal(report.asset,fallback);
+ assert.equal(report.status,'PROVIDERS_UNCONFIGURED');
+ assert.equal(report.observationGate,'COLLECTOR_SAMPLE_VALID');
+ assert.equal([...data.keys()].some(key=>key.startsWith('omega/predictions/')),false);
+ assert.equal(report.ordersAuthorized,false);
+});
+
+test('fallback still requires independent live quote and freezes only one prospective market',async()=>{
+ const assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
+ const first=assets[(assets.indexOf(asset)+1)%assets.length];
+ const second=assets[(assets.indexOf(asset)+2)%assets.length];
+ const alternate={...sample,asset:first,ticker:'KXFALLBACK15M-TEST'};
+ const later={...sample,asset:second,ticker:'KXSECOND15M-TEST'};
+ const data=new Map([['latest/'+first,alternate],['latest/'+second,later]]);
+ const db={get:async key=>data.get(key)??null,setJSON:async(key,value,opts={})=>{
+  if(opts.onlyIfNew&&data.has(key))return;data.set(key,value);
+ }};
+ let providerCalls=0,marketCalls=0;
+ const report=await runOmegaScheduled({nowMs:now,db,env:{OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'},
+  fetchImpl:async url=>{
+   if(url.includes('/markets/')){marketCalls++;return {ok:true,json:async()=>({market:{
+    ticker:alternate.ticker,status:'active',yes_bid:45,yes_ask:50,no_bid:50,no_ask:55
+   }})};}
+   providerCalls++;return {ok:true,json:async()=>({choices:[{message:{content:'{"upProbability":0.6}'}}]})};
+  }});
+ assert.equal(report.asset,first);
+ assert.equal(report.status,'SHADOW_RESEARCH');
+ assert.equal(report.observationGate,'INDEPENDENT_QUOTE_VERIFIED');
+ assert.equal(providerCalls,2);
+ assert.ok(marketCalls>=1);
+ assert.equal([...data.keys()].filter(key=>key.startsWith('omega/predictions/')).length,1);
+ assert.equal([...data.keys()].some(key=>key.includes(later.ticker)),false);
+ assert.equal(report.ordersAuthorized,false);
+});
+
 test('configured providers produce stored pre-settlement shadow research',async()=>{
  const data=new Map([['latest/'+asset,sample]]);
  const db={get:async key=>data.get(key)||null,setJSON:async(key,value)=>{data.set(key,value)}};
