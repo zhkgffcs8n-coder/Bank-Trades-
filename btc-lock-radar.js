@@ -901,10 +901,10 @@ function scalp(market,left,side,strong,quotes){
     else if(side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
   }
   if(tracked.exit&&tracked.exitBid==null)tracked.exitBid=quote.bid;
-  const displayedBid=tracked.exitBid??quote.bid;
-  const displayedMove=displayedBid-tracked.entry;
+  const liveMove=move.toFixed(1);
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
-  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · '+(tracked.exit?'Exit bid ':'Bid ')+displayedBid.toFixed(1)+'% · Move '+(displayedMove>=0?'+':'')+displayedMove.toFixed(1)+' pts',tracked.exit?tracked.side:null);
+  const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
+  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null);
 }
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');
 const directions=new Map();
@@ -982,5 +982,6 @@ refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
 refreshPredatorReport();setInterval(refreshPredatorReport,2000);
 setInterval(()=>{if(!document.hidden){paintV8();paintSuperTracker();refreshSuperTracker();}},5000);
-evaluate();setInterval(()=>{if(!document.hidden)evaluate()},30000);
+evaluate();setInterval(()=>{if(!document.hidden&&selectedCoin==='BTC')evaluate()},5000);
+setInterval(()=>{if(!document.hidden&&selectedCoin!=='BTC')evaluate()},30000);
 })();
