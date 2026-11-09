@@ -218,6 +218,7 @@ function currentScalpBid(coin,position,now){
  return level?.size>=1&&level.price>0&&level.price<1?level.price:null;
 }
 const scalpNet=(position,bid)=>bid-position.ask-(position.entryCost??modeledScalpCost(position.ask))-modeledScalpCost(bid);
+let sharedScalpCall=null;
 function paintV8(){
  const shared=sharedV8.find(row=>row.asset===selectedCoin);
  const snapshot=shared?.v8;
@@ -293,6 +294,15 @@ function paintV8(){
    if(paperValid&&Number.isFinite(position.peakBid))detail.textContent+=' · best bid '+trackerPrice(position.peakBid);
    if(!closed&&Number.isFinite(position.peakNet??position.peak))
     detail.textContent+=' · peak net '+trackerNet(position.peakNet??position.peak);
+  }
+  if(sharedScalpCall?.coin===selectedCoin&&Date.now()-sharedScalpCall.at<=5000){
+   detail.textContent+=' · Shared scalper reference: '+sharedScalpCall.label+' · '+sharedScalpCall.ticker;
+   if(!validPosition){
+    action=sharedScalpCall.label;
+    tone=sharedScalpCall.tone;
+    icon='◈';
+    mode='REFERENCE';
+   }
   }
   const label=icon+' '+action+(mode?' · '+mode:'');
   const badgeKey=[selectedCoin,position?.ticker??shared?.ticker,label].join('/');
@@ -855,11 +865,12 @@ if(!mountScalper()){
 }
 
 const positions=new Map();
-function showScalp(message,exitSide){
+function showScalp(message,exitSide,ticker){
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
   const detail=separator<0?'':message.slice(separator+3);
   const label=exitSide?action+' '+exitSide.toUpperCase():action;
+  sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
   if(scalpLabel.textContent!==label){
     const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
       :action.startsWith('HOLD')?'hold':action==='TAKE PROFIT'?'profit':action==='SELL FAST'?'fast'
@@ -904,7 +915,7 @@ function scalp(market,left,side,strong,quotes){
   const liveMove=move.toFixed(1);
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
-  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null);
+  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
 }
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');
 const directions=new Map();
