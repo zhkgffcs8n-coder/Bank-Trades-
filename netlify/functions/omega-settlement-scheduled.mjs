@@ -23,7 +23,10 @@ export async function scoreOmegaArchive(db,{nowMs=Date.now()}={}){
     !Number.isSafeInteger(settledAtMs)||settledAtMs>nowMs||
     forecast.expiresAtMs>settledAtMs||forecast.recordedAtMs>=settledAtMs||
    !Array.isArray(forecast.accepted)||forecast.accepted.length<2||
+   // Recheck the 15-second provider freshness gate at durable freeze time.
+   // Old archives must not turn delayed/stale AI responses into scored wins.
    forecast.accepted.some(x=>!Number.isSafeInteger(x?.observedAtMs)||x.observedAtMs>forecast.recordedAtMs||
+    forecast.recordedAtMs-x.observedAtMs>15000||
     typeof x.upProbability!=='number'||!Number.isFinite(x.upProbability)||x.upProbability<0||x.upProbability>1)||
    new Set(forecast.accepted.map(x=>x.provider)).size!==forecast.accepted.length)return;
   const score=scoreVerifiedRound({status:forecast.status,marketTicker:ticker,roundId:ticker,
