@@ -32,12 +32,15 @@ export async function summarizeOmegaPaper(db,{limit=80,nowMs=Date.now()}={}){
   if(!validTime(at)||at<=p.openedAtMs||at>nowMs){invalid++;continue;}
   // A simulated bid exit cannot return more than $1 per contract before costs.
   // Treat impossible stored profits as corrupt evidence, never as paper P&L.
-  // The production simulator models a fixed $0.05 exit fee and nonnegative
-  // bid proceeds after slippage. Even a worthless bid cannot lose more than
-  // entry cost plus that fee. Reject impossible negative exits as well as
-  // impossible gains; otherwise corrupt losses inflate reported drawdown.
+  // The production paperExit simulator charges $0.01 per contract of
+  // exit slippage plus a fixed $0.05 exit fee. Since the Kalshi bid is
+  // strictly below $1, the highest possible simulated proceeds are bounded
+  // by quantity * (1 - slippage) - exit fee. Merely bounding proceeds at
+  // quantity dollars would allow impossible, overstated paper profits.
+  // A zero-proceeds exit still pays the fixed fee.
+  const maxExitNet=p.quantity*(1-.01)-.05-p.entryCostDollars;
   if(p.status==='CLOSED'&&(
-   p.netDollars>p.quantity-p.entryCostDollars+.00011||
+   p.netDollars>maxExitNet+.00011||
    p.netDollars< -p.entryCostDollars-.05011
   )){invalid++;continue;}
   if(p.status==='SETTLED'){
