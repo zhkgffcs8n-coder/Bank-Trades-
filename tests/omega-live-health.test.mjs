@@ -165,3 +165,12 @@ test('self-reported settlement flags cannot turn a heartbeat into verified offic
   assert.equal(health.realOrdersAuthorized,false);
  }
 });
+
+test('OMEGA quote-gate diagnostics require a fresh heartbeat and known enum',()=>{
+ const checkedAt=new Date(now-1000).toISOString();
+ const report={checkedAt,status:'NO_FRESH_MARKET_OBSERVATION',
+  observationGate:'INDEPENDENT_QUOTE_UNAVAILABLE'};
+ assert.equal(omegaLiveHealth(heartbeat,now,report).omegaObservationGate,'INDEPENDENT_QUOTE_UNAVAILABLE');
+ assert.equal(omegaLiveHealth(heartbeat,now,{...report,checkedAt:new Date(now-200000).toISOString()}).omegaObservationGate,'NOT_VERIFIED');
+ assert.equal(omegaLiveHealth(heartbeat,now,{...report,observationGate:'SECRET=invalid'}).omegaObservationGate,'NOT_VERIFIED');
+});
