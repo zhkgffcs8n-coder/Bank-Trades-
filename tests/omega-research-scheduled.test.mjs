@@ -344,3 +344,25 @@ test('unreadable indexed OMEGA paper ledger retains its marker for later exit re
  assert.equal(db.values.has(marker),false,'confirmed closed ledger may clear marker');
  assert.equal(second.ordersAuthorized,false);
 });
+
+test('OMEGA records the exact safe observation gate without bypassing quote checks',async()=>{
+ const configured={OPENAI_API_KEY:'test',DEEPSEEK_API_KEY:'test'};
+ const createDb=latest=>{
+  const data=new Map(latest?[['latest/'+asset,latest]]:[]);
+  return {data,db:{get:async k=>data.get(k)??null,setJSON:async(k,v)=>data.set(k,v)}};
+ };
+ const missing=createDb(null);
+ const absent=await runOmegaScheduled({nowMs:now,db:missing.db,env:configured,fetchImpl:async()=>{throw Error('No request expected')}});
+ assert.equal(absent.status,'NO_FRESH_MARKET_OBSERVATION');
+ assert.equal(absent.observationGate,'COLLECTOR_SAMPLE_UNAVAILABLE');
+ const unavailable=createDb(sample);
+ const failed=await runOmegaScheduled({nowMs:now,db:unavailable.db,env:configured,fetchImpl:async()=>({ok:false})});
+ assert.equal(failed.status,'NO_FRESH_MARKET_OBSERVATION');
+ assert.equal(failed.observationGate,'INDEPENDENT_QUOTE_UNAVAILABLE');
+ assert.equal(unavailable.data.get('omega/heartbeat').observationGate,'INDEPENDENT_QUOTE_UNAVAILABLE');
+ assert.equal([...unavailable.data.keys()].some(k=>k.startsWith('omega/predictions/')),false);
+ const good=createDb(sample);
+ const verified=await runOmegaScheduled({nowMs:now,db:good.db,env:configured,fetchImpl:confidentForecastFetch});
+ assert.equal(verified.observationGate,'INDEPENDENT_QUOTE_VERIFIED');
+ assert.equal(verified.ordersAuthorized,false);
+});
