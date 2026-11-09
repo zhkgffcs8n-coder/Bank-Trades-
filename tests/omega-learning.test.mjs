@@ -214,3 +214,40 @@ test('OMEGA official score uses durable freeze time, never earlier provider obse
  assert.ok(scored.predictedAtMs>Math.max(...forecast.accepted.map(x=>x.observedAtMs)));
  assert.equal(scored.ordersAuthorized,false);
 });
+
+
+test('OMEGA official archive excludes stale provider observations even when settlement is valid',async()=>{
+ const {scoreOmegaArchive}=await import('../netlify/functions/omega-settlement-scheduled.mjs');
+ const {SETTLEMENT_VERIFICATION}=await import('../src/official-settlement.mjs');
+ const frozenAt=100000000,expiresAt=105000000,settledAt=110000000;
+ const makeForecast=(ticker,firstObservedAt)=>({
+  ticker,status:'SHADOW_RESEARCH',recordedAtMs:frozenAt,expiresAtMs:expiresAt,baseline:.5,
+  accepted:[
+   {provider:'gpt',upProbability:.8,observedAtMs:firstObservedAt},
+   {provider:'claude',upProbability:.7,observedAtMs:frozenAt-1000}
+  ]
+ });
+ const data=new Map();
+ for(const [ticker,observedAt] of [
+  ['BTC-STALE-ARCHIVE',frozenAt-15001],
+  ['BTC-BOUNDARY-ARCHIVE',frozenAt-15000],
+  ['BTC-FRESH-ARCHIVE',frozenAt-1000]
+ ]){
+  data.set('omega/predictions/v1/'+ticker+'/1',makeForecast(ticker,observedAt));
+  data.set('outcomes/'+ticker,{ticker,result:'yes',verification:SETTLEMENT_VERIFICATION,
+   settledAt:new Date(settledAt).toISOString()});
+ }
+ const db={
+  async get(key){return data.get(key)??null},
+  async setJSON(key,value){data.set(key,value)},
+  async *list({prefix}){yield {blobs:[...data.keys()].filter(key=>key.startsWith(prefix))
+   .sort().map(key=>({key}))}}
+ };
+ await scoreOmegaArchive(db,{nowMs:settledAt+1000});
+ assert.equal(data.has('omega/verified-scores/v1/BTC-STALE-ARCHIVE'),false);
+ for(const ticker of ['BTC-BOUNDARY-ARCHIVE','BTC-FRESH-ARCHIVE']){
+  const scored=data.get('omega/verified-scores/v1/'+ticker);
+  assert.equal(scored.status,'VERIFIED_SHADOW_SCORE');
+  assert.equal(scored.ordersAuthorized,false);
+ }
+});
