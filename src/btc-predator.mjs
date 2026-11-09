@@ -42,7 +42,7 @@ export function openPredatorWatch(observation){
   observation.now-observation.bookAt>1500)return null;
  const {side,now,ticker}=observation;
  const ask=askFor(observation,side);
- if(!(ask>0&&ask<1))return null;
+ if(!isScalpEntryPrice(ask))return null;
  const target=Math.min(.999,ask+bounds(.045,.12,.035+Math.abs(observation.flow)*.045+Math.abs(observation.imbalance)*.03));
  if(target>=1||netAt(ask,target)<.015)return null;
  return {ticker,side,at:now,sourceEventAt:observation.sourceEventAt,ask,target,
@@ -51,7 +51,11 @@ export function openPredatorWatch(observation){
 }
 
 export function advancePredatorWatch(watch,observation){
- if(!observation||observation.ticker!==watch.ticker||observation.now<=watch.at)return watch;
+ if(!observation||watch.closedAt||observation.ticker!==watch.ticker||observation.now<=watch.at)return watch;
+ // Never mark a profit or stop using an aged or out-of-order order book.
+ if(!Number.isFinite(observation.bookAt)||observation.bookAt>observation.now||
+    observation.now-observation.bookAt>1500||
+    (Number.isFinite(watch.lastBookAt)&&observation.bookAt<=watch.lastBookAt))return watch;
  const {now,remaining}=observation;
  if(watch.warningMs===undefined&&now>watch.deadline+6000)return {...watch,reason:'UNSCORED_GAP',closedAt:now};
  const bid=priceFor(observation,watch.side).price;
@@ -68,7 +72,7 @@ export function advancePredatorWatch(watch,observation){
  const stop=Number.isFinite(watch.entryBid)?bid-watch.entryBid<=-.07+1e-9:net<=-.07;
  const reason=bid>=watch.target&&net>(watch.version===16?.01:0)?'TAKE PROFIT':stop?'SELL FAST':
   (weakening&&net>reserve)||protectProfit||!micro&&peakNet>=.05&&peakNet-net>=.03?'TRAIL EXIT':now>=watch.deadline||remaining<=5?'TIME EXIT':null;
- return {...watch,peakNet,peakBid:Math.max(watch.peakBid??watch.entryBid??bid,bid),baseline,bid,net,...(reason?{reason,closedAt:now,
+ return {...watch,lastBookAt:observation.bookAt,peakNet,peakBid:Math.max(watch.peakBid??watch.entryBid??bid,bid),baseline,bid,net,...(reason?{reason,closedAt:now,
   baselineNet:baseline?netAt(baseline.ask,bid):null,leadMs:baseline?baseline.at-watch.at:null}:{})};
 }
 
@@ -77,7 +81,9 @@ export function confirmPredatorEntry(watch, observation){
  if(!watch||!observation||watch.ticker!==observation.ticker||
     observation.now<=watch.at||observation.now-watch.at>10000||
     observation.sourceEventAt<=watch.sourceEventAt||!observation.sourceEventAt||
-    observation.remaining<35||observation.side!==watch.side)return null;
+    observation.remaining<35||observation.side!==watch.side||
+    !Number.isFinite(observation.bookAt)||observation.bookAt>observation.now||
+    observation.now-observation.bookAt>1500)return null;
  const sign=watch.side==='UP'?1:-1;
  const ask=askFor(observation,watch.side);
  if(!isScalpEntryPrice(ask)||
