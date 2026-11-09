@@ -105,6 +105,9 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  }
  const latest=await db.get('latest/'+asset,{type:'json'});
  let observation=selectOmegaObservation({latest,nowMs,asset});
+ // A bounded, non-sensitive diagnostic explains why a scheduled research round
+ // skipped; never relax the independent quote or freshness gates.
+ let observationGate=observation?'COLLECTOR_SAMPLE_VALID':'COLLECTOR_SAMPLE_UNAVAILABLE';
  let freshQuote=null;
  if(observation&&configured.length>=2&&selectedProviders.length){
   // Check expiry against the clock AFTER the network read. A response that
@@ -112,6 +115,8 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
   freshQuote=await fetchOmegaLiveQuote({ticker:observation.marketTicker,nowMs,fetchImpl,clock});
   const observationAtMs=clock();
   observation=freshQuote?selectOmegaObservation({asset,nowMs:observationAtMs,latest:{...latest,observedAt:freshQuote.asOfMs,yesBid:freshQuote.yesBidDollars,yesAsk:freshQuote.yesAskDollars,noBid:freshQuote.noBidDollars,noAsk:freshQuote.noAskDollars}}):null;
+  observationGate=!freshQuote?'INDEPENDENT_QUOTE_UNAVAILABLE':
+   observation?'INDEPENDENT_QUOTE_VERIFIED':'INDEPENDENT_QUOTE_REJECTED';
  }
  let report;
  if(!observation)report={status:'NO_FRESH_MARKET_OBSERVATION',asset,providersConfigured:configured.length,ordersAuthorized:false};
@@ -172,6 +177,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  }
  report.lastProviderCheckAt=checked.length?checkedAt:previous?.lastProviderCheckAt||null;
  report.providerStatus=configured.map(provider=>checks.get(provider)||{provider,status:'AWAITING_CHECK'});
+ report.observationGate=observationGate;
  report.paperMonitoring=paperMonitoring;
  await db.setJSON('omega/heartbeat',{...report,checkedAt:new Date(nowMs).toISOString(),expectedIntervalSeconds:60,
   coverage:'One rotating asset per minute; not every market every second',realOrdersAuthorized:false});

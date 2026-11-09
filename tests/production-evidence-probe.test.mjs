@@ -66,3 +66,11 @@ test('HTTP errors and invalid JSON cannot be mistaken for running providers or p
  assert.equal(result.paper.status,'UNAVAILABLE');
  assert.equal(result.verifiedProfitableTrading,false);
 });
+
+test('sanitized production probe exposes only known OMEGA quote gates',()=>{
+ const health=summarizeHealth({omegaObservationGate:'INDEPENDENT_QUOTE_UNAVAILABLE'});
+ assert.equal(health.omegaObservationGate,'INDEPENDENT_QUOTE_UNAVAILABLE');
+ assert.equal(summarizeHealth({omegaObservationGate:'raw network secret'}).omegaObservationGate,'NOT_VERIFIED');
+ const report={checkedAt:'2026-11-09T21:00:00Z',health,paper:{status:'NOT_VERIFIED'}};
+ assert.match(evidenceSummary(report),/OMEGA quote gate.*INDEPENDENT_QUOTE_UNAVAILABLE/);
+});

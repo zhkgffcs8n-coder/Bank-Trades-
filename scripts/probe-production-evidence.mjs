@@ -22,6 +22,7 @@ export function summarizeHealth(body){
    ['newPendingPredictions','trained','trainingReviews','settlementFailures','researchFailures']
     .map(k=>[k,count(body.collectorLastRunCounts?.[k])])),
   omegaStatus:state(body.omegaStatus,['SHADOW_RESEARCH','NOT_VERIFIED','PROVIDERS_UNCONFIGURED','NO_FRESH_MARKET_OBSERVATION','PROVIDERS_COOLING_DOWN']),
+  omegaObservationGate:state(body.omegaObservationGate,['COLLECTOR_SAMPLE_VALID','COLLECTOR_SAMPLE_UNAVAILABLE','INDEPENDENT_QUOTE_UNAVAILABLE','INDEPENDENT_QUOTE_VERIFIED','INDEPENDENT_QUOTE_REJECTED']),
   omegaAgeSeconds:count(body.omegaAgeSeconds),
   omegaLiveResearchRunning:bool(body.omegaLiveResearchRunning),
   omegaExternalProvidersRunning:bool(body.omegaExternalProvidersRunning),
@@ -86,6 +87,7 @@ export function evidenceSummary(report){
   '| --- | --- |',
   '| Collector | '+value(h.status)+' (age '+value(h.collectorAgeSeconds)+'s) |',
   '| OMEGA scheduler | '+value(h.omegaStatus)+' (age '+value(h.omegaAgeSeconds)+'s) |',
+  '| OMEGA quote gate | '+value(h.omegaObservationGate)+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
   '| OMEGA paper monitoring: exits | '+value(h.omegaPaperMonitoring?.exits)+' |',
   '| Paper archive | '+value(p.status)+' |',
