@@ -42,3 +42,12 @@ test('each engine allows one supported pullback observation and protects against
   assert.equal(monitorHunterPaper(held,{...book,at:3,yes:{price:.52,size:20}}).supportedPullback,false);
  }
 });
+
+test('all paper engines accept 1¢ and 90¢ but reject entries above 90¢',()=>{
+ const snapshot={ticker:'T',at:1,expiresAt:90000};
+ for(const name of ['A','B','C']){
+  const idea={side:'UP',target:.99,horizonSeconds:10};
+  for(const ask of [1-.99,1-.10])assert.ok(openHunterPaper(name,snapshot,{...idea,ask}));
+  for(const ask of [NaN,.009,.901,.91])assert.equal(openHunterPaper(name,snapshot,{...idea,ask}),null);
+ }
+});

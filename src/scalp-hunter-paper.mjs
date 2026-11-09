@@ -1,8 +1,10 @@
+import {isScalpEntryPrice} from './scalp-entry-price.mjs';
 import {modeledCost} from './scalper-v8.mjs';
 import {trustedStoredFinalizedOutcome} from './official-settlement.mjs';
 
 export const hunterEngines=['A','B','C'];
 export function openHunterPaper(name,snapshot,idea,depth){
+ if(!isScalpEntryPrice(idea.ask))return null;
  const entryBid=idea.side==='UP'?depth?.yes?.price:depth?.no?.price;
  return {name,asset:snapshot.asset,quantity:1,entryBid,bid:entryBid,peakBid:entryBid,ticker:snapshot.ticker,at:snapshot.at,expiresAt:snapshot.expiresAt,
   side:idea.side,ask:idea.ask,target:idea.target,entryCost:modeledCost(idea.ask),

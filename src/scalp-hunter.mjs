@@ -1,3 +1,4 @@
+import {isScalpEntryPrice} from './scalp-entry-price.mjs';
 import {modeledCost} from './scalper-v8.mjs';
 
 const horizons=[3,6,10,20,30,60];
@@ -13,7 +14,7 @@ function setup(snapshot,depth,name,side,early=false){
  const sign=side==='UP'?1:-1;
  const ask=1-opposite(depth,side).price;
  const bid=leg(depth,side).price;
- if(!(ask>0&&ask<1)||(ask<.01-1e-9||ask>.99+1e-9)||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
+ if(!isScalpEntryPrice(ask)||ask<=bid||ask-bid>.050001||opposite(depth,side).size<1)return null;
  const supported=early?snapshot.early?.[name]?.[side]:name==='A'?sign*snapshot.imbalance>=.2&&sign*snapshot.acceleration>=.01:
   name==='B'?sign*snapshot.velocity>=.02&&sign*snapshot.breakout>0:
   snapshot.radar===side+' FLIP WATCH';

@@ -1,3 +1,4 @@
+import {isScalpEntryPrice} from './scalp-entry-price.mjs';
 // BTC-only forward experiment. All positions are local simulations.
 const cost=price=>Math.ceil(7*price*(1-price))/100+.01;
 const bounds=(low,high,value)=>Math.max(low,Math.min(high,value));
@@ -74,7 +75,7 @@ export function confirmPredatorEntry(watch, observation){
     observation.remaining<35||observation.side!==watch.side)return null;
  const sign=watch.side==='UP'?1:-1;
  const ask=askFor(observation,watch.side);
- if(!(ask>0&&ask<1)||
+ if(!isScalpEntryPrice(ask)||
     Math.abs(observation.flow)<.45||sign*observation.imbalance<.12||
     sign*observation.acceleration<=0||netAt(ask,watch.target)<.025)return null;
  return {...watch,ask,entryBid:priceFor(observation,watch.side).price,at:observation.now,watchAt:watch.at,watchAsk:watch.ask,

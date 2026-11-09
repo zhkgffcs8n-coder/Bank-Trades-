@@ -231,6 +231,7 @@ function trackShadowEngine(coin,ticker,name,engine,snapshot,now){
   const opposite=engine.decision==='UP'?book?.no:book?.yes;
   const ask=1-opposite?.price;
   if(book?.ticker===ticker&&book.at>=snapshot.at&&book.at<=now&&now-book.at<=5000&&
+     ask>=.01-Number.EPSILON&&ask<=.90+Number.EPSILON&&
      opposite.size>=1&&1-book.yes.price-book.no.price<=.050001&&ask-engine.ask<=.020001){
    position={ticker,side:engine.decision,ask,referenceAsk:engine.ask,entryBid:(engine.decision==='UP'?book.yes:book.no).price,at:book.at,expiresAt:snapshot.expiresAt,peak:0};
    round.positions[name]=position;
