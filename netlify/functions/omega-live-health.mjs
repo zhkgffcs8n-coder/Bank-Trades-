@@ -46,6 +46,11 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   ].map(([label,key])=>[label,Number.isSafeInteger(heartbeat?.[key])&&heartbeat[key]>=0?heartbeat[key]:null])),
   omegaExternalProvidersRunning:externalProvidersRunning,omegaLiveResearchRunning:omegaRunning,
   omegaStatus:omegaHeartbeat?.status||'NOT_VERIFIED',omegaAgeSeconds,
+   omegaObservationGate:omegaAgeSeconds!==null&&omegaAgeSeconds<=150&&
+    ['COLLECTOR_SAMPLE_VALID','COLLECTOR_SAMPLE_UNAVAILABLE',
+     'INDEPENDENT_QUOTE_UNAVAILABLE','INDEPENDENT_QUOTE_VERIFIED',
+     'INDEPENDENT_QUOTE_REJECTED'].includes(omegaHeartbeat?.observationGate)?
+    omegaHeartbeat.observationGate:'NOT_VERIFIED',
   omegaReasons:Array.isArray(omegaHeartbeat?.reasons)?omegaHeartbeat.reasons:[],
   omegaProviderCheckedAt:omegaHeartbeat?.lastProviderCheckAt||null,
   omegaProviderStatus:Array.isArray(omegaHeartbeat?.providerStatus)?omegaHeartbeat.providerStatus
