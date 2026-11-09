@@ -64,6 +64,27 @@ test('impossible simulated exit profits invalidate the archive instead of inflat
  assert.equal(r.ordersAuthorized,false);
 });
 
+test('paper exit accounting rejects profits that omit modeled exit slippage and fee',async()=>{
+ // The old upper bound (quantity - entry cost) would accept an impossible
+ // $0.88 net from two contracts entered for $1.10. The simulator always
+ // subtracts $0.01 per contract and $0.05 per exit, so the maximum is $0.83.
+ const invalid=await summarizeOmegaPaper(store([
+  record('BTC-EXIT-OMITS-COSTS',{status:'CLOSED',closedAtMs:2000,
+   quantity:2,entryCostDollars:1.1,netDollars:.88})
+ ]),{nowMs:5000});
+ assert.equal(invalid.invalidPositions,1);
+ assert.equal(invalid.realizedNetDollars,null);
+ assert.equal(invalid.status,'INCOMPLETE_PAPER_HISTORY');
+ const valid=await summarizeOmegaPaper(store([
+  record('BTC-EXIT-INCLUDES-COSTS',{status:'CLOSED',closedAtMs:2000,
+   quantity:2,entryCostDollars:1.1,netDollars:.82})
+ ]),{nowMs:5000});
+ assert.equal(valid.invalidPositions,0);
+ assert.equal(valid.realizedNetDollars,.82);
+ assert.equal(valid.simulatedBidExits,1);
+ assert.equal(valid.ordersAuthorized,false);
+});
+
 test('OMEGA paper archive rejects entries above the $5 execution cap before reporting PnL',async()=>{
  const db=store([
   record('BTC-OVER-CLOSED',{status:'CLOSED',closedAtMs:2000,quantity:20,entryCostDollars:5.50,netDollars:2}),
