@@ -28,16 +28,20 @@ test('detects a compressed directional setup before the momentum baseline',()=>{
 
 test('records a later paired baseline and only closes from executable same-round bids',()=>{
  const watch=openPredatorWatch(predatorObservation(snapshot));
- const later=advancePredatorWatch(watch,{...snapshot,now:now+3000,baselineSide:'UP'});
+ // A later baseline needs a new executable book; an aged snapshot is not evidence.
+ assert.equal(advancePredatorWatch(watch,{...snapshot,now:now+3000,baselineSide:'UP'}),watch);
+ const later=advancePredatorWatch(watch,{...snapshot,now:now+3000,bookAt:now+3000,baselineSide:'UP'});
  assert.equal(later.baseline.at,now+3000);
  assert.equal(advancePredatorWatch(later,{...snapshot,ticker:'OTHER',now:now+4000}),later);
+ assert.equal(advancePredatorWatch(later,{...snapshot,now:now+4000,bookAt:now+3000}),later);
+ assert.equal(advancePredatorWatch(later,{...snapshot,now:now+4000,bookAt:now+4001}),later);
  const next=predatorObservation({...snapshot,now:now+5000,bookAt:now+5000,trades:[],
   yes:{price:.6,size:5},no:{price:.38,size:5}});
  const closed=advancePredatorWatch(later,next);
  assert.equal(closed.reason,'TAKE PROFIT');
  assert.equal(closed.leadMs,3000);
  assert.ok(closed.net>0);
- assert.equal(advancePredatorWatch(watch,{...snapshot,now:now+37000}).reason,'UNSCORED_GAP');
+ assert.equal(advancePredatorWatch(watch,{...snapshot,now:now+37000,bookAt:now+37000}).reason,'UNSCORED_GAP');
 });
 
 test('VOLT waits for fresh confirmation, rejects repricing, and tracks a later executable exit',()=>{
