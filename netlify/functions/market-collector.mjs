@@ -184,8 +184,8 @@ export default async()=>{
        depthStatus='INVALID_OR_ONE_SIDED_BOOK';
       }
      }catch{} // Quotes without depth cannot be used to simulate an early fill.
-     const bookQuote=scalperQuoteFromDepth(record,depth);
      const payload=await tapeRead;
+     let bookQuote=scalperQuoteFromDepth(record,depth);
      if(asset==='BTC'){
       try{
        const observedAt=Date.now();
@@ -203,6 +203,8 @@ export default async()=>{
        await db.setJSON('predator-v11/latest',observation);
       }catch(e){researchFailure('predator-v11',e,asset)}
      }
+     // Blob writes and the trade request can outlast the executable quote window.
+     bookQuote=scalperQuoteFromDepth(record,depth);
      if(depth&&!bookQuote)depthStatus='BOOK_STALE_OR_CROSSED';
      const snapshot=bookQuote?evaluateScalperV8(bookQuote,recent.filter(row=>row.t!==record.t),depth):candidate;
      if(bookQuote){
