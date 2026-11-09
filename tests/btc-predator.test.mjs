@@ -15,6 +15,12 @@ test('detects a compressed directional setup before the momentum baseline',()=>{
  const watch=openPredatorWatch(observation);
  assert.equal(watch.side,'UP');
  assert.ok(watch.estimatedNet>.015);
+ // A 2s-old book can still be monitored but cannot originate a new watch.
+ const stale=predatorObservation({...snapshot,bookAt:now-1501});
+ assert.equal(stale?.early,true);
+ assert.equal(openPredatorWatch(stale),null);
+ assert.equal(openPredatorWatch(predatorObservation({...snapshot,bookAt:now-1500}))?.side,'UP');
+ assert.equal(openPredatorWatch({...observation,bookAt:now+1}),null);
  assert.equal(predatorObservation({...snapshot,bookAt:now-4001}),null);
  assert.equal(predatorObservation({...snapshot,ticker:'KXETH15M-TEST'}),null);
  assert.equal(openPredatorWatch(predatorObservation({...snapshot,trades:[]})),null);
