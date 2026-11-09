@@ -7,7 +7,7 @@ const HEALTH_PATH='/.netlify/functions/omega-live-health';
 const PAPER_PATH='/.netlify/functions/omega-paper-summary';
 const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
 const money=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
-const bool=x=>x===true;
+const bool=x=>typeof x==='boolean'?x:null;
 const state=(x,allowed)=>allowed.includes(x)?x:'NOT_VERIFIED';
 
 export function summarizeHealth(body){
@@ -75,6 +75,8 @@ export async function probeProductionEvidence({fetchImpl=fetch,origin=PRODUCTION
 }
 export function evidenceSummary(report){
  const h=report.health,p=report.paper;
+ const orders=(h.realOrdersAuthorized===true||p.realOrdersAuthorized===true)?'TRUE - REVIEW':
+  (h.realOrdersAuthorized===false&&p.realOrdersAuthorized===false)?'false (both endpoints)':'unverified';
  const value=x=>x===null||x===undefined?'unverified':String(x);
  return [
   '## BANK TRADES PRO independent production evidence',
@@ -89,7 +91,7 @@ export function evidenceSummary(report){
   '| Paper archive | '+value(p.status)+' |',
   '| Officially settled paper positions | '+value(p.officiallySettledPositions)+' |',
   '| Net modeled paper P&L after recorded costs | '+value(p.realizedNetDollars)+' |',
-  '| Real-money authorization (must be false) | '+value(h.realOrdersAuthorized||p.realOrdersAuthorized)+' |',
+  '| Real-money authorization (must be false) | '+orders+' |',
   '',
   'A completed probe is **not** a health certification. Missing, stale or partial evidence is not a verified trading result.'
  ].join('\n')+'\n';
