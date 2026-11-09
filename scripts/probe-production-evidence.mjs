@@ -21,7 +21,7 @@ export function summarizeHealth(body){
   collectorLastRunCounts:Object.fromEntries(
    ['newPendingPredictions','trained','trainingReviews','settlementFailures','researchFailures']
     .map(k=>[k,count(body.collectorLastRunCounts?.[k])])),
-  omegaStatus:state(body.omegaStatus,['SHADOW_RESEARCH','NOT_VERIFIED','PROVIDERS_UNCONFIGURED','NO_FRESH_MARKET_OBSERVATION','PROVIDERS_COOLING_DOWN']),
+  omegaStatus:state(body.omegaStatus,['SHADOW_RESEARCH','INSUFFICIENT_DATA','STALE_PROVIDER_RESEARCH','NOT_VERIFIED','PROVIDERS_UNCONFIGURED','NO_FRESH_MARKET_OBSERVATION','PROVIDERS_COOLING_DOWN']),
   omegaObservationGate:state(body.omegaObservationGate,['COLLECTOR_SAMPLE_VALID','COLLECTOR_SAMPLE_UNAVAILABLE','INDEPENDENT_QUOTE_UNAVAILABLE','INDEPENDENT_QUOTE_VERIFIED','INDEPENDENT_QUOTE_REJECTED']),
   omegaAgeSeconds:count(body.omegaAgeSeconds),
   omegaLiveResearchRunning:bool(body.omegaLiveResearchRunning),

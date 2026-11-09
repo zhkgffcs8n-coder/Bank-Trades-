@@ -74,3 +74,16 @@ test('sanitized production probe exposes only known OMEGA quote gates',()=>{
  const report={checkedAt:'2026-11-09T21:00:00Z',health,paper:{status:'NOT_VERIFIED'}};
  assert.match(evidenceSummary(report),/OMEGA quote gate.*INDEPENDENT_QUOTE_UNAVAILABLE/);
 });
+
+
+test('known insufficient or stale OMEGA research remains diagnostic, not verified success',()=>{
+ for(const status of ['INSUFFICIENT_DATA','STALE_PROVIDER_RESEARCH']){
+  const health=summarizeHealth({omegaStatus:status,omegaObservationGate:'INDEPENDENT_QUOTE_VERIFIED',
+   omegaLiveResearchRunning:false,omegaExternalProvidersRunning:false,realOrdersAuthorized:false});
+  assert.equal(health.omegaStatus,status);
+  assert.equal(health.omegaLiveResearchRunning,false);
+  assert.equal(health.omegaExternalProvidersRunning,false);
+  assert.match(evidenceSummary({checkedAt:'2026-11-09T22:00:00Z',health,paper:{status:'NOT_VERIFIED'}}),new RegExp(status));
+ }
+ assert.equal(summarizeHealth({omegaStatus:'API_KEY=secret'}).omegaStatus,'NOT_VERIFIED');
+});
