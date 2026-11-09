@@ -30,8 +30,11 @@ test('records a later paired baseline and only closes from executable same-round
  const watch=openPredatorWatch(predatorObservation(snapshot));
  // A later baseline needs a new executable book; an aged snapshot is not evidence.
  assert.equal(advancePredatorWatch(watch,{...snapshot,now:now+3000,baselineSide:'UP'}),watch);
- const later=advancePredatorWatch(watch,{...snapshot,now:now+3000,bookAt:now+3000,baselineSide:'UP'});
+ // The paired baseline book must also be executable without immediately stopping the watch.
+ const later=advancePredatorWatch(watch,{...snapshot,now:now+3000,bookAt:now+3000,baselineSide:'UP',
+  yes:{price:.48,size:30},no:{price:.50,size:10}});
  assert.equal(later.baseline.at,now+3000);
+ assert.equal(later.reason,undefined);
  assert.equal(advancePredatorWatch(later,{...snapshot,ticker:'OTHER',now:now+4000}),later);
  assert.equal(advancePredatorWatch(later,{...snapshot,now:now+4000,bookAt:now+3000}),later);
  assert.equal(advancePredatorWatch(later,{...snapshot,now:now+4000,bookAt:now+4001}),later);
