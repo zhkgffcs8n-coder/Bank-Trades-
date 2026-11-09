@@ -22,7 +22,7 @@ export function selectOmegaObservation({latest,nowMs,asset}){
   marketBaseline:{marketTicker:latest.ticker,roundId:latest.ticker,upProbability:mid,observedAtMs:latest.observedAt}};
 }
 export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fetchImpl=fetch,clock=()=>nowMs}={}){
- const minute=Math.floor(nowMs/60000),asset=ASSETS[minute%ASSETS.length];
+ const minute=Math.floor(nowMs/60000),preferredAsset=ASSETS[minute%ASSETS.length];
  const configured=omegaProviderStatus(env).filter(x=>x.configured).map(x=>x.provider);
  const previous=await db.get('omega/heartbeat',{type:'json'});
  // A malformed persisted heartbeat must not prevent monitoring open paper positions.
@@ -40,6 +40,7 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  // Only active contracts with independently fetched executable quotes can be exited.
  const paperMonitoring={open:0,exits:0,holds:0,settled:0,unpriced:0,backfilled:0};
  const monitoredTickers=new Set();
+ const latestByAsset=new Map();
  async function monitorOpenTicker(ticker,{indexed=false}={}){
   if(typeof ticker!=='string'||!/^[A-Z0-9-]{3,100}$/.test(ticker)||monitoredTickers.has(ticker))return;
   monitoredTickers.add(ticker);
@@ -101,10 +102,26 @@ export async function runOmegaScheduled({nowMs=Date.now(),db,env=process.env,fet
  // when a bounded archive scan has not yet reached their marker.
  for(const monitoredAsset of ASSETS){
   const snapshot=await db.get('latest/'+monitoredAsset,{type:'json'});
+  latestByAsset.set(monitoredAsset,snapshot);
   await monitorOpenTicker(snapshot?.ticker);
  }
- const latest=await db.get('latest/'+asset,{type:'json'});
+ // Rotate the first choice, but do not waste the entire minute when that
+ // asset has no eligible collector quote. Reuse snapshots already read for
+ // paper monitoring; select at most ONE valid market for research this run.
+ // All candidates still require independent Kalshi quote verification.
+ const preferredIndex=minute%ASSETS.length;
+ const candidates=[...ASSETS.slice(preferredIndex),...ASSETS.slice(0,preferredIndex)];
+ let asset=preferredAsset,latest=latestByAsset.get(preferredAsset)||null;
  let observation=selectOmegaObservation({latest,nowMs,asset});
+ if(!observation){
+  for(const candidate of candidates.slice(1)){
+   const candidateLatest=latestByAsset.get(candidate);
+   const selected=selectOmegaObservation({latest:candidateLatest,nowMs,asset:candidate});
+   if(!selected)continue;
+   asset=candidate;latest=candidateLatest;observation=selected;
+   break;
+  }
+ }
  // A bounded, non-sensitive diagnostic explains why a scheduled research round
  // skipped; never relax the independent quote or freshness gates.
  let observationGate=observation?'COLLECTOR_SAMPLE_VALID':'COLLECTOR_SAMPLE_UNAVAILABLE';
