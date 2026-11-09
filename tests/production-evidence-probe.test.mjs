@@ -45,8 +45,9 @@ test('malformed and missing health evidence cannot be marked fresh',()=>{
  const h=summarizeHealth({status:'COLLECTOR_FRESH',collectorAgeSeconds:-5,
   omegaExternalProvidersRunning:'true',realOrdersAuthorized:false});
  assert.equal(h.collectorAgeSeconds,null);
- assert.equal(h.omegaExternalProvidersRunning,false);
+ assert.equal(h.omegaExternalProvidersRunning,null);
  assert.equal(h.collectorLastRunCounts.trained,null);
+ assert.equal(summarizeHealth({}).realOrdersAuthorized,null);
 });
 
 test('transport failure is recorded as unavailable without leaking exception text',async()=>{
