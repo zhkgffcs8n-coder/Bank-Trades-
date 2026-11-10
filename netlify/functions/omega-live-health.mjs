@@ -37,6 +37,10 @@ export function omegaLiveHealth(heartbeat,nowMs=Date.now(),omegaHeartbeat=null,p
   activeProviders.size>=2;
  return {status:healthy?'COLLECTOR_FRESH':'NOT_VERIFIED',collectorStatus:heartbeat?.status||'UNKNOWN',
   collectorAgeSeconds:ageSeconds,sampledAssetCount:distinctSampled.size,sampledAssets:sampled,
+  collectorFailureReasons:Object.fromEntries(expectedAssets.filter(asset=>!distinctSampled.has(asset)).map(asset=>[
+   asset,['SERIES_UNAVAILABLE','NO_OPEN_CONTRACT','NO_EXECUTABLE_CONTRACT','COLLECTOR_EXCEPTION'].includes(heartbeat?.failureReasons?.[asset])
+    ?heartbeat.failureReasons[asset]:'UNCLASSIFIED'
+  ])),
   trainingSucceeded:heartbeat?.trainingSucceeded===true,expectedIntervalSeconds:60,
   // These are counts for the LAST collector invocation, never lifetime totals.
   collectorLastRunCounts:Object.fromEntries([
