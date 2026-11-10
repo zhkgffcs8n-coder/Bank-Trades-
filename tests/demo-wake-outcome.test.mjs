@@ -23,3 +23,19 @@ test('valid lifecycle statuses distinguish waiting from reconciled entry and exi
  for(const status of ['DEMO_WAITING_FOR_CHAMPION_ENTRY','DEMO_CHAMPION_ASK_ABOVE_REFERENCE','DEMO_ENTRY_RECONCILED','DEMO_EXIT_RECONCILED'])
   assert.equal(demoWakeLifecycleStatus(status),status);
 });
+
+test('Netlify receipt records the precise safe market gate but never implies an order',()=>{
+ const response=new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_CHAMPION_CONTRACT_INELIGIBLE',
+  'x-demo-market-rejection-reason':'DEMO_MARKET_CLOSING_SOON'
+ }});
+ const receipt=demoWakeReceipt({response,intake:{status:'SHADOW_PARITY_MATCH',ticker:'KXBTC15M-TEST',action:'BUY DOWN'},receivedAt:100,completedAt:200});
+ assert.equal(receipt.lifecycleStatus,'DEMO_CHAMPION_CONTRACT_INELIGIBLE');
+ assert.equal(receipt.marketRejectionReason,'DEMO_MARKET_CLOSING_SOON');
+ assert.equal(receipt.filled,undefined);
+ const fake=demoWakeReceipt({response:new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_CHAMPION_CONTRACT_INELIGIBLE',
+  'x-demo-market-rejection-reason':'DEMO_ORDER_FILLED'
+ }}),intake:{},receivedAt:100,completedAt:200});
+ assert.equal(fake.marketRejectionReason,'DEMO_MARKET_NOT_VERIFIED');
+});
