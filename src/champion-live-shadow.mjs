@@ -2,7 +2,9 @@ import {spotAnalysis} from './champion-spot-evidence.mjs';
 import {replayChampionScalper} from './champion-scalper-replay.mjs';
 
 export function championSpotEvidence(data,now=Date.now()){
- if(data?.asset!=='BTC'||!(Math.abs(now-Date.parse(data.fetched_at))<=30000)||!Array.isArray(data.candles))return null;
+ const fetchedAt=Date.parse(data?.fetched_at);
+ // Reject future-dated snapshots; clock skew must not admit look-ahead evidence.
+ if(data?.asset!=='BTC'||!Number.isFinite(fetchedAt)||fetchedAt>now||now-fetchedAt>30000||!Array.isArray(data.candles))return null;
  const candles=data.candles.filter(p=>[p.t,p.open,p.high,p.low,p.close].every(Number.isFinite)&&
   p.low>0&&p.high>=p.low&&p.open>=p.low&&p.open<=p.high&&p.close>=p.low&&p.close<=p.high&&p.t*1000<now)
   .sort((a,b)=>a.t-b.t);
