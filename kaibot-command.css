@@ -1,0 +1,37 @@
+#kai-command{box-sizing:border-box;width:min(1100px,100%);max-width:100%;max-height:100dvh;padding:clamp(14px,3vw,32px);margin:auto;border:1px solid #625ca1;border-radius:18px;background:#090d20;color:#e5efff;overflow:auto;overscroll-behavior:contain;color-scheme:dark}
+#kai-command::backdrop{background:#03040be8}
+#kai-command .kai-command-head,#kai-command .kai-arena-heading,#kai-command .kai-arena-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+#kai-command .kai-command-head p,#kai-command dt,#kai-command .kai-arena-footer{color:#9eadce;font-size:.75rem;letter-spacing:.08em}
+#kai-command h1{font-size:clamp(1.25rem,4.2vw,2.3rem);margin:4px 0 14px}
+#kai-command button{min-height:44px}
+#kai-command [data-back]{background:#1d2547;border:1px solid #7489c8;color:#fff}
+#kai-command .kai-arena{--fx:#32d7ff;background:radial-gradient(ellipse at 50% 75%,#24274e,#100d24 65%);border:1px solid #514879;border-radius:16px;margin:16px 0;padding:14px;overflow:hidden}
+#kai-command .kai-arena svg{display:block;width:100%;max-height:260px}
+#kai-command .kai-arena-heading strong{color:var(--fx)}
+#kai-command .kai-fighter{color:#32d7ff;filter:drop-shadow(0 0 7px currentColor);transform-origin:center;animation:kai-spar 1.8s ease-in-out infinite}
+#kai-command .kai-rival{color:#ed55fa;filter:drop-shadow(0 0 7px currentColor);transform-origin:center;animation:kai-spar 1.8s .8s ease-in-out infinite reverse}
+#kai-command .kai-impact{color:var(--fx);transform-origin:340px 120px;opacity:0}
+#kai-command [data-move=buy-up],#kai-command [data-move=profit]{--fx:#4dffac}
+#kai-command [data-move=buy-down],#kai-command [data-move=fast],#kai-command [data-move=stop]{--fx:#ff647d}
+#kai-command [data-move=hold]{--fx:#ffda78}
+#kai-command :is([data-move=buy-up],[data-move=buy-down],[data-move=fast],[data-move=profit]) .kai-fighter{animation:kai-strike 1s ease-in-out infinite}
+#kai-command :is([data-move=profit],[data-move=fast]) .kai-impact{animation:kai-impact 1s ease-out infinite}
+#kai-command [data-move=hold] .kai-fighter{animation:kai-guard 1.4s ease-in-out infinite}
+#kai-command [data-move=stop] :is(.kai-fighter,.kai-rival){animation:none}
+#kai-command .kai-telemetry{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px}
+#kai-command .kai-telemetry div,#kai-command .kai-activity{background:#131a32;border:1px solid #344169;border-radius:10px;padding:12px;overflow-wrap:anywhere}
+#kai-command dd{margin:6px 0 0}
+#kai-command #pro-real{display:block}
+#kai-command #liveExecutionControls button{min-height:48px}
+#kai-command :is(input,textarea,select){max-width:100%;box-sizing:border-box}
+@keyframes kai-spar{50%{transform:translate(20px,5px) rotate(7deg)}}
+@keyframes kai-strike{45%{transform:translate(105px,-4px) rotate(-8deg)}}
+@keyframes kai-guard{50%{transform:translate(-19px,12px) rotate(-9deg)}}
+@keyframes kai-impact{40%{opacity:0;transform:scale(.4)}55%{opacity:.85}100%{opacity:0;transform:scale(2.8)}}
+@media(max-width:600px){#kai-command{width:100%;height:100dvh;border-radius:0}#kai-command [data-back]{width:100%}}
+@media(prefers-reduced-motion:reduce){#kai-command :is(.kai-fighter,.kai-rival,.kai-impact){animation:none!important}}
+
+#kai-command :is(.kai-command-modes,.kai-command-actions){display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+#kai-command .kai-command-modes>*{border:1px solid #454c78;border-radius:999px;padding:6px 10px;font-size:.75rem}
+#kai-command .kai-command-actions button{flex:1 1 180px;min-height:48px}
+#kai-command [data-stop]{background:#411f37;border-color:#ff647d;color:#fff}
