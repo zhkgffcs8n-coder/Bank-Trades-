@@ -7,7 +7,7 @@ import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
 import {eligibleDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
-export default async()=>{
+export async function runScheduledDemo(worker){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
  if(saved?.status!=='DEMO_AUTHENTICATED'||!id){await db.setJSON('lifecycle-status',{status:'DEMO_CREDENTIALS_MISSING'});return new Response(null,{status:204});}
@@ -25,7 +25,7 @@ export default async()=>{
    return {ticker,at,expiresAt:Date.parse(m.close_time),upAsk:Math.round(Number(m.yes_ask_dollars)*100),upBid:Math.round(Number(m.yes_bid_dollars)*100),downAsk:Math.round(Number(m.no_ask_dollars)*100),downBid:Math.round(Number(m.no_bid_dollars)*100)};
   };
   const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
-  const championSignals=async()=>championExecutionSignals(await history.get('predator-v13/health',{type:'json'}));
+  const championSignals=async()=>championExecutionSignals(worker??await history.get('predator-v13/health',{type:'json'}));
   const findMarket=async(excluded,ticker)=>{
    try{
     const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
@@ -45,5 +45,6 @@ export default async()=>{
   const lockEvidence=e.message==='EXECUTION_BUSY'&&credentials?
    await inspectDemoLock(repo,kalshiClient(credentials,{environment:'demo'})):null;
   await db.setJSON('lifecycle-status',{lockEvidence,status:'DEMO_LIFECYCLE_UNAVAILABLE',error:/^[A-Z0-9_:.-]+$/.test(e.message)?e.message:'DEMO_CONFIGURATION_OR_TRANSPORT_ERROR',checkedAt:Date.now()});return new Response(null,{status:503});}
-};
+}
+export default ()=>runScheduledDemo();
 export const config={schedule:'* * * * *'};
