@@ -115,3 +115,23 @@ test('champion routing holds confirmed exposure, ignores a wrong-side exit, then
  assert.equal(client.count(),2);
  assert.deepEqual((await client.snapshot()).positions,[]);
 });
+
+test('champion Demo round trip requires a real matching entry and exit decision',async()=>{
+ const {repo}=await started(),client=exchange();
+ let signal=null,bid=49,discoveries=0;
+ const run=()=>runDemoLifecycle({
+  repo,client,championSignals:async()=>signal?[{ticker:'BTC-ROUND',action:signal,entryReference:50,at:Date.now()}]:[],
+  quoteFor:async()=>quote(bid),
+  findMarket:async(excluded,ticker)=>{discoveries++;assert.equal(ticker,'BTC-ROUND');return {ticker};}
+ });
+ assert.equal((await run()).status,'DEMO_WAITING_FOR_CHAMPION_ENTRY');
+ assert.equal(discoveries,0);
+ signal='BUY UP';
+ assert.equal((await run()).status,'DEMO_ENTRY_RECONCILED');
+ signal='HOLD UP';
+ assert.equal((await run()).status,'DEMO_WAITING_FOR_CHAMPION_EXIT');
+ signal='TAKE PROFIT UP';bid=65;
+ assert.equal((await run()).status,'DEMO_EXIT_RECONCILED');
+ assert.equal((await run()).status,'DEMO_CHAMPION_ROUND_TRIP_VERIFIED');
+ assert.equal(client.count(),2);
+});
