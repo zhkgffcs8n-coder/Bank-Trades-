@@ -9,6 +9,15 @@ const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
 const money=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const bool=x=>typeof x==='boolean'?x:null;
 const state=(x,allowed)=>allowed.includes(x)?x:'NOT_VERIFIED';
+const KNOWN_ASSETS=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
+function safeCollectorCoverage(assets,reportedCount){
+ if(!Array.isArray(assets)||assets.length>KNOWN_ASSETS.length||
+  !assets.every(asset=>KNOWN_ASSETS.includes(asset))||
+  new Set(assets).size!==assets.length||reportedCount!==assets.length)
+  return {collectorSampledAssets:null,collectorMissingAssets:null};
+ return {collectorSampledAssets:[...assets],
+  collectorMissingAssets:KNOWN_ASSETS.filter(asset=>!assets.includes(asset))};
+}
 const KNOWN_PROVIDERS=['gpt','grok','deepseek','qwen','mistral','kimi','perplexity','claude','gemini'];
 const PROVIDER_STATES=['RESEARCH_FORECAST','AWAITING_CHECK','PROVIDER_ERROR','PROVIDER_UNAVAILABLE','INVALID_RESPONSE','INVALID_KEY_FORMAT','UNCONFIGURED','INVALID_INPUT'];
 const FUSION_REASONS=['Missing fresh Kalshi baseline','At least two distinct fresh research forecasts required','Missing market, round or evaluation timestamp'];
@@ -36,6 +45,7 @@ export function summarizeHealth(body){
   collectorStatus:state(body.collectorStatus,['COMPLETED','DEGRADED','RUNNING','FAILED','UNKNOWN']),
   collectorAgeSeconds:count(body.collectorAgeSeconds),
   sampledAssetCount:count(body.sampledAssetCount),
+  ...safeCollectorCoverage(body.sampledAssets,body.sampledAssetCount),
   trainingSucceeded:bool(body.trainingSucceeded),
   collectorLastRunCounts:Object.fromEntries(
    ['newPendingPredictions','trained','trainingReviews','settlementFailures','researchFailures']
@@ -110,6 +120,7 @@ export function evidenceSummary(report){
   '| OMEGA scheduler | '+value(h.omegaStatus)+' (age '+value(h.omegaAgeSeconds)+'s) |',
   '| OMEGA quote gate | '+value(h.omegaObservationGate)+' |',
   '| Collector run state | '+value(h.collectorStatus)+' |',
+  '| Collector coverage | '+value(h.sampledAssetCount)+'/8; missing: '+(Array.isArray(h.collectorMissingAssets)?(h.collectorMissingAssets.join(', ')||'none'):'unverified')+' |',
   '| OMEGA fusion blockers | '+(h.omegaReasons?.length?h.omegaReasons.join('; '):'none verified')+' |',
   '| Provider diagnostics | '+(h.omegaProviderStatus?.length?h.omegaProviderStatus.map(x=>x.provider+':'+x.status+(x.httpStatus?' HTTP '+x.httpStatus:'')).join('; '):'none verified')+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
