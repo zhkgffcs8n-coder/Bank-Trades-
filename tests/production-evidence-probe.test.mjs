@@ -87,3 +87,45 @@ test('known insufficient or stale OMEGA research remains diagnostic, not verifie
  }
  assert.equal(summarizeHealth({omegaStatus:'API_KEY=secret'}).omegaStatus,'NOT_VERIFIED');
 });
+
+test('degraded collector and insufficient OMEGA research preserve safe actionable diagnostics',()=>{
+ const health=summarizeHealth({
+  status:'NOT_VERIFIED',collectorStatus:'DEGRADED',sampledAssetCount:8,
+  omegaStatus:'INSUFFICIENT_DATA',omegaObservationGate:'INDEPENDENT_QUOTE_VERIFIED',
+  omegaReasons:['At least two distinct fresh research forecasts required','SECRET_TOKEN=do-not-print'],
+  omegaProviderStatus:[
+   {provider:'gpt',status:'PROVIDER_ERROR',httpStatus:429,errorCode:'insufficient_quota',checkedAt:'2026-11-10T00:08:00Z',key:'SECRET_TOKEN=do-not-print'},
+   {provider:'claude',status:'RESEARCH_FORECAST',checkedAt:'2026-11-10T00:08:00Z'},
+   {provider:'evil=SECRET_TOKEN',status:'RESEARCH_FORECAST'},
+   {provider:'gemini',status:'SECRET_TOKEN=do-not-print',errorCode:'SECRET_TOKEN=do-not-print',httpStatus:999}
+  ],realOrdersAuthorized:false
+ });
+ assert.equal(health.collectorStatus,'DEGRADED');
+ assert.deepEqual(health.omegaReasons,['At least two distinct fresh research forecasts required']);
+ assert.equal(health.omegaProviderStatus.length,3);
+ assert.equal(health.omegaProviderStatus[0].status,'PROVIDER_ERROR');
+ assert.equal(health.omegaProviderStatus[0].httpStatus,429);
+ assert.equal(health.omegaProviderStatus[0].errorCode,'insufficient_quota');
+ assert.equal(health.omegaProviderStatus[2].status,'NOT_VERIFIED');
+ assert.equal(health.omegaProviderStatus[2].httpStatus,null);
+ assert.equal(health.omegaProviderStatus[2].errorCode,null);
+ const report={checkedAt:'2026-11-10T00:09:00Z',health,paper:{status:'NOT_VERIFIED'}};
+ assert.match(evidenceSummary(report),/gpt:PROVIDER_ERROR HTTP 429/);
+ assert.match(evidenceSummary(report),/At least two distinct fresh research forecasts required/);
+ assert.doesNotMatch(JSON.stringify(report),/SECRET_TOKEN/);
+ assert.equal(health.realOrdersAuthorized,false);
+});
+
+test('provider diagnostics reject malformed lists and duplicate or forged provider identities',()=>{
+ assert.deepEqual(summarizeHealth({omegaProviderStatus:'SECRET_TOKEN'}).omegaProviderStatus,[]);
+ const result=summarizeHealth({omegaProviderStatus:[
+  null,{},'unsafe',[],{provider:'gpt',status:'RESEARCH_FORECAST'},
+  {provider:'gpt',status:'PROVIDER_ERROR',httpStatus:401},
+  {provider:'claude',status:'INVALID_KEY_FORMAT',checkedAt:'not-a-date'},
+  {provider:'gemini',status:'PROVIDER_UNAVAILABLE',httpStatus:-1}
+ ]});
+ assert.deepEqual(result.omegaProviderStatus.map(x=>x.provider),['gpt','claude','gemini']);
+ assert.equal(result.omegaProviderStatus[0].status,'RESEARCH_FORECAST');
+ assert.equal(result.omegaProviderStatus[1].checkedAt,null);
+ assert.equal(result.omegaProviderStatus[2].httpStatus,null);
+});
