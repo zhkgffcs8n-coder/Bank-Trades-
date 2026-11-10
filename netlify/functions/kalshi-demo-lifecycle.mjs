@@ -1,5 +1,5 @@
 import {getStore} from '@netlify/blobs';
-import {demoWakeLifecycleStatus} from '../../src/demo-wake-outcome.mjs';
+import {demoWakeLifecycleStatus,demoWakeMarketRejectionReason} from '../../src/demo-wake-outcome.mjs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
@@ -42,7 +42,10 @@ export async function runScheduledDemo(worker){
   };
   const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,commit:process.env.COMMIT_REF||null});
   await db.setJSON('lifecycle-status',outcome);
-  return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)}});
+  const headers={'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)};
+  if(outcome?.status==='DEMO_CHAMPION_CONTRACT_INELIGIBLE')
+   headers['x-demo-market-rejection-reason']=demoWakeMarketRejectionReason(outcome?.marketRejectionReason);
+  return new Response(null,{status:204,headers});
  }catch(e){
   if(e.message==='DEMO_LOCK_RECOVERED'){
    await db.setJSON('lifecycle-status',{status:e.message,checkedAt:Date.now()});
