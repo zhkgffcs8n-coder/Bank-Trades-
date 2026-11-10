@@ -2,6 +2,7 @@ import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHo
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import WebSocket from 'ws';
+import {predatorStreamCredentials} from './predator-stream-credentials.mjs';
 import {getStore} from '@netlify/blobs';
 import {signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {openPredatorTape} from '../src/predator-stream.mjs';
@@ -18,14 +19,9 @@ let state={positions:{},rounds:{},closed:[],rejections:{},totalClosed:0};
 let tape,ws,lastDepthAt=0,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false;
 const startedAt=Date.now();
 const base='https://external-api.kalshi.com';
-for(const [first,second] of [
- ['PREDATOR_KALSHI_KEY_ID','PREDATOR_KALSHI_PRIVATE_KEY_FILE'],
- ['PREDATOR_NETLIFY_SITE_ID','PREDATOR_NETLIFY_TOKEN']
-]){
- if(Boolean(env[first])!==Boolean(env[second]))throw Error(first+' and '+second+' must be configured together');
-}
-const credentials=env.PREDATOR_KALSHI_KEY_ID&&env.PREDATOR_KALSHI_PRIVATE_KEY_FILE?
- {keyId:env.PREDATOR_KALSHI_KEY_ID,privateKeyPem:await readFile(env.PREDATOR_KALSHI_PRIVATE_KEY_FILE,'utf8')}:null;
+if(Boolean(env.PREDATOR_NETLIFY_SITE_ID)!==Boolean(env.PREDATOR_NETLIFY_TOKEN))
+ throw Error('PREDATOR_NETLIFY_SITE_ID and PREDATOR_NETLIFY_TOKEN must be configured together');
+const credentials=await predatorStreamCredentials(env);
 const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
   fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;

@@ -13,7 +13,8 @@ Use a private state directory with mode 0700. Back up state.json. The ledger is 
 |---|---|
 | PREDATOR_STATE_DIR | Required persistent state directory |
 | PREDATOR_KALSHI_KEY_ID | Kalshi API key ID for authenticated depth |
-| PREDATOR_KALSHI_PRIVATE_KEY_FILE | Mounted private PEM file, readable only by the worker |
+| PREDATOR_KALSHI_PRIVATE_KEY_PEM | Multiline RSA private key, stored as a sealed Railway service variable |
+| PREDATOR_KALSHI_PRIVATE_KEY_FILE | Alternative to the PEM variable. Mounted private PEM file, readable only by the worker |
 | PREDATOR_NETLIFY_SITE_ID | Optional Netlify site ID for publishing health |
 | PREDATOR_NETLIFY_TOKEN | Optional Netlify credential with access to the site's Blobs store |
 | PREDATOR_ENABLE_EXPERIMENTAL_PAPER | Set to true to opt into one-contract forward research simulations |
@@ -26,4 +27,4 @@ The worker uses public Kalshi REST depth when the authenticated book is unavaila
 
 V17 early-entry research records one prospective probe per direction per BTC round on Kalshi WebSocket depth. It scores 1, 3, 5, 10, 30 and 60 seconds using later executable bids and publishes sample counts and a lower bound for the historical profitable-exit rate. The V18 paper entry rules remain the baseline. V17 probes cannot create positions.
 
-For production startup, set both Kalshi variables and both Netlify variables. Keep the PEM and Netlify token in the host's secret store. The Kalshi credential is used to authenticate the market-data socket. The Netlify token must be able to write the site's Blobs store. Run under a restart supervisor on the persistent volume. A successful startup publishes the configured/connected feed flags; an idle Kalshi socket is reconnected after 10 seconds without a book update. Missing settings in a credential pair stop startup, and heartbeat write failures are reported without logging secrets.
+For authenticated streaming on Railway, set the key ID and multiline PEM together in the production service Variables tab. Supply exactly one private key source. Set both Netlify variables for heartbeat publishing. Keep the PEM and Netlify token in the host's secret store. The Kalshi credential is used to authenticate the market-data socket. The Netlify token must be able to write the site's Blobs store. Run under a restart supervisor on the persistent volume. A successful startup publishes the configured/connected feed flags; an idle Kalshi socket is reconnected after 10 seconds without a book update. Missing settings in a credential pair stop startup, and heartbeat write failures are reported without logging secrets.
