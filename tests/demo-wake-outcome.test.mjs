@@ -39,3 +39,25 @@ test('Netlify receipt records the precise safe market gate but never implies an 
  }}),intake:{},receivedAt:100,completedAt:200});
  assert.equal(fake.marketRejectionReason,'DEMO_MARKET_NOT_VERIFIED');
 });
+
+
+test('Demo failure stage receipt is sanitized and cannot invent an exchange fill',()=>{
+ const intake={status:'SHADOW_PARITY_MATCH',ticker:'KXBTC15M-TEST',action:'BUY UP'};
+ const receipt=demoWakeReceipt({response:new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-stage':'FIND_MARKET'
+ }}),intake,receivedAt:100,completedAt:200});
+ assert.equal(receipt.failureStage,'FIND_MARKET');
+ assert.equal(receipt.lifecycleStatus,'DEMO_LIFECYCLE_FAILED');
+ assert.equal(receipt.filled,undefined);
+ const unsafe=demoWakeReceipt({response:new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-stage':'API_KEY_SECRET'
+ }}),intake,receivedAt:100,completedAt:200});
+ assert.equal(unsafe.failureStage,'UNVERIFIED_STAGE');
+ const normal=demoWakeReceipt({response:new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_WAITING_FOR_CHAMPION_ENTRY',
+  'x-demo-failure-stage':'FIND_MARKET'
+ }}),intake,receivedAt:100,completedAt:200});
+ assert.equal(normal.failureStage,undefined);
+});
