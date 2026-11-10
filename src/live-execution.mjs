@@ -71,7 +71,7 @@ export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,s
  return roi<=-stopPct?'STOP_LOSS':roi>=profitPct?'TAKE_PROFIT':peakCents>=entryCents*(1+trailActivationPct/100)&&bidCents<=peakCents*(1-trailPct/100)?'TRAILING_EXIT':null;
 }
 // persist must use a compare-and-swap transaction. Never retry a timed-out POST.
-export async function submitIntent({state,client,persist,checkStopped,snapshot,signal,quote,action='buy',position,now=Date.now(),clock=Date.now}){
+export async function submitIntent({state,client,persist,checkStopped,snapshot,signal,quote,action='buy',position,trialCaps=false,now=Date.now(),clock=Date.now}){
  validateLimits(state.limits);
  if(!state.enabled||state.stopped||await checkStopped())throw Error('TRADING_STOPPED');
  reconcile(state,snapshot,now);
@@ -86,14 +86,15 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  if(action==='sell'){
   const actual=Number(open.find(p=>p.ticker===quote.ticker)?.position_fp??open.find(p=>p.ticker===quote.ticker)?.position);
   if(!Number.isFinite(actual)||Math.sign(actual)!==(side==='up'?1:-1)||qty>Math.abs(actual))throw Error('SELL_EXCEEDS_POSITION');
- }else if(open.length>=state.limits.maxPositions)throw Error('POSITION_LIMIT');
+ }else if(open.length>=Math.min(state.limits.maxPositions,trialCaps?1:Infinity))throw Error('POSITION_LIMIT');
  const day=new Date(now).toISOString().slice(0,10),reserve=action==='buy'?Math.ceil(qty*price+qty*10):0;
  const risk=accountRisk(state,snapshot,now);
- if(action==='buy'&&risk.dailyLossCents+risk.openCostCents+reserve>state.limits.lossCents)throw Error('DAILY_LOSS_LIMIT');
+ if(action==='buy'&&risk.dailyLossCents+risk.openCostCents+reserve>Math.min(state.limits.lossCents,trialCaps?300:Infinity))throw Error('DAILY_LOSS_LIMIT');
+ if(action==='buy'&&trialCaps&&risk.openCostCents+reserve>500)throw Error('EXPOSURE_LIMIT');
  if(action==='buy'&&quote.expiresAt-now<75000)throw Error('LATE_ENTRY');
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
  if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
- if(action==='buy'&&(reserve>state.limits.orderCents||reserve+(state.spent[day]||0)>state.limits.dailyCents||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
+ if(action==='buy'&&(reserve>Math.min(state.limits.orderCents,trialCaps?100:Infinity)||reserve+(state.spent[day]||0)>state.limits.dailyCents||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
  // Conservative budget includes a 10-cent per-contract fee reserve and is never released on retries.
  const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};
  state.intents.push(intent);state.spent[day]=(state.spent[day]||0)+reserve;await persist(state);

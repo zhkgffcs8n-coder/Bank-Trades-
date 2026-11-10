@@ -4,10 +4,9 @@ import {liveRepository} from './live-state.mjs';
 import {openKalshiCredentials} from './kalshi-credential-envelope.mjs';
 import {kalshiClient} from './kalshi-execution-client.mjs';
 import {releaseStatus} from './kalshi-release-gate.mjs';
-import {qualifiesLiveEntry} from '../../../src/live-execution.mjs';
+import {championExecutionSignals} from '../../../src/champion-kaibot-intake.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
 import {parseCollectorPrice,validCollectorQuote} from '../../../src/collector-quote.mjs';
-import sharedSignals from '../shared-signals.mjs';
 export function parseLiveQuote(m,ticker,at,receivedAt){
  if(m?.ticker!==ticker||m.status!=='active'||receivedAt<at||receivedAt-at>10000)return null;
  const close=Date.parse(m.close_time);
@@ -35,7 +34,9 @@ export async function runtime(userId){
   if(!releaseStatus().canTrade&&!record.state.intents.length)return {status:'RELEASE_BLOCKED',...releaseStatus()};
   const exchange=await client();
   const result=await runLiveCycle({repo,client:exchange,canTrade:releaseStatus().canTrade,
-   signals:async()=>{const res=await sharedSignals(new Request('https://internal/shared-signals'));if(!res.ok)throw Error('SIGNAL_SERVICE_FAILED');const payload=await res.json();return (payload.results||[]).filter(s=>qualifiesLiveEntry(s,record.state.entryMode));},
+   championMode:true,
+   signals:async()=>championExecutionSignals(await getStore({name:'bank-trades-market-history',consistency:'strong'})
+    .get('predator-v13/health',{type:'json'})),
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
     return parseLiveQuote(m,ticker,at,Date.now());
