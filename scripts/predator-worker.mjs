@@ -39,9 +39,9 @@ const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
 let previousEarlyBook=null;
 let demoWakePending=false;
 let demoWakeInFlight=false;
-async function wakeDemo(at){
+async function wakeDemo(worker){
  const token=randomBytes(32).toString('hex');
- await remote.setJSON(DEMO_WAKE_KEY,{hash:hashDemoWake(token),at});
+ await remote.setJSON(DEMO_WAKE_KEY,{hash:hashDemoWake(token),at:worker.championShadow.at,worker:{feeds:{kalshiAuthenticated:worker.feeds.kalshiAuthenticated},championShadow:worker.championShadow}});
  const response=await fetch('https://neon-gecko-046bff.netlify.app/.netlify/functions/kalshi-demo-wake',{
   method:'POST',headers:{'x-demo-wake':token},signal:AbortSignal.timeout(20000),redirect:'error'
  });
@@ -314,7 +314,7 @@ async function run(){
      const signal=health.championShadow;
      if(signal&&Date.now()-signal.at<=10000&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(signal.action)){
       demoWakeInFlight=true;
-      void wakeDemo(signal.at).catch(error=>{
+      void wakeDemo(health).catch(error=>{
        console.warn(JSON.stringify({event:'KAIBOT_DEMO_WAKE_FAILED',code:/^DEMO_WAKE_HTTP_[0-9]{3}$/.test(error?.message)?error.message:'TRANSPORT'}));
       }).finally(()=>{demoWakeInFlight=false;});
      }
