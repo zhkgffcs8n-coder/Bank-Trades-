@@ -12,10 +12,23 @@ export function demoWakeLifecycleStatus(status){
 export function demoWakeMarketRejectionReason(reason){
  return MARKET_REASONS.has(reason)?reason:'DEMO_MARKET_NOT_VERIFIED';
 }
+// Only fixed lifecycle stages may leave the Netlify runner. Never expose raw errors.
+const FAILURE_STAGES=new Set([
+ 'INITIALIZE','ACCOUNT_SNAPSHOT','ACCOUNT_RECONCILIATION','EXIT_QUOTE',
+ 'RECORD_EXIT_ATTEMPT','SUBMIT_EXIT','VERIFY_EXIT','FIND_MARKET',
+ 'ENTRY_ACCOUNT_SNAPSHOT','ENTRY_QUOTE','RECORD_ENTRY_ATTEMPT',
+ 'SUBMIT_ENTRY','VERIFY_ENTRY'
+]);
+export function demoWakeFailureStage(stage){
+ return FAILURE_STAGES.has(stage)?stage:'UNVERIFIED_STAGE';
+}
 export function demoWakeReceipt({response,intake,receivedAt,completedAt}){
  const lifecycleStatus=demoWakeLifecycleStatus(response?.headers?.get?.('x-demo-lifecycle-status'));
  return {receivedAt,completedAt,httpStatus:response?.status??null,...intake,lifecycleStatus,
   ...(lifecycleStatus==='DEMO_CHAMPION_CONTRACT_INELIGIBLE'?{
    marketRejectionReason:demoWakeMarketRejectionReason(response?.headers?.get?.('x-demo-market-rejection-reason'))
+  }:{}),
+  ...(lifecycleStatus==='DEMO_LIFECYCLE_FAILED'?{
+   failureStage:demoWakeFailureStage(response?.headers?.get?.('x-demo-failure-stage'))
   }:{})};
 }
