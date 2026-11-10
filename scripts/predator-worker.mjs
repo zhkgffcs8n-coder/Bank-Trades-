@@ -1,6 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import {DEMO_WAKE_KEY,hashDemoWake} from '../src/demo-wake-ticket.mjs';
-import {recoverInterruptedDemoWakeAudit} from '../src/demo-wake-audit.mjs';
+import {recoverInterruptedDemoWakeAudit,recordDemoWakeAcknowledgment} from '../src/demo-wake-audit.mjs';
 import {championSpotEvidence,observeChampion} from '../src/champion-live-shadow.mjs';
 import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHorizons,forecastPredatorEarly} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
@@ -49,7 +49,7 @@ function dispatchDemoWake(){
  event.sentAt=now;
  dirty=true;
  demoWakeInFlight=true;
- void wakeDemo(worker).then(()=>{event.status='RUNNER_ACKNOWLEDGED';},error=>{
+ void wakeDemo(worker).then(response=>{recordDemoWakeAcknowledgment(event,response);},error=>{
   event.status=/^DEMO_WAKE_HTTP_[0-9]{3}$/.test(error?.message)?error.message:'TRANSPORT';
  }).finally(()=>{
   event.completedAt=Date.now();
@@ -64,6 +64,7 @@ async function wakeDemo(worker){
   method:'POST',headers:{'x-demo-wake':token},signal:AbortSignal.timeout(20000),redirect:'error'
  });
  if(!response.ok)throw Error('DEMO_WAKE_HTTP_'+response.status);
+  return response;
 }
 let championEvidence=null,championDecision=null,nextChampionSample=0,nextChampionCandles=0;
 function sampleChampion(now){

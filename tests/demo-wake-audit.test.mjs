@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {recoverInterruptedDemoWakeAudit} from '../src/demo-wake-audit.mjs';
+import {recoverInterruptedDemoWakeAudit,recordDemoWakeAcknowledgment} from '../src/demo-wake-audit.mjs';
 
 test('restart records uncertain Demo wake delivery without replay or inventing an acknowledgment',()=>{
  const state={demoWakeAudit:[
@@ -24,4 +24,27 @@ test('restart recovery leaves absent and terminal audit history unchanged',()=>{
  const state={demoWakeAudit:[null,{status:'EXPIRED_BEFORE_SEND'},{status:'TRANSPORT'}]};
  assert.equal(recoverInterruptedDemoWakeAudit(state,123),false);
  assert.equal(state.demoWakeAudit[1].recoveredAt,undefined);
+});
+
+test('worker persists the sanitized lifecycle gate from an acknowledged Demo wake',()=>{
+ const event={ticker:'KXBTC15M-TEST',action:'BUY DOWN',signalAt:100,bookAt:90,status:'SENDING'};
+ const response=new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_WAITING_FOR_CHAMPION_ENTRY'}});
+ recordDemoWakeAcknowledgment(event,response);
+ assert.equal(event.status,'RUNNER_ACKNOWLEDGED');
+ assert.equal(event.httpStatus,204);
+ assert.equal(event.lifecycleStatus,'DEMO_WAITING_FOR_CHAMPION_ENTRY');
+ assert.equal(event.action,'BUY DOWN');
+ assert.equal(event.signalAt,100);
+ assert.equal(event.filled,undefined);
+});
+
+test('missing or malformed Demo outcome is recorded as unverified, never a fill',()=>{
+ for(const status of [null,'BAD_STATUS','DEMO_BAD-STATUS','DEMO_FAKE+BAD']){
+  const event={ticker:'KXBTC15M-TEST',action:'SELL FAST DOWN',status:'SENDING'};
+  const headers=status===null?{}:{'x-demo-lifecycle-status':status};
+  recordDemoWakeAcknowledgment(event,new Response(null,{status:204,headers}));
+  assert.equal(event.status,'RUNNER_ACKNOWLEDGED');
+  assert.equal(event.lifecycleStatus,'DEMO_OUTCOME_UNVERIFIED');
+  assert.equal(event.filled,undefined);
+ }
 });
