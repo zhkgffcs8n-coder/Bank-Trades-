@@ -18,6 +18,7 @@ function safeCollectorCoverage(assets,reportedCount){
  return {collectorSampledAssets:[...assets],
   collectorMissingAssets:KNOWN_ASSETS.filter(asset=>!assets.includes(asset))};
 }
+const COLLECTOR_FAILURE_CODES=['SERIES_UNAVAILABLE','NO_OPEN_CONTRACT','NO_EXECUTABLE_CONTRACT','COLLECTOR_EXCEPTION','UNCLASSIFIED'];
 const KNOWN_PROVIDERS=['gpt','grok','deepseek','qwen','mistral','kimi','perplexity','claude','gemini'];
 const PROVIDER_STATES=['RESEARCH_FORECAST','AWAITING_CHECK','PROVIDER_ERROR','PROVIDER_UNAVAILABLE','INVALID_RESPONSE','INVALID_KEY_FORMAT','UNCONFIGURED','INVALID_INPUT'];
 const FUSION_REASONS=['Missing fresh Kalshi baseline','At least two distinct fresh research forecasts required','Missing market, round or evaluation timestamp'];
@@ -40,12 +41,17 @@ function safeProviderDiagnostics(entries){
 
 export function summarizeHealth(body){
  if(!body||typeof body!=='object'||Array.isArray(body))return {status:'INVALID_RESPONSE'};
+ const coverage=safeCollectorCoverage(body.sampledAssets,body.sampledAssetCount);
+ const collectorFailureReasons=coverage.collectorMissingAssets===null?null:Object.fromEntries(
+  coverage.collectorMissingAssets.map(asset=>[asset,
+   COLLECTOR_FAILURE_CODES.includes(body.collectorFailureReasons?.[asset])?body.collectorFailureReasons[asset]:'UNCLASSIFIED']));
  return {
   status:state(body.status,['COLLECTOR_FRESH','NOT_VERIFIED']),
   collectorStatus:state(body.collectorStatus,['COMPLETED','DEGRADED','RUNNING','FAILED','UNKNOWN']),
   collectorAgeSeconds:count(body.collectorAgeSeconds),
   sampledAssetCount:count(body.sampledAssetCount),
-  ...safeCollectorCoverage(body.sampledAssets,body.sampledAssetCount),
+  ...coverage,
+  collectorFailureReasons,
   trainingSucceeded:bool(body.trainingSucceeded),
   collectorLastRunCounts:Object.fromEntries(
    ['newPendingPredictions','trained','trainingReviews','settlementFailures','researchFailures']
@@ -121,6 +127,7 @@ export function evidenceSummary(report){
   '| OMEGA quote gate | '+value(h.omegaObservationGate)+' |',
   '| Collector run state | '+value(h.collectorStatus)+' |',
   '| Collector coverage | '+value(h.sampledAssetCount)+'/8; missing: '+(Array.isArray(h.collectorMissingAssets)?(h.collectorMissingAssets.join(', ')||'none'):'unverified')+' |',
+  '| Missing-asset causes | '+(h.collectorFailureReasons&&Object.keys(h.collectorFailureReasons).length?Object.entries(h.collectorFailureReasons).map(([asset,code])=>asset+':'+code).join('; '):'none verified')+' |',
   '| OMEGA fusion blockers | '+(h.omegaReasons?.length?h.omegaReasons.join('; '):'none verified')+' |',
   '| Provider diagnostics | '+(h.omegaProviderStatus?.length?h.omegaProviderStatus.map(x=>x.provider+':'+x.status+(x.httpStatus?' HTTP '+x.httpStatus:'')).join('; '):'none verified')+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
