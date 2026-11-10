@@ -1,11 +1,20 @@
 import {randomUUID} from 'node:crypto';
 import {initialState} from '../../../src/live-execution.mjs';
-export function liveRepository(db,userId){
+export function liveRepository(db,userId,{recoverDemoLock}={}){
  if(!/^[a-zA-Z0-9_-]{8,128}$/.test(userId))throw Error('INVALID_OWNER_ID');
  const key='owner/'+userId;
  const read=()=>db.getWithMetadata(key,{type:'json'});
  async function acquire(){
-  const current=await read();if(current?.data?.lock)throw Error('EXECUTION_BUSY');
+  const current=await read();
+  if(current?.data?.lock){
+   if(userId!=='demo-lifecycle-v1'||!recoverDemoLock)throw Error('EXECUTION_BUSY');
+   const recovered=await recoverDemoLock(current.data);
+   if(!recovered)throw Error('EXECUTION_BUSY');
+   const result=await db.setJSON(key,{state:recovered,lock:null},{onlyIfMatch:current.etag});
+   // Defer all order handling to the next scheduled invocation.
+   if(!result.modified)throw Error('EXECUTION_BUSY');
+   throw Error('DEMO_LOCK_RECOVERED');
+  }
   const token=randomUUID(),record={state:current?.data?.state||initialState(),lock:{token,at:Date.now()}};
   const result=await db.setJSON(key,record,current?{onlyIfMatch:current.etag}:{onlyIfNew:true});
   if(!result.modified||!result.etag)throw Error('EXECUTION_BUSY');let etag=result.etag;
