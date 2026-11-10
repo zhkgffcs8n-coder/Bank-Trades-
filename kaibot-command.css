@@ -35,3 +35,9 @@
 #kai-command .kai-command-modes>*{border:1px solid #454c78;border-radius:999px;padding:6px 10px;font-size:.75rem}
 #kai-command .kai-command-actions button{flex:1 1 180px;min-height:48px}
 #kai-command [data-stop]{background:#411f37;border-color:#ff647d;color:#fff}
+
+#kai-command .kai-coins h2{font-size:.85rem;letter-spacing:.08em;margin-bottom:8px}
+#kai-command [data-coins]{display:grid;grid-template-columns:repeat(auto-fit,minmax(75px,1fr));gap:8px}
+#kai-command [data-coins] button{padding:6px;background:#131a32;border:1px solid #53618a;color:#e5efff}
+#kai-command [data-coins] button[aria-pressed=true]{background:#574900;border:2px solid #ffd400;color:#fff7a8}
+#kai-command [data-coin-status]{color:#9eadce;font-size:.8rem}
