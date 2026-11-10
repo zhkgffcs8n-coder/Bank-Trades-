@@ -24,3 +24,24 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now){
  }
  return null;
 }
+
+/**
+ * Diagnostic-only classification of the existing Demo eligibility gate.
+ * Do not relax the executable-market predicate or substitute a different ticker.
+ * Return only fixed, non-sensitive reason codes.
+ */
+export function demoLifecycleMarketRejection(m,excluded,now=Date.now()){
+ if(!m)return 'DEMO_MARKET_NOT_FOUND';
+ if(m.exchange_index!==0)return 'DEMO_MARKET_NONDEFAULT_EXCHANGE';
+ if(m.status!=='active')return 'DEMO_MARKET_INACTIVE';
+ if(m.market_type!=='binary')return 'DEMO_MARKET_NOT_BINARY';
+ if(excluded.includes(m.ticker))return 'DEMO_MARKET_ALREADY_USED';
+ if(!(Date.parse(m.close_time)>now+300000))return 'DEMO_MARKET_CLOSING_SOON';
+ for(const side of ['yes','no']){
+  const ask=Number(m[side+'_ask_dollars']),bid=Number(m[side+'_bid_dollars']);
+  if(!(ask>=.1&&ask<=.8))return 'DEMO_MARKET_ASK_OUT_OF_RANGE';
+  if(!(bid>0))return 'DEMO_MARKET_BID_UNAVAILABLE';
+  if(!(ask>=bid&&ask-bid<=.05))return 'DEMO_MARKET_SPREAD_UNSAFE';
+ }
+ return null;
+}
