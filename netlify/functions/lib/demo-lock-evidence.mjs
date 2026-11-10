@@ -1,3 +1,6 @@
+import {reconcile} from '../../../src/live-execution.mjs';
+import {accountRisk} from '../../../src/live-accounting.mjs';
+
 // Read-only evidence. An unchanged lock and a complete snapshot cannot rule out
 // an in-flight order request, so this probe never releases or replaces a lock.
 export async function inspectDemoLock(repo,client) {
@@ -14,7 +17,21 @@ export async function inspectDemoLock(repo,client) {
   const intents=after.state.intents;
   const intentIds=new Set(intents.map(intent=>intent.id));
   const matched=orders.filter(order=>intentIds.has(order.client_order_id));
+  let reconciliation=null;
+  if(snapshot.complete===true){
+   const state=structuredClone(after.state);
+   try{
+    reconcile(state,snapshot);
+    const risk=accountRisk(state,snapshot);
+    reconciliation={status:'RECONCILED_READ_ONLY',openPositions:risk.open.length,
+     filledQuantity:state.intents.reduce((total,intent)=>total+(intent.filled||0),0)};
+   }catch(error){
+    const code=error?.message?.replace(/^(UNRESOLVED_ORDER|POSITION_MISMATCH|POSITION_MISSING)_.*/, '$1');
+    reconciliation={status:/^[A-Z][A-Z_]{2,50}$/.test(code)?code:'RECONCILIATION_UNAVAILABLE'};
+   }
+  }
   return {
+   reconciliation,
    status:snapshot.complete===true?'LOCK_REQUIRES_REVIEW':'SNAPSHOT_INCOMPLETE',
    lockAt:Number.isFinite(before.lock.at)?before.lock.at:null,
    authenticatedSnapshot:snapshot.complete===true,
