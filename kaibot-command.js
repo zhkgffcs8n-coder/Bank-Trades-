@@ -12,6 +12,11 @@
  </header>
  <div class="kai-command-modes"><strong data-live-mode>REAL MONEY · LOCKED</strong><span>DEMO · SIMULATED FUNDS</span><span>PAPER · VIRTUAL LEDGER</span></div>
  <div class="kai-command-actions"><button type="button" data-start disabled>START AUTO TRADE</button><button type="button" data-stop disabled>STOP AUTO TRADE</button></div>
+ <section class="kai-coins" aria-labelledby="kai-coins-title">
+  <h2 id="kai-coins-title">COINS</h2>
+  <div data-coins role="group" aria-label="Auto Trade coin selection"></div>
+  <p data-coin-status role="status"></p>
+ </section>
  <section class="kai-arena" data-move="idle" aria-label="KaiBot animated robot arena">
   <div class="kai-arena-heading"><span>01 / BTC ARENA</span><strong data-decision>AWAITING SIGNAL</strong></div>
   <svg viewBox="0 0 680 240" aria-hidden="true">
@@ -43,6 +48,37 @@
  const arena=panel.querySelector('.kai-arena');
  const update=(name,value)=>{field(name).textContent=value;};
  const readable=value=>value?String(value).replaceAll('_',' '):'Unavailable';
+ const coinButtons=[...document.querySelectorAll('#quickAssets [data-quick-asset]')];
+ const selectionKey='btKaiCommandCoins';
+ const selected=new Set();
+ try{
+  const saved=JSON.parse(localStorage.getItem(selectionKey)||'[]');
+  if(Array.isArray(saved))saved.forEach(coin=>selected.add(coin));
+ }catch{}
+ const paintCoins=()=>{
+  const names=[];
+  for(const button of field('coins').children){
+   const coin=button.dataset.coin;
+   button.setAttribute('aria-pressed',String(selected.has(coin)));
+   if(selected.has(coin))names.push(coin);
+  }
+  update('coin-status',(names.length?'Selected: '+names.join(', '):'Tap one or more coins')+' · Display selection only');
+ };
+ for(const source of coinButtons){
+  const coin=source.dataset.quickAsset;
+  const button=document.createElement('button');
+  button.type='button';
+  button.dataset.coin=coin;
+  button.textContent=source.textContent;
+  button.addEventListener('click',()=>{
+   if(selected.has(coin))selected.delete(coin);else selected.add(coin);
+   try{localStorage.setItem(selectionKey,JSON.stringify([...selected]));}catch{}
+   paintCoins();
+  });
+  field('coins').append(button);
+ }
+ paintCoins();
+
  let timer,pending,lastEvent;
  const liveStart=document.getElementById('primalLiveStart');
  const liveStop=document.getElementById('liveStop');
