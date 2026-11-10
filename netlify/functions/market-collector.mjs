@@ -122,9 +122,10 @@ function titanReport(rows,now,truncated){
   note:'UTC today and yesterday, paired versus frozen market probability. One hypothetical contract held to settlement. Estimated costs and quote-based entries; no exchange fills.'};
 }
 
+export function collectorFailureCode(error){return error?.message==='Kalshi series list unavailable'?'SERIES_UNAVAILABLE':'COLLECTOR_EXCEPTION';}
 export default async()=>{
  const db=store(),now=Date.now(),bucket=Math.floor(now/60000)*60000;
- const collection={sampled:new Set(),newPredictions:0,errors:new Set(),trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0,researchFailures:0,researchErrors:[]};
+ const collection={sampled:new Set(),newPredictions:0,errors:new Set(),failureReasons:{},trainingSucceeded:false,trainingError:null,trainingReviewCount:0,settlementFailures:0,researchFailures:0,researchErrors:[]};
  const researchFailure=(scope,error,asset=null)=>{
   collection.researchFailures++;
   if(collection.researchErrors.length<16)collection.researchErrors.push({scope,asset,error:String(error).slice(0,160)});
@@ -137,6 +138,7 @@ export default async()=>{
   const markets=(d.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry-now<=16*60000).sort((a,b)=>a._expiry-b._expiry);
   const selection=selectEligibleRound(markets,now);
   if(!selection){
+   collection.failureReasons[asset]=markets.length?'NO_EXECUTABLE_CONTRACT':'NO_OPEN_CONTRACT';
    await db.setJSON('scalp-hunter/diagnostics/'+asset,{at:Date.now(),stage:markets.length?'NO_EXECUTABLE_CONTRACT':'NO_OPEN_CONTRACT'});
    await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:markets.length?'No eligible contract with executable binary quote':'No verified open contract'});return;}
   const {market:m,yesBid,yesAsk,noBid,noAsk}=selection;
@@ -390,7 +392,7 @@ export default async()=>{
    await db.setJSON(pendingKey,{ticker:m.ticker,asset,expiresAt:m._expiry,at:now,features,baseline,prediction:predict(model,baseline,features),assetPrediction:predict(assetModelForPrediction,baseline,features),globalPrediction:predict(globalModelForPrediction,baseline,features)});
    collection.newPredictions++;
   }
- }catch(e){collection.errors.add(asset);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
+ }catch(e){collection.errors.add(asset);collection.failureReasons[asset]=collectorFailureCode(e);console.error('Collector asset failed',asset,String(e));try{await db.setJSON('telemetry/'+asset,{at:Date.now(),asset,valid:false,error:String(e).slice(0,240)})}catch(writeError){console.error('Collector telemetry failed',asset,String(writeError))}}}));
  // These counters must remain in scope for the final heartbeat, even if training fails.
  let trainedThisRun=0;
  const trainedByAsset={};
@@ -778,7 +780,7 @@ export default async()=>{
   collection.trainingSucceeded=true;
  }catch(e){collection.trainingError=String(e).slice(0,240);console.error('Training update failed',String(e))}
  // Mark completion independently of the KaiBot paper runner, including research-only collection.
- await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0&&collection.researchFailures===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],newPendingPredictions:collection.newPredictions,trainedThisRun,trainedByAsset,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,researchFailures:collection.researchFailures,researchErrors:collection.researchErrors,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
+ await db.setJSON('collector/heartbeat',{startedAt:now,completedAt:Date.now(),status:collection.sampled.size===Object.keys(SERIES).length&&!collection.errors.size&&collection.trainingSucceeded&&collection.settlementFailures===0&&collection.trainingReviewCount===0&&collection.researchFailures===0?'COMPLETED':'DEGRADED',mode:'PAPER RESEARCH',expectedIntervalSeconds:60,sampledAssets:[...collection.sampled],sampledAssetCount:collection.sampled.size,failedAssets:[...collection.errors],failureReasons:collection.failureReasons,newPendingPredictions:collection.newPredictions,trainedThisRun,trainedByAsset,trainingReviewCount:collection.trainingReviewCount,settlementFailures:collection.settlementFailures,researchFailures:collection.researchFailures,researchErrors:collection.researchErrors,trainingSucceeded:collection.trainingSucceeded,trainingError:collection.trainingError,note:'A fresh heartbeat alone does not prove every market was sampled or every prediction was verified.'});
  // Retention is enforced lazily by the read API; keys are minute buckets and bounded reads are used.
  return new Response(null,{status:204});
 };

@@ -146,3 +146,17 @@ test('collector coverage evidence names only validated missing assets and reject
  const full=summarizeHealth({sampledAssetCount:8,sampledAssets:['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC']});
  assert.deepEqual(full.collectorMissingAssets,[]);
 });
+
+
+test('missing asset reasons are allowlisted and never expose raw exceptions or forged assets',()=>{
+ const health=summarizeHealth({sampledAssetCount:6,
+  sampledAssets:['ETH','SOL','XRP','DOGE','BNB','HYPE'],
+  collectorFailureReasons:{BTC:'SERIES_UNAVAILABLE',ZEC:'SECRET_TOKEN=leak',FAKE:'NO_OPEN_CONTRACT'}});
+ assert.deepEqual(health.collectorMissingAssets,['BTC','ZEC']);
+ assert.deepEqual(health.collectorFailureReasons,{BTC:'SERIES_UNAVAILABLE',ZEC:'UNCLASSIFIED'});
+ const report={checkedAt:'2026-11-10T09:00:00Z',health,paper:{status:'NOT_VERIFIED'}};
+ assert.match(evidenceSummary(report),/BTC:SERIES_UNAVAILABLE/);
+ assert.doesNotMatch(JSON.stringify(report),/SECRET_TOKEN|FAKE/);
+ assert.equal(summarizeHealth({sampledAssetCount:2,sampledAssets:['BTC','BTC'],
+  collectorFailureReasons:{ETH:'SERIES_UNAVAILABLE'}}).collectorFailureReasons,null);
+});

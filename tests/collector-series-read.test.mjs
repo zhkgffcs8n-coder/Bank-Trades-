@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readCollectorSeries} from '../netlify/functions/market-collector.mjs';
+import {readCollectorSeries,collectorFailureCode} from '../netlify/functions/market-collector.mjs';
 
 test('collector recovers a series after one transient failure',async()=>{
  let calls=0;
@@ -23,4 +23,10 @@ test('collector does not retry permanent errors or ignore a long rate-limit dela
   assert.equal(result,null);
   assert.equal(calls,1);
  }
+});
+
+
+test('collector classifies missing series without exposing raw exception text',()=>{
+ assert.equal(collectorFailureCode(new Error('Kalshi series list unavailable')),'SERIES_UNAVAILABLE');
+ assert.equal(collectorFailureCode(new Error('SECRET_TOKEN=never-print')),'COLLECTOR_EXCEPTION');
 });
