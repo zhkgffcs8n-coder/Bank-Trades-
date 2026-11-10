@@ -52,6 +52,10 @@ function sampleChampion(now){
  if(now<nextChampionSample)return;
  nextChampionSample=now+5000;
  const observation=observeChampion({market,book,bookSource,evidence:championEvidence,previous:state.championReference,now});
+ // BUY exists for only the first sample of a round. Publish actionable
+ // transitions immediately so a routine heartbeat cannot replace them with HOLD.
+ if(observation&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(observation.action)&&
+  (observation.action!==championDecision?.action||observation.ticker!==championDecision?.ticker))lastPublish=0;
  championDecision=observation;
  if(observation?.position&&JSON.stringify(observation.position)!==JSON.stringify(state.championReference)){
   state.championReference=observation.position;
