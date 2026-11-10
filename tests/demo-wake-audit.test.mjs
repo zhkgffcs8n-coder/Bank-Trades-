@@ -95,3 +95,28 @@ test('failed Demo lifecycle records only an allowlisted stage, never a fill',()=
  }}));
  assert.equal(waiting.failureStage,undefined);
 });
+
+
+test('durable Demo wake records only allowlisted account snapshot failure codes',()=>{
+ const event={ticker:'KXBTC15M-TEST',action:'BUY UP',status:'SENDING'};
+ recordDemoWakeAcknowledgment(event,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-stage':'ACCOUNT_SNAPSHOT',
+  'x-demo-failure-code':'KALSHI_HTTP_403'
+ }}));
+ assert.equal(event.failureStage,'ACCOUNT_SNAPSHOT');
+ assert.equal(event.failureCode,'KALSHI_HTTP_403');
+ assert.equal(event.filled,undefined);
+ const unsafe={status:'SENDING'};
+ recordDemoWakeAcknowledgment(unsafe,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-code':'PRIVATE_KEY_VALUE'
+ }}));
+ assert.equal(unsafe.failureCode,'UNVERIFIED_FAILURE_CODE');
+ const waiting={status:'SENDING'};
+ recordDemoWakeAcknowledgment(waiting,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_WAITING_FOR_CHAMPION_ENTRY',
+  'x-demo-failure-code':'KALSHI_HTTP_403'
+ }}));
+ assert.equal(waiting.failureCode,undefined);
+});

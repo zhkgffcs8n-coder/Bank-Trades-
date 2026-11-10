@@ -22,6 +22,19 @@ const FAILURE_STAGES=new Set([
 export function demoWakeFailureStage(stage){
  return FAILURE_STAGES.has(stage)?stage:'UNVERIFIED_STAGE';
 }
+// Only fixed diagnostic codes cross the Demo wake boundary. Never emit raw
+// exchange messages, exception text, credentials, or response bodies.
+const FAILURE_CODES=new Set([
+ 'KALSHI_HTTP_400','KALSHI_HTTP_401','KALSHI_HTTP_403','KALSHI_HTTP_404',
+ 'KALSHI_HTTP_408','KALSHI_HTTP_409','KALSHI_HTTP_422','KALSHI_HTTP_429',
+ 'KALSHI_HTTP_500','KALSHI_HTTP_502','KALSHI_HTTP_503','KALSHI_HTTP_504',
+ 'INVALID_ORDERS','INVALID_FILLS','INVALID_MARKET_POSITIONS',
+ 'INVALID_SETTLEMENTS','CURSOR_LOOP','PAGINATION_LIMIT',
+ 'INCOMPLETE_ACCOUNT_SNAPSHOT','DEMO_TRANSPORT_OR_STORAGE_ERROR'
+]);
+export function demoWakeFailureCode(code){
+ return FAILURE_CODES.has(code)?code:'UNVERIFIED_FAILURE_CODE';
+}
 export function demoWakeReceipt({response,intake,receivedAt,completedAt}){
  const lifecycleStatus=demoWakeLifecycleStatus(response?.headers?.get?.('x-demo-lifecycle-status'));
  return {receivedAt,completedAt,httpStatus:response?.status??null,...intake,lifecycleStatus,
@@ -29,6 +42,7 @@ export function demoWakeReceipt({response,intake,receivedAt,completedAt}){
    marketRejectionReason:demoWakeMarketRejectionReason(response?.headers?.get?.('x-demo-market-rejection-reason'))
   }:{}),
   ...(lifecycleStatus==='DEMO_LIFECYCLE_FAILED'?{
-   failureStage:demoWakeFailureStage(response?.headers?.get?.('x-demo-failure-stage'))
+   failureStage:demoWakeFailureStage(response?.headers?.get?.('x-demo-failure-stage')),
+   failureCode:demoWakeFailureCode(response?.headers?.get?.('x-demo-failure-code'))
   }:{})};
 }
