@@ -37,8 +37,25 @@ const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
   fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;
 let previousEarlyBook=null;
-let demoWakePending=false;
+const demoWakeQueue=[];
 let demoWakeInFlight=false;
+function dispatchDemoWake(){
+ if(demoWakeInFlight||!demoWakeQueue.length)return;
+ const {event,worker}=demoWakeQueue.shift();
+ const now=Date.now();
+ if(now-event.signalAt>10000){event.status='EXPIRED_BEFORE_SEND';event.completedAt=now;dirty=true;return;}
+ event.status='SENDING';
+ event.sentAt=now;
+ dirty=true;
+ demoWakeInFlight=true;
+ void wakeDemo(worker).then(()=>{event.status='RUNNER_ACKNOWLEDGED';},error=>{
+  event.status=/^DEMO_WAKE_HTTP_[0-9]{3}$/.test(error?.message)?error.message:'TRANSPORT';
+ }).finally(()=>{
+  event.completedAt=Date.now();
+  dirty=true;
+  demoWakeInFlight=false;
+ });
+}
 async function wakeDemo(worker){
  const token=randomBytes(32).toString('hex');
  await remote.setJSON(DEMO_WAKE_KEY,{hash:hashDemoWake(token),at:worker.championShadow.at,worker:{feeds:{kalshiAuthenticated:worker.feeds.kalshiAuthenticated},championShadow:worker.championShadow}});
@@ -67,9 +84,15 @@ function sampleChampion(now){
  // BUY exists for only the first sample of a round. Publish actionable
  // transitions immediately so a routine heartbeat cannot replace them with HOLD.
  if(observation&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(observation.action)&&
-  (observation.action!==championDecision?.action||observation.ticker!==championDecision?.ticker)){
+  (observation.action!==championDecision?.action||observation.ticker!==championDecision?.ticker)&&
+  !state.demoWakeAudit?.some(event=>event.ticker===observation.ticker&&event.action===observation.action)){
   lastPublish=0;
-  demoWakePending=true;
+  const event={ticker:observation.ticker,action:observation.action,signalAt:observation.at,
+   bookAt:observation.bookAt,status:'QUEUED'};
+  state.demoWakeAudit=[...(state.demoWakeAudit||[]),event].slice(-32);
+  if(remote)demoWakeQueue.push({event,worker:{feeds:{kalshiAuthenticated:true},championShadow:observation}});
+  else event.status='PUBLISHING_UNCONFIGURED';
+  dirty=true;
  }
  championDecision=observation;
  if(observation?.position&&JSON.stringify(observation.position)!==JSON.stringify(state.championReference)){
@@ -268,6 +291,7 @@ async function run(){
    }catch{reject('REST_DEPTH_FAILED');}
   }
   sampleChampion(Date.now());
+  dispatchDemoWake();
   sampleProductionReads(now);
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
   if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
@@ -277,7 +301,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,productionReads,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
@@ -309,16 +333,7 @@ async function run(){
     net:state.closed.reduce((sum,row)=>sum+row.net,0),rejections:state.rejections};
    console.log(JSON.stringify(health));
    if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;
-    if(demoWakePending&&!demoWakeInFlight){
-     demoWakePending=false;
-     const signal=health.championShadow;
-     if(signal&&Date.now()-signal.at<=10000&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(signal.action)){
-      demoWakeInFlight=true;
-      void wakeDemo(health).catch(error=>{
-       console.warn(JSON.stringify({event:'KAIBOT_DEMO_WAKE_FAILED',code:/^DEMO_WAKE_HTTP_[0-9]{3}$/.test(error?.message)?error.message:'TRANSPORT'}));
-      }).finally(()=>{demoWakeInFlight=false;});
-     }
-    }}catch(error){
+   }catch(error){
     publishError=true;counters.heartbeatFailures++;
     console.error(JSON.stringify({event:'PREDATOR_HEARTBEAT_WRITE_FAILED',errorType:error?.name??'Error'}));
    }
