@@ -5,7 +5,8 @@ import {join} from 'node:path';
 import WebSocket from 'ws';
 import {predatorStreamCredentials} from './predator-stream-credentials.mjs';
 import {getStore} from '@netlify/blobs';
-import {signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
+import {checkKalshiProductionReads} from './kalshi-production-readiness.mjs';
+import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {openPredatorTape} from '../src/predator-stream.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
 import {parseDepthV8} from '../src/scalper-v8.mjs';
@@ -23,6 +24,13 @@ const base='https://external-api.kalshi.com';
 if(Boolean(env.PREDATOR_NETLIFY_SITE_ID)!==Boolean(env.PREDATOR_NETLIFY_TOKEN))
  throw Error('PREDATOR_NETLIFY_SITE_ID and PREDATOR_NETLIFY_TOKEN must be configured together');
 const credentials=await predatorStreamCredentials(env);
+const productionReadClient=credentials?kalshiClient(credentials):null;
+let productionReads=null,nextProductionRead=0;
+function sampleProductionReads(now){
+ if(!productionReadClient||now<nextProductionRead)return;
+ nextProductionRead=now+300000;
+ void checkKalshiProductionReads(productionReadClient).then(result=>{productionReads=result;});
+}
 const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
   fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;
@@ -241,6 +249,7 @@ async function run(){
    }catch{reject('REST_DEPTH_FAILED');}
   }
   sampleChampion(Date.now());
+  sampleProductionReads(now);
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
   if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
@@ -249,7 +258,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,productionReads,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
