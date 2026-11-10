@@ -3,6 +3,7 @@ import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {recoverTerminalDemoState} from './lib/demo-lock-recovery.mjs';
+import {findDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 export default async()=>{
@@ -22,10 +23,7 @@ export default async()=>{
    if(m?.ticker!==ticker||m.status!=='active'||m.exchange_index!==0)return null;
    return {ticker,at,expiresAt:Date.parse(m.close_time),upAsk:Math.round(Number(m.yes_ask_dollars)*100),upBid:Math.round(Number(m.yes_bid_dollars)*100),downAsk:Math.round(Number(m.no_ask_dollars)*100),downBid:Math.round(Number(m.no_bid_dollars)*100)};
   };
-  const findMarket=async excluded=>{
-   const {markets}=await client.request('GET','/trade-api/v2/markets?status=open&limit=100&mve_filter=exclude');
-   return markets?.find(m=>m.exchange_index===0&&m.status==='active'&&m.market_type==='binary'&&!excluded.includes(m.ticker)&&Date.parse(m.close_time)>Date.now()+300000&&['yes','no'].every(s=>{const ask=Number(m[s+'_ask_dollars']),bid=Number(m[s+'_bid_dollars']);return ask>=.1&&ask<=.8&&bid>0&&ask>=bid&&ask-bid<=.05;}));
-  };
+  const findMarket=excluded=>findDemoLifecycleMarket(client,excluded);
   await db.setJSON('lifecycle-status',await runDemoLifecycle({repo,client,quoteFor,findMarket,commit:process.env.COMMIT_REF||null}));
   return new Response(null,{status:204});
  }catch(e){
