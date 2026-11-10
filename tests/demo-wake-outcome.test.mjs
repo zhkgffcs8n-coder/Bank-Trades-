@@ -61,3 +61,17 @@ test('Demo failure stage receipt is sanitized and cannot invent an exchange fill
  }}),intake,receivedAt:100,completedAt:200});
  assert.equal(normal.failureStage,undefined);
 });
+
+
+test('Demo failure code is allowlisted and cannot leak raw errors or imply fills',()=>{
+ const intake={status:'SHADOW_PARITY_MATCH',action:'BUY UP'};
+ const make=(status,code)=>demoWakeReceipt({response:new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':status,'x-demo-failure-code':code
+ }}),intake,receivedAt:1,completedAt:2});
+ const known=make('DEMO_LIFECYCLE_FAILED','KALSHI_HTTP_401');
+ assert.equal(known.failureCode,'KALSHI_HTTP_401');
+ assert.equal(known.filled,undefined);
+ for(const code of ['API_KEY_SECRET','KALSHI_HTTP_200','KALSHI_HTTP_401\\r\\nx-leak:secret'])
+  assert.equal(make('DEMO_LIFECYCLE_FAILED',code).failureCode,'UNVERIFIED_FAILURE_CODE');
+ assert.equal(make('DEMO_WAITING_FOR_CHAMPION_ENTRY','KALSHI_HTTP_401').failureCode,undefined);
+});
