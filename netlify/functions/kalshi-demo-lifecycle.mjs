@@ -5,7 +5,7 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {recoverTerminalDemoState} from './lib/demo-lock-recovery.mjs';
 import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
-import {eligibleDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
+import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 export async function runScheduledDemo(worker){
@@ -27,16 +27,20 @@ export async function runScheduledDemo(worker){
   };
   const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
   const championSignals=async()=>championExecutionSignals(worker??await history.get('predator-v13/health',{type:'json'}));
+  let marketRejectionReason='DEMO_MARKET_NOT_VERIFIED';
   const findMarket=async(excluded,ticker)=>{
    try{
     const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
-    return market?.ticker===ticker&&eligibleDemoLifecycleMarket(market,excluded)?market:null;
+    if(!market||market.ticker!==ticker){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
+    if(eligibleDemoLifecycleMarket(market,excluded))return market;
+    marketRejectionReason=demoLifecycleMarketRejection(market,excluded)||'DEMO_MARKET_NOT_VERIFIED';
+    return null;
    }catch(error){
-    if(error.message==='KALSHI_HTTP_404')return null;
+    if(error.message==='KALSHI_HTTP_404'){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
     throw error;
    }
   };
-  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,championSignals,commit:process.env.COMMIT_REF||null});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,commit:process.env.COMMIT_REF||null});
   await db.setJSON('lifecycle-status',outcome);
   return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)}});
  }catch(e){
