@@ -1,7 +1,7 @@
 // Bounded integration test. Caller constructs a DEMO-only client; never production.
 import {initialState,reconcile,submitIntent} from '../../../src/live-execution.mjs';
 import {accountRisk} from '../../../src/live-accounting.mjs';
-export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,championSignals,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false;
@@ -62,7 +62,8 @@ export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,c
   const entry=championSignals?(await championSignals()).find(signal=>['BUY UP','BUY DOWN'].includes(signal.action)):null;
   if(championSignals&&!entry){result('DEMO_WAITING_FOR_CHAMPION_ENTRY');await session.persist(state);return state.demo;}
   const market=await findMarket(state.intents.map(i=>i.ticker),entry?.ticker);
-  if(!market){result(entry?'DEMO_CHAMPION_CONTRACT_INELIGIBLE':'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');await session.persist(state);return state.demo;}
+  if(!market){result(entry?'DEMO_CHAMPION_CONTRACT_INELIGIBLE':'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET',
+   {marketRejectionReason:marketRejection?.()||'DEMO_MARKET_NOT_VERIFIED'});await session.persist(state);return state.demo;}
   stage='ENTRY_ACCOUNT_SNAPSHOT';
   const entrySnapshot=await client.snapshot();
   stage='ENTRY_QUOTE';
