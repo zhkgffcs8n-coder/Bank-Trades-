@@ -4,15 +4,28 @@ import {accountRisk} from '../../../src/live-accounting.mjs';
 export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
+ let retry=false;
  try{
-  if(state.demo?.finished)return state.demo;
+  retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
+   !state.demoRetryUsed&&state.demo.error==='DEMO_TRANSPORT_OR_STORAGE_ERROR';
+  if(state.demo?.finished&&!retry)return state.demo;
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
-  if(state.demo.attempts>=8){result('DEMO_ORDER_LIMIT_REACHED',{finished:true});await session.persist(state);return state.demo;}
+  if(!retry&&state.demo.attempts>=8){result('DEMO_ORDER_LIMIT_REACHED',{finished:true});await session.persist(state);return state.demo;}
   stage='ACCOUNT_SNAPSHOT';
   const snapshot=await client.snapshot();
   stage='ACCOUNT_RECONCILIATION';
   reconcile(state,snapshot);const risk=accountRisk(state,snapshot,clock());
+  if(retry){
+   if(risk.open.length)return state.demo;
+   state.demoHistory=[...(state.demoHistory||[]),state.demo];
+   state.demoRetryUsed=true;
+   state.demo={startedAt:clock(),commit,phase:'UP',attempts:0,intentOffset:state.intents.length};
+   state.enabled=true;state.stopped=false;
+   result('DEMO_RETRY_ARMED');
+   await session.persist(state);
+   return state.demo;
+  }
   state.risk=risk;await session.persist(state);
   const open=risk.open[0];
   if(open){
@@ -28,9 +41,10 @@ export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,c
    result('DEMO_EXIT_RECONCILED');await session.persist(state);return state.demo;
   }
   const phase=state.demo.phase,side=phase==='UP'?'up':'down';
-  const buy=state.intents.find(i=>i.action==='buy'&&i.side===side);
+  const currentIntents=state.intents.slice(state.demo.intentOffset||0);
+  const buy=currentIntents.find(i=>i.action==='buy'&&i.side===side);
   if(buy){
-   const sold=state.intents.filter(i=>i.action==='sell'&&i.side===side).reduce((n,i)=>n+(i.filled||0),0);
+   const sold=currentIntents.filter(i=>i.action==='sell'&&i.side===side).reduce((n,i)=>n+(i.filled||0),0);
    if(!(buy.filled>0)||Math.abs(sold-buy.filled)>1e-7){result('DEMO_LIFECYCLE_NOT_FILLED',{finished:true});await session.persist(state);return state.demo;}
    state.demo[side+'RoundTripVerified']=true;
    if(phase==='DOWN'){result('DEMO_BOTH_SIDES_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
@@ -51,6 +65,6 @@ export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,c
   stage='VERIFY_ENTRY';
   const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
   result('DEMO_ENTRY_RECONCILED');await session.persist(state);return state.demo;
- }catch(e){state.enabled=false;state.stopped=true;state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:/^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:'DEMO_TRANSPORT_OR_STORAGE_ERROR',finished:true,checkedAt:clock()};await session.persist(state);return state.demo;}
+ }catch(e){if(retry)throw e;state.enabled=false;state.stopped=true;state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:/^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:'DEMO_TRANSPORT_OR_STORAGE_ERROR',finished:true,checkedAt:clock()};await session.persist(state);return state.demo;}
  finally{await session.release();}
 }
