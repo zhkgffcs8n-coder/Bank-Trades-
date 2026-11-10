@@ -48,3 +48,26 @@ test('missing or malformed Demo outcome is recorded as unverified, never a fill'
   assert.equal(event.filled,undefined);
  }
 });
+
+test('Railway audit captures only allowlisted contract rejection reasons, not fills',()=>{
+ for(const [reason,expected] of [
+  ['DEMO_MARKET_SPREAD_UNSAFE','DEMO_MARKET_SPREAD_UNSAFE'],
+  ['DEMO_MARKET_NOT_FOUND','DEMO_MARKET_NOT_FOUND'],
+  ['FAKE_EXCHANGE_FILL','DEMO_MARKET_NOT_VERIFIED']
+ ]){
+  const event={ticker:'KXBTC15M-TEST',action:'BUY DOWN',status:'SENDING'};
+  const response=new Response(null,{status:204,headers:{
+   'x-demo-lifecycle-status':'DEMO_CHAMPION_CONTRACT_INELIGIBLE',
+   'x-demo-market-rejection-reason':reason
+  }});
+  recordDemoWakeAcknowledgment(event,response);
+  assert.equal(event.marketRejectionReason,expected);
+  assert.equal(event.filled,undefined);
+ }
+ const exit={ticker:'KXBTC15M-TEST',action:'SELL FAST DOWN',status:'SENDING'};
+ recordDemoWakeAcknowledgment(exit,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_WAITING_FOR_CHAMPION_ENTRY',
+  'x-demo-market-rejection-reason':'DEMO_MARKET_SPREAD_UNSAFE'
+ }}));
+ assert.equal(exit.marketRejectionReason,undefined);
+});
