@@ -9,12 +9,31 @@ const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
 const money=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const bool=x=>typeof x==='boolean'?x:null;
 const state=(x,allowed)=>allowed.includes(x)?x:'NOT_VERIFIED';
+const KNOWN_PROVIDERS=['gpt','grok','deepseek','qwen','mistral','kimi','perplexity','claude','gemini'];
+const PROVIDER_STATES=['RESEARCH_FORECAST','AWAITING_CHECK','PROVIDER_ERROR','PROVIDER_UNAVAILABLE','INVALID_RESPONSE','INVALID_KEY_FORMAT','UNCONFIGURED','INVALID_INPUT'];
+const FUSION_REASONS=['Missing fresh Kalshi baseline','At least two distinct fresh research forecasts required','Missing market, round or evaluation timestamp'];
+const ERROR_CODES=['invalid_api_key','authentication_error','insufficient_quota','model_not_found','permission_error','RESOURCE_EXHAUSTED','INVALID_ARGUMENT','PERMISSION_DENIED','UNAUTHENTICATED','NOT_FOUND','API_KEY_INVALID','API_KEY_SERVICE_BLOCKED','BILLING_DISABLED','CLAUDE_REFUSAL','CLAUDE_TRUNCATED'];
+function safeProviderDiagnostics(entries){
+ if(!Array.isArray(entries))return [];
+ const seen=new Set(),safe=[];
+ for(const entry of entries){
+  if(!entry||typeof entry!=='object'||Array.isArray(entry)||!KNOWN_PROVIDERS.includes(entry.provider)||seen.has(entry.provider))continue;
+  seen.add(entry.provider);
+  const at=typeof entry.checkedAt==='string'?Date.parse(entry.checkedAt):NaN;
+  safe.push({provider:entry.provider,status:state(entry.status,PROVIDER_STATES),
+   checkedAt:Number.isFinite(at)&&at>0?new Date(at).toISOString():null,
+   httpStatus:Number.isSafeInteger(entry.httpStatus)&&entry.httpStatus>=100&&entry.httpStatus<=599?entry.httpStatus:null,
+   errorCode:ERROR_CODES.includes(entry.errorCode)?entry.errorCode:null});
+  if(safe.length===KNOWN_PROVIDERS.length)break;
+ }
+ return safe;
+}
 
 export function summarizeHealth(body){
  if(!body||typeof body!=='object'||Array.isArray(body))return {status:'INVALID_RESPONSE'};
  return {
   status:state(body.status,['COLLECTOR_FRESH','NOT_VERIFIED']),
-  collectorStatus:state(body.collectorStatus,['COMPLETED','FAILED','UNKNOWN']),
+  collectorStatus:state(body.collectorStatus,['COMPLETED','DEGRADED','RUNNING','FAILED','UNKNOWN']),
   collectorAgeSeconds:count(body.collectorAgeSeconds),
   sampledAssetCount:count(body.sampledAssetCount),
   trainingSucceeded:bool(body.trainingSucceeded),
@@ -27,6 +46,8 @@ export function summarizeHealth(body){
   omegaLiveResearchRunning:bool(body.omegaLiveResearchRunning),
   omegaExternalProvidersRunning:bool(body.omegaExternalProvidersRunning),
   omegaProvidersConfigured:count(body.omegaProvidersConfigured),
+  omegaReasons:Array.isArray(body.omegaReasons)?[...new Set(body.omegaReasons.filter(x=>FUSION_REASONS.includes(x)))].slice(0,3):[],
+  omegaProviderStatus:safeProviderDiagnostics(body.omegaProviderStatus),
   omegaPaperMonitoring:Object.fromEntries(['open','exits','holds','settled','unpriced','backfilled']
    .map(k=>[k,count(body.omegaPaperMonitoring?.[k])])),
   paperLastAction:state(body.paperLastAction,['PAPER_ENTRY','PAPER_EXIT','PAPER_SETTLEMENT_UNVERIFIED','NONE_VERIFIED']),
@@ -88,6 +109,9 @@ export function evidenceSummary(report){
   '| Collector | '+value(h.status)+' (age '+value(h.collectorAgeSeconds)+'s) |',
   '| OMEGA scheduler | '+value(h.omegaStatus)+' (age '+value(h.omegaAgeSeconds)+'s) |',
   '| OMEGA quote gate | '+value(h.omegaObservationGate)+' |',
+  '| Collector run state | '+value(h.collectorStatus)+' |',
+  '| OMEGA fusion blockers | '+(h.omegaReasons?.length?h.omegaReasons.join('; '):'none verified')+' |',
+  '| Provider diagnostics | '+(h.omegaProviderStatus?.length?h.omegaProviderStatus.map(x=>x.provider+':'+x.status+(x.httpStatus?' HTTP '+x.httpStatus:'')).join('; '):'none verified')+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
   '| OMEGA paper monitoring: exits | '+value(h.omegaPaperMonitoring?.exits)+' |',
   '| Paper archive | '+value(p.status)+' |',
