@@ -18,3 +18,12 @@ export function inspectChampionIntake(worker,now=Date.now()){
  return {status:'SHADOW_PARITY_MATCH',ticker:signal.ticker,action:signal.action,
   observedAt:signal.at,ageMs};
 }
+
+export function championExecutionSignals(worker,now=Date.now()){
+ const evidence=inspectChampionIntake(worker,now);
+ if(evidence.status!=='SHADOW_PARITY_MATCH')return [];
+ const signal=worker.championShadow;
+ if(!/^(BUY|HOLD|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(signal.action)||
+  !Number.isFinite(signal.position?.entry))return [];
+ return [{ticker:signal.ticker,action:signal.action,at:signal.at,entryReference:signal.position.entry}];
+}

@@ -99,3 +99,19 @@ test('live quote parser rejects malformed, stale, and closed books',async()=>{
  assert.equal(parseLiveQuote(market,ticker,at,at+10001),null);
  assert.equal(parseLiveQuote({...market,close_time:new Date(at+50).toISOString()},ticker,at,at+100),null);
 });
+
+test('champion routing holds confirmed exposure, ignores a wrong-side exit, then closes reduce-only',async()=>{
+ const {repo}=await started(),client=exchange();
+ let action='BUY UP';
+ const championSignals=async()=>[{ticker:'BTC-ROUND',action,at:Date.now(),entryReference:50}];
+ const tick=bid=>runLiveCycle({repo,client,signals:championSignals,quoteFor:async()=>quote(bid),canTrade:true,championMode:true});
+ assert.equal((await tick(49)).status,'ENTRY_SUBMITTED');
+ action='HOLD UP';
+ assert.equal((await tick(65)).status,'MONITORING');
+ action='SELL FAST DOWN';
+ assert.equal((await tick(65)).status,'MONITORING');
+ action='TAKE PROFIT UP';
+ assert.equal((await tick(65)).status,'EXIT_SUBMITTED');
+ assert.equal(client.count(),2);
+ assert.deepEqual((await client.snapshot()).positions,[]);
+});

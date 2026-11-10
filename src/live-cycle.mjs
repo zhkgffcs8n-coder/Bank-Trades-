@@ -6,7 +6,7 @@ const temporaryQuoteError=e=>/^KALSHI_HTTP_(429|500|502|503|504)$/.test(e?.messa
 async function safeQuote(quoteFor,ticker){
  try{return await quoteFor(ticker)}catch(e){if(temporaryQuoteError(e))return null;throw e}
 }
-export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,now=Date.now()}){
+export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,championMode=false,now=Date.now()}){
  const session=await repo.acquire(),state=session.state,persist=session.persist;
  try{
   // A stop blocks entries immediately, but does not claim cancellation while an order is unknown.
@@ -17,23 +17,33 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,now=Da
    return {status:'STOPPED',...await emergencyStop({state,client,persist})};
   }
   const snap=await client.snapshot();reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
+  const decisions=championMode?await signals():null;
   for(const p of risk.open){
    const quote=await safeQuote(quoteFor,p.ticker);
    // Missing executable exit liquidity is a degraded monitoring state, not an
    // exchange/order failure. Do not open new exposure or disable future checks.
    if(!quote||quote.ticker!==p.ticker||!Number.isFinite(quote.at)||Date.now()-quote.at<0||Date.now()-quote.at>10000||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
    state.peaks??={};state.peaks[p.ticker]=Math.max(state.peaks[p.ticker]||p.entryCents,quote[p.side+'Bid']);await persist(state);
-   const reason=exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct,trailPct:state.limits.trailPct,trailActivationPct:state.limits.trailActivationPct});
-   if(reason||risk.dailyLossCents+risk.openCostCents>=state.limits.lossCents||quote.expiresAt-Date.now()<30000){
+   const side=p.side.toUpperCase();
+   const decision=decisions?.find(signal=>signal.ticker===p.ticker&&
+    Number.isFinite(signal.at)&&Date.now()-signal.at>=0&&Date.now()-signal.at<=10000&&signal.action.endsWith(' '+side));
+   const bid=quote[p.side+'Bid'];
+   const netPositive=bid-p.entryCents>10;
+   const championExit=decision&&(['SELL FAST','TIME EXIT','EXIT'].some(action=>decision.action===action+' '+side)||
+    decision.action==='TAKE PROFIT '+side&&netPositive)?decision.action:null;
+   const reason=championMode?championExit:exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct,trailPct:state.limits.trailPct,trailActivationPct:state.limits.trailActivationPct});
+   if(reason||risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity)||quote.expiresAt-Date.now()<30000){
     const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal:{ticker:p.ticker,at:Date.now()},quote,action:'sell',position:p});
     reconcile(state,await client.snapshot());await persist(state);return {status:'EXIT_SUBMITTED',reason:reason||'RISK_OR_EXPIRY',id:intent.id};
    }
   }
-  if(risk.dailyLossCents+risk.openCostCents>=state.limits.lossCents)return {status:'RISK_LIMIT',risk};
-  for(const signal of await signals()){
+  if(risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity))return {status:'RISK_LIMIT',risk};
+  if(championMode&&risk.open.length)return {status:'MONITORING',risk};
+  for(const signal of decisions??await signals()){
    if(!['BUY UP','BUY DOWN'].includes(signal.action)||state.intents.some(i=>i.ticker===signal.ticker&&i.action==='buy'))continue;
    const quote=await safeQuote(quoteFor,signal.ticker);if(!quote)continue;
-   const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote});
+   if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference))continue;
+   const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
    reconcile(state,await client.snapshot());await persist(state);return {status:'ENTRY_SUBMITTED',id:intent.id};
   }
   return {status:'MONITORING',risk};
