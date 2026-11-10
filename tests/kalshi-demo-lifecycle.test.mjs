@@ -24,3 +24,20 @@ test('demo entry takes its fresh quote after the last preflight snapshot', async
  assert.equal(await runDemoLifecycle(options),failed);
  assert.equal(calls.length,4);
 });
+
+test('a legacy transport failure arms one new Demo run and keeps historical state',async()=>{
+ const now=Date.now(),state=initialState();
+ const old={finished:true,status:'DEMO_LIFECYCLE_FAILED',error:'DEMO_TRANSPORT_OR_STORAGE_ERROR',attempts:1};
+ state.demo=old;
+ state.intents=[{id:'old',status:'ABORTED',ticker:'OLD'}];
+ const options={
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>({at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]})},
+  findMarket:async excluded=>{assert.deepEqual(excluded,['OLD']);return null;},
+  clock:()=>now
+ };
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_RETRY_ARMED');
+ assert.deepEqual(state.demoHistory,[old]);
+ assert.equal(state.demo.intentOffset,1);
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');
+});
