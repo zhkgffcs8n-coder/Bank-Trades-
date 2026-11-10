@@ -1,3 +1,4 @@
+import {championSpotEvidence,observeChampion} from '../src/champion-live-shadow.mjs';
 import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHorizons,forecastPredatorEarly} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
@@ -26,6 +27,29 @@ const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
   fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;
 let previousEarlyBook=null;
+let championEvidence=null,championDecision=null,nextChampionSample=0,nextChampionCandles=0;
+function sampleChampion(now){
+ if(now>=nextChampionCandles){
+  nextChampionCandles=now+30000;
+  const end=Math.floor(now/60000)*60000;
+  const query=new URLSearchParams({granularity:'60',start:new Date(end-180*60000).toISOString(),end:new Date(end).toISOString()});
+  fetch('https://api.exchange.coinbase.com/products/BTC-USD/candles?'+query,{signal:AbortSignal.timeout(5000)})
+   .then(response=>response.ok?response.json():null)
+   .then(rows=>{
+    const candles=rows.filter(row=>Array.isArray(row)&&row.length>=6&&row.slice(0,6).every(Number.isFinite)&&row[0]*1000<end)
+     .map(([t,low,high,open,close,volume])=>({t,low,high,open,close,volume}));
+    championEvidence=championSpotEvidence({asset:'BTC',fetched_at:new Date().toISOString(),candles});
+   }).catch(()=>{championEvidence=null;});
+ }
+ if(now<nextChampionSample)return;
+ nextChampionSample=now+5000;
+ const observation=observeChampion({market,book,bookSource,evidence:championEvidence,previous:state.championReference,now});
+ championDecision=observation;
+ if(observation?.position&&JSON.stringify(observation.position)!==JSON.stringify(state.championReference)){
+  state.championReference=observation.position;
+  dirty=true;
+ }
+}
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
 const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,heartbeatFailures:0};
 async function persist(){
@@ -216,6 +240,7 @@ async function run(){
     }
    }catch{reject('REST_DEPTH_FAILED');}
   }
+  sampleChampion(Date.now());
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
   if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
@@ -224,7 +249,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
