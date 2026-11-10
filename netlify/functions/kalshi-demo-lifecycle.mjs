@@ -1,4 +1,5 @@
 import {getStore} from '@netlify/blobs';
+import {demoWakeLifecycleStatus} from '../../src/demo-wake-outcome.mjs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
@@ -10,7 +11,7 @@ import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 export async function runScheduledDemo(worker){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
- if(saved?.status!=='DEMO_AUTHENTICATED'||!id){await db.setJSON('lifecycle-status',{status:'DEMO_CREDENTIALS_MISSING'});return new Response(null,{status:204});}
+ if(saved?.status!=='DEMO_AUTHENTICATED'||!id){await db.setJSON('lifecycle-status',{status:'DEMO_CREDENTIALS_MISSING'});return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_CREDENTIALS_MISSING'}});}
  let credentials,repo;
  try{
   credentials=openKalshiCredentials({userId:'demo-'+id,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
@@ -35,16 +36,17 @@ export async function runScheduledDemo(worker){
     throw error;
    }
   };
-  await db.setJSON('lifecycle-status',await runDemoLifecycle({repo,client,quoteFor,findMarket,championSignals,commit:process.env.COMMIT_REF||null}));
-  return new Response(null,{status:204});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,championSignals,commit:process.env.COMMIT_REF||null});
+  await db.setJSON('lifecycle-status',outcome);
+  return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)}});
  }catch(e){
   if(e.message==='DEMO_LOCK_RECOVERED'){
    await db.setJSON('lifecycle-status',{status:e.message,checkedAt:Date.now()});
-   return new Response(null,{status:204});
+   return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_LOCK_RECOVERED'}});
   }
   const lockEvidence=e.message==='EXECUTION_BUSY'&&credentials?
    await inspectDemoLock(repo,kalshiClient(credentials,{environment:'demo'})):null;
-  await db.setJSON('lifecycle-status',{lockEvidence,status:'DEMO_LIFECYCLE_UNAVAILABLE',error:/^[A-Z0-9_:.-]+$/.test(e.message)?e.message:'DEMO_CONFIGURATION_OR_TRANSPORT_ERROR',checkedAt:Date.now()});return new Response(null,{status:503});}
+  await db.setJSON('lifecycle-status',{lockEvidence,status:'DEMO_LIFECYCLE_UNAVAILABLE',error:/^[A-Z0-9_:.-]+$/.test(e.message)?e.message:'DEMO_CONFIGURATION_OR_TRANSPORT_ERROR',checkedAt:Date.now()});return new Response(null,{status:503,headers:{'x-demo-lifecycle-status':'DEMO_LIFECYCLE_UNAVAILABLE'}});}
 }
 export default ()=>runScheduledDemo();
 export const config={schedule:'* * * * *'};
