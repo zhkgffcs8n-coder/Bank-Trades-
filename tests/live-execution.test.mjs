@@ -118,3 +118,22 @@ test('emergency stop cannot confirm cancellation from an incomplete exchange sna
   assert.equal(state.enabled,false);
  }
 });
+
+test('snapshot failure identifies only the fixed read phase without changing requests',async()=>{
+ const phases=[['balance','BALANCE'],['orders','ORDERS'],['fills','FILLS'],['positions','POSITIONS'],['settlements','SETTLEMENTS']];
+ for(const [failed,expected] of phases){
+  const requests=[];
+  const client=kalshiClient(credentials,{environment:'demo',fetchImpl:async url=>{
+   requests.push(url);
+   if(url.includes('/'+failed))throw new TypeError('private upstream transport detail');
+   const field=url.includes('/orders')?'orders':url.includes('/fills')?'fills':url.includes('/positions')?'market_positions':'settlements';
+   return {ok:true,json:async()=>url.includes('/balance')?{balance:100}:{[field]:[]}};
+  }});
+  await assert.rejects(client.snapshot(),error=>{
+   assert.equal(error.snapshotPhase,expected);
+   assert.equal(error.message,'private upstream transport detail');
+   return true;
+  });
+  assert.equal(requests.length,phases.findIndex(([name])=>name===failed)+1);
+ }
+});

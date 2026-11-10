@@ -1,13 +1,17 @@
 // Bounded integration test. Caller constructs a DEMO-only client; never production.
 import {initialState,reconcile,submitIntent} from '../../../src/live-execution.mjs';
 import {accountRisk} from '../../../src/live-accounting.mjs';
+const SNAPSHOT_PHASES=new Set(['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMENTS']);
+const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
+const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
+const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
 export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false;
  try{
   retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
-   !state.demoRetryUsed&&state.demo.error==='DEMO_TRANSPORT_OR_STORAGE_ERROR';
+   !state.demoRetryUsed&&retryableSnapshotFailure(state.demo.error);
   if(state.demo?.finished&&!retry)return state.demo;
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
@@ -83,6 +87,16 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   stage='VERIFY_ENTRY';
   const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
   result('DEMO_ENTRY_RECONCILED');await session.persist(state);return state.demo;
- }catch(e){if(retry)throw e;state.enabled=false;state.stopped=true;state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:/^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:'DEMO_TRANSPORT_OR_STORAGE_ERROR',finished:true,checkedAt:clock()};await session.persist(state);return state.demo;}
+ }catch(e){
+  if(retry)throw e;
+  // A failed read is not an order attempt. Classify only the fixed GET phase;
+  // never propagate raw exception text, URLs, account data, or credentials.
+  const safeError=/^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:
+   SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)?
+    'DEMO_SNAPSHOT_'+e.snapshotPhase+'_READ_FAILED':'DEMO_TRANSPORT_OR_STORAGE_ERROR';
+  state.enabled=false;state.stopped=true;
+  state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:safeError,finished:true,checkedAt:clock()};
+  await session.persist(state);return state.demo;
+ }
  finally{await session.release();}
 }

@@ -41,3 +41,35 @@ test('a legacy transport failure arms one new Demo run and keeps historical stat
  assert.equal(state.demo.intentOffset,1);
  assert.equal((await runDemoLifecycle(options)).status,'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');
 });
+
+test('Demo snapshot read phase is sanitized, creates no orders, and retains bounded retry semantics',async()=>{
+ const state=initialState(),now=Date.now();let calls=0,creates=0;
+ const options={
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>{
+   calls++;
+   if(calls===1){const error=new TypeError('private host and credential detail');error.snapshotPhase='FILLS';throw error;}
+   return {at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]};
+  },create:async()=>{creates++;throw Error('should never submit')}},
+  findMarket:async()=>null,clock:()=>now
+ };
+ const failed=await runDemoLifecycle(options);
+ assert.equal(failed.status,'DEMO_LIFECYCLE_FAILED');
+ assert.equal(failed.stage,'ACCOUNT_SNAPSHOT');
+ assert.equal(failed.error,'DEMO_SNAPSHOT_FILLS_READ_FAILED');
+ assert.equal(creates,0);
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_RETRY_ARMED');
+ assert.equal(creates,0);
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');
+ assert.equal(creates,0);
+});
+test('unrecognized snapshot phases never leak raw error data',async()=>{
+ const state=initialState(),now=Date.now();
+ const result=await runDemoLifecycle({
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>{const error=Error('secret details');error.snapshotPhase='TOKEN_VALUE';throw error;}},
+  clock:()=>now
+ });
+ assert.equal(result.error,'DEMO_TRANSPORT_OR_STORAGE_ERROR');
+ assert.equal(result.stage,'ACCOUNT_SNAPSHOT');
+});
