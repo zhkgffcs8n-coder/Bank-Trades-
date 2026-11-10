@@ -37,19 +37,19 @@ test('diagnostic reason matches every existing Demo market rejection without rel
 });
 
 test('ineligible champion contract persists only safe diagnostic code; no order attempt',async()=>{
- const state=initialState();
+ const state=initialState(),runtimeNow=Date.now();
  let creates=0,persists=0;
  const repo={async acquire(){return {state,async persist(){persists++;},async release(){}};}};
  const client={
-  async snapshot(){return {at:now,complete:true,balanceCents:10000,orders:[],fills:[],positions:[],settlements:[]};},
+  async snapshot(){return {at:runtimeNow,complete:true,balanceCents:10000,orders:[],fills:[],positions:[],settlements:[]};},
   async create(){creates++;throw Error('UNEXPECTED_DEMO_ORDER');}
  };
  const result=await runDemoLifecycle({
   repo,client,findMarket:async()=>null,
   marketRejection:()=> 'DEMO_MARKET_SPREAD_UNSAFE',
-  championSignals:async()=>[{ticker:'KXBTC15M-TEST',action:'BUY DOWN',at:now,entryReference:50}],
+  championSignals:async()=>[{ticker:'KXBTC15M-TEST',action:'BUY DOWN',at:runtimeNow,entryReference:50}],
   quoteFor:async()=>{throw Error('UNEXPECTED_DEMO_QUOTE');},
-  commit:'test',clock:()=>now
+  commit:'test',clock:()=>runtimeNow
  });
  assert.equal(result.status,'DEMO_CHAMPION_CONTRACT_INELIGIBLE');
  assert.equal(result.marketRejectionReason,'DEMO_MARKET_SPREAD_UNSAFE');
