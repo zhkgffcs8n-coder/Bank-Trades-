@@ -12,6 +12,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
  const body=await req.json(),action=body?.action;
  if(!['start','stop','emergency-stop','configure','reconcile','tick'].includes(action))fail(400,'Invalid action');
  if(action==='start'&&!getRelease().canTrade)return json({...getRelease(),error:'Release verification required'},409);
+ if(action==='start'&&body.confirmation!=='START_REAL_MONEY_WITH_LIMITS')fail(409,'EXPLICIT_LIVE_CONFIRMATION_REQUIRED');
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
  let session;try{session=await live.repo.acquire();}catch(e){if(e.message==='EXECUTION_BUSY')return json({enabled:false,stopRequested:action==='stop'||action==='emergency-stop',cancelled:false,error:'Worker busy; cancellation pending, not verified'},202);throw e;}
@@ -45,7 +46,9 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   state.risk=accountRisk(state,snapshot);state.lastReconciledAt=Date.now();await session.persist(state);
   if(action==='reconcile')return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
   if(state.risk.open.length||snapshot.orders.some(o=>o.status==='resting'))fail(409,'Start requires a reconciled flat account without resting orders');
-  validateLimits(state.limits);state.enabled=true;state.stopped=false;state.failure=null;await session.persist(state);await live.repo.startFence(fence);
+  validateLimits(state.limits);
+  if(state.limits.orderCents>100||state.limits.dailyCents>500||state.limits.lossCents>300||state.limits.maxPositions!==1)fail(409,'LIVE_TRIAL_LIMITS_EXCEEDED');
+  state.enabled=true;state.stopped=false;state.failure=null;await session.persist(state);await live.repo.startFence(fence);
   return json({enabled:true,stopped:false});
  }finally{await session.release();}
 }catch(e){if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
