@@ -1,7 +1,7 @@
 // Bounded integration test. Caller constructs a DEMO-only client; never production.
 import {initialState,reconcile,submitIntent} from '../../../src/live-execution.mjs';
 import {accountRisk} from '../../../src/live-accounting.mjs';
-export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,championSignals,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false;
@@ -29,13 +29,20 @@ export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,c
   state.risk=risk;await session.persist(state);
   const open=risk.open[0];
   if(open){
+   const side=open.side.toUpperCase();
+   const exit=championSignals?(await championSignals()).find(signal=>signal.ticker===open.ticker&&
+    ['TAKE PROFIT','SELL FAST','TIME EXIT','EXIT'].some(action=>signal.action===action+' '+side)):null;
+   if(championSignals&&!exit){result('DEMO_WAITING_FOR_CHAMPION_EXIT');await session.persist(state);return state.demo;}
    stage='EXIT_QUOTE';
    const quote=await quoteFor(open.ticker);
    if(!quote||quote[open.side+'Bid']<=0){result('DEMO_EXIT_LIQUIDITY_UNAVAILABLE');await session.persist(state);return state.demo;}
+   if(exit?.action.startsWith('TAKE PROFIT')&&quote[open.side+'Bid']-open.entryCents<=10){
+    result('DEMO_CHAMPION_PROFIT_BID_TOO_LOW');await session.persist(state);return state.demo;
+   }
    stage='RECORD_EXIT_ATTEMPT';
    state.demo.attempts++;await session.persist(state);
    stage='SUBMIT_EXIT';
-   await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot,signal:{ticker:open.ticker,at:clock()},quote,action:'sell',position:open,now:clock(),clock});
+   await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot,signal:exit||{ticker:open.ticker,at:clock()},quote,action:'sell',position:open,now:clock(),clock});
    stage='VERIFY_EXIT';
    const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
    result('DEMO_EXIT_RECONCILED');await session.persist(state);return state.demo;
@@ -47,21 +54,31 @@ export async function runDemoLifecycle({repo,client,findMarket,quoteFor,commit,c
    const sold=currentIntents.filter(i=>i.action==='sell'&&i.side===side).reduce((n,i)=>n+(i.filled||0),0);
    if(!(buy.filled>0)||Math.abs(sold-buy.filled)>1e-7){result('DEMO_LIFECYCLE_NOT_FILLED',{finished:true});await session.persist(state);return state.demo;}
    state.demo[side+'RoundTripVerified']=true;
+   if(championSignals){result('DEMO_CHAMPION_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
    if(phase==='DOWN'){result('DEMO_BOTH_SIDES_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
    state.demo.phase='DOWN';await session.persist(state);return state.demo;
   }
   stage='FIND_MARKET';
-  const market=await findMarket(state.intents.map(i=>i.ticker));
-  if(!market){result('DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');await session.persist(state);return state.demo;}
+  const entry=championSignals?(await championSignals()).find(signal=>['BUY UP','BUY DOWN'].includes(signal.action)):null;
+  if(championSignals&&!entry){result('DEMO_WAITING_FOR_CHAMPION_ENTRY');await session.persist(state);return state.demo;}
+  const market=await findMarket(state.intents.map(i=>i.ticker),entry?.ticker);
+  if(!market){result(entry?'DEMO_CHAMPION_CONTRACT_INELIGIBLE':'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET');await session.persist(state);return state.demo;}
   stage='ENTRY_ACCOUNT_SNAPSHOT';
   const entrySnapshot=await client.snapshot();
   stage='ENTRY_QUOTE';
   const quote=await quoteFor(market.ticker);
   if(!quote){result('DEMO_QUOTE_UNAVAILABLE');await session.persist(state);return state.demo;}
+  if(entry){
+   const side=entry.action==='BUY UP'?'up':'down';
+   if(!(quote[side+'Ask']<=entry.entryReference)){
+    result('DEMO_CHAMPION_ASK_ABOVE_REFERENCE');await session.persist(state);return state.demo;
+   }
+   state.demo.phase=side.toUpperCase();
+  }
   stage='RECORD_ENTRY_ATTEMPT';
   state.demo.attempts++;await session.persist(state);
   stage='SUBMIT_ENTRY';
-  await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot:entrySnapshot,signal:{ticker:market.ticker,action:'BUY '+phase,at:clock()},quote,now:clock(),clock});
+  await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot:entrySnapshot,signal:entry||{ticker:market.ticker,action:'BUY '+phase,at:clock()},quote,trialCaps:!!entry,now:clock(),clock});
   stage='VERIFY_ENTRY';
   const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
   result('DEMO_ENTRY_RECONCILED');await session.persist(state);return state.demo;

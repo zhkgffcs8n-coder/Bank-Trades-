@@ -3,7 +3,8 @@ import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {recoverTerminalDemoState} from './lib/demo-lock-recovery.mjs';
-import {findDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
+import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
+import {eligibleDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 export default async()=>{
@@ -23,8 +24,18 @@ export default async()=>{
    if(m?.ticker!==ticker||m.status!=='active'||m.exchange_index!==0)return null;
    return {ticker,at,expiresAt:Date.parse(m.close_time),upAsk:Math.round(Number(m.yes_ask_dollars)*100),upBid:Math.round(Number(m.yes_bid_dollars)*100),downAsk:Math.round(Number(m.no_ask_dollars)*100),downBid:Math.round(Number(m.no_bid_dollars)*100)};
   };
-  const findMarket=excluded=>findDemoLifecycleMarket(client,excluded);
-  await db.setJSON('lifecycle-status',await runDemoLifecycle({repo,client,quoteFor,findMarket,commit:process.env.COMMIT_REF||null}));
+  const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
+  const championSignals=async()=>championExecutionSignals(await history.get('predator-v13/health',{type:'json'}));
+  const findMarket=async(excluded,ticker)=>{
+   try{
+    const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
+    return market?.ticker===ticker&&eligibleDemoLifecycleMarket(market,excluded)?market:null;
+   }catch(error){
+    if(error.message==='KALSHI_HTTP_404')return null;
+    throw error;
+   }
+  };
+  await db.setJSON('lifecycle-status',await runDemoLifecycle({repo,client,quoteFor,findMarket,championSignals,commit:process.env.COMMIT_REF||null}));
   return new Response(null,{status:204});
  }catch(e){
   if(e.message==='DEMO_LOCK_RECOVERED'){
