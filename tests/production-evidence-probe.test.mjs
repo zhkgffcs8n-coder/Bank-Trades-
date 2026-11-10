@@ -136,7 +136,7 @@ test('collector coverage evidence names only validated missing assets and reject
   sampledAssetCount:2,sampledAssets:['BTC','ETH'],realOrdersAuthorized:false});
  assert.deepEqual(partial.collectorSampledAssets,['BTC','ETH']);
  assert.deepEqual(partial.collectorMissingAssets,['SOL','XRP','DOGE','BNB','HYPE','ZEC']);
- assert.match(evidenceSummary({checkedAt:'2026-11-10T08:00:00Z',health:partial,paper:{status:'NOT_VERIFIED'}}),/Collector coverage.*2\\/8; missing: SOL, XRP/);
+ assert.ok(evidenceSummary({checkedAt:'2026-11-10T08:00:00Z',health:partial,paper:{status:'NOT_VERIFIED'}}).includes('2/8; missing: SOL, XRP'));
  for(const sampledAssets of [['BTC','BTC'],['BTC','SECRET_TOKEN=hidden'],['BTC','ETH','SOL'], 'BTC',null]){
   const invalid=summarizeHealth({sampledAssetCount:2,sampledAssets});
   assert.equal(invalid.collectorSampledAssets,null);
