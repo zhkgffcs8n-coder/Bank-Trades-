@@ -1,5 +1,6 @@
 import {randomBytes} from 'node:crypto';
 import {DEMO_WAKE_KEY,hashDemoWake} from '../src/demo-wake-ticket.mjs';
+import {recoverInterruptedDemoWakeAudit} from '../src/demo-wake-audit.mjs';
 import {championSpotEvidence,observeChampion} from '../src/champion-live-shadow.mjs';
 import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHorizons,forecastPredatorEarly} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
@@ -264,6 +265,7 @@ function evaluate(trades,trigger,receivedAt){
 }
 async function run(){
  try{state=JSON.parse(await readFile(path,'utf8'))}catch(error){if(error.code!=='ENOENT')throw error;}
+ if(recoverInterruptedDemoWakeAudit(state))dirty=true;
  state.voltV18Cells??={};
  state.predatorEarlyCells??={};
  tape=openPredatorTape({onTrades:(trades,at)=>evaluate(trades,'COINBASE_WS',at)});
