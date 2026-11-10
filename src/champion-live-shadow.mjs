@@ -30,5 +30,5 @@ export function observeChampion({market,book,bookSource,evidence,previous,now=Da
  const input={ticker:market.ticker,secondsLeft,side,strong,
   quotes:{up:{ask:upAsk,bid:upBid},down:{ask:downAsk,bid:downBid}}};
  return {...replayChampionScalper(input,previous),ticker:market.ticker,at:now,mode:'SHADOW_ONLY',
-  inputs:input,bookAt:book.eventAt,candleAt:evidence.candleAt};
+  inputs:input,previousReference:previous?.ticker===market.ticker?previous:null,bookAt:book.eventAt,candleAt:evidence.candleAt};
 }
