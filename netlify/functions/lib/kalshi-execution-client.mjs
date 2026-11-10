@@ -43,12 +43,24 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
  return {request,pages,
   async snapshot(){
    const startedAt=Date.now();
-   const balance=await request('GET','/trade-api/v2/portfolio/balance');
-   const orders=await pages('/trade-api/v2/portfolio/orders','orders');
-   const fills=await pages('/trade-api/v2/portfolio/fills','fills');
-   const positions=await pages('/trade-api/v2/portfolio/positions','market_positions');
-   const settlements=await pages('/trade-api/v2/portfolio/settlements','settlements');
-   return {balanceCents:balance.balance,orders,fills,positions,settlements,at:startedAt,complete:true};
+   // Diagnostic-only phase marker. Preserve the original error and request order.
+   // The Demo runner may translate this fixed marker into a sanitized receipt.
+   let snapshotPhase='BALANCE';
+   try{
+    const balance=await request('GET','/trade-api/v2/portfolio/balance');
+    snapshotPhase='ORDERS';
+    const orders=await pages('/trade-api/v2/portfolio/orders','orders');
+    snapshotPhase='FILLS';
+    const fills=await pages('/trade-api/v2/portfolio/fills','fills');
+    snapshotPhase='POSITIONS';
+    const positions=await pages('/trade-api/v2/portfolio/positions','market_positions');
+    snapshotPhase='SETTLEMENTS';
+    const settlements=await pages('/trade-api/v2/portfolio/settlements','settlements');
+    return {balanceCents:balance.balance,orders,fills,positions,settlements,at:startedAt,complete:true};
+   }catch(error){
+    if(error&&typeof error==='object')error.snapshotPhase=snapshotPhase;
+    throw error;
+   }
   },
   create:body=>request('POST','/trade-api/v2/portfolio/events/orders',body),
   cancel:order=>request('DELETE','/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(order.order_id)+'?'+new URLSearchParams({market_ticker:order.ticker}))};
