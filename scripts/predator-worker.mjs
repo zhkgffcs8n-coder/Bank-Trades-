@@ -1,3 +1,5 @@
+import {randomBytes} from 'node:crypto';
+import {DEMO_WAKE_KEY,hashDemoWake} from '../src/demo-wake-ticket.mjs';
 import {championSpotEvidence,observeChampion} from '../src/champion-live-shadow.mjs';
 import {observeVoltHorizons,forecastVoltHorizons,voltV18Horizons,predatorEarlyHorizons,forecastPredatorEarly} from '../src/volt-horizons.mjs';
 import {mkdir,readFile,rename,writeFile} from 'node:fs/promises';
@@ -35,6 +37,16 @@ const remote=env.PREDATOR_NETLIFY_SITE_ID&&env.PREDATOR_NETLIFY_TOKEN?
  getStore({name:'bank-trades-market-history',siteID:env.PREDATOR_NETLIFY_SITE_ID,token:env.PREDATOR_NETLIFY_TOKEN,
   fetch:(url,options)=>fetch(url,{...options,signal:AbortSignal.timeout(4000)})}):null;
 let previousEarlyBook=null;
+let demoWakePending=false;
+let demoWakeInFlight=false;
+async function wakeDemo(at){
+ const token=randomBytes(32).toString('hex');
+ await remote.setJSON(DEMO_WAKE_KEY,{hash:hashDemoWake(token),at});
+ const response=await fetch('https://neon-gecko-046bff.netlify.app/.netlify/functions/kalshi-demo-wake',{
+  method:'POST',headers:{'x-demo-wake':token},signal:AbortSignal.timeout(20000),redirect:'error'
+ });
+ if(!response.ok)throw Error('DEMO_WAKE_HTTP_'+response.status);
+}
 let championEvidence=null,championDecision=null,nextChampionSample=0,nextChampionCandles=0;
 function sampleChampion(now){
  if(now>=nextChampionCandles){
@@ -55,7 +67,10 @@ function sampleChampion(now){
  // BUY exists for only the first sample of a round. Publish actionable
  // transitions immediately so a routine heartbeat cannot replace them with HOLD.
  if(observation&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(observation.action)&&
-  (observation.action!==championDecision?.action||observation.ticker!==championDecision?.ticker))lastPublish=0;
+  (observation.action!==championDecision?.action||observation.ticker!==championDecision?.ticker)){
+  lastPublish=0;
+  demoWakePending=true;
+ }
  championDecision=observation;
  if(observation?.position&&JSON.stringify(observation.position)!==JSON.stringify(state.championReference)){
   state.championReference=observation.position;
@@ -293,7 +308,17 @@ async function run(){
     wins:state.closed.filter(row=>row.net>0).length,losses:state.closed.filter(row=>row.net<0).length,
     net:state.closed.reduce((sum,row)=>sum+row.net,0),rejections:state.rejections};
    console.log(JSON.stringify(health));
-   if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;}catch(error){
+   if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;
+    if(demoWakePending&&!demoWakeInFlight){
+     demoWakePending=false;
+     const signal=health.championShadow;
+     if(signal&&Date.now()-signal.at<=10000&&/^(BUY|TAKE PROFIT|SELL FAST|TIME EXIT|EXIT) (UP|DOWN)$/.test(signal.action)){
+      demoWakeInFlight=true;
+      void wakeDemo(signal.at).catch(error=>{
+       console.warn(JSON.stringify({event:'KAIBOT_DEMO_WAKE_FAILED',code:/^DEMO_WAKE_HTTP_[0-9]{3}$/.test(error?.message)?error.message:'TRANSPORT'}));
+      }).finally(()=>{demoWakeInFlight=false;});
+     }
+    }}catch(error){
     publishError=true;counters.heartbeatFailures++;
     console.error(JSON.stringify({event:'PREDATOR_HEARTBEAT_WRITE_FAILED',errorType:error?.name??'Error'}));
    }
