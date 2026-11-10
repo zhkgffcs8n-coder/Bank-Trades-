@@ -71,3 +71,27 @@ test('Railway audit captures only allowlisted contract rejection reasons, not fi
  }}));
  assert.equal(exit.marketRejectionReason,undefined);
 });
+
+
+test('failed Demo lifecycle records only an allowlisted stage, never a fill',()=>{
+ const event={ticker:'KXBTC15M-TEST',action:'BUY DOWN',status:'SENDING'};
+ recordDemoWakeAcknowledgment(event,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-stage':'ACCOUNT_SNAPSHOT'
+ }}));
+ assert.equal(event.lifecycleStatus,'DEMO_LIFECYCLE_FAILED');
+ assert.equal(event.failureStage,'ACCOUNT_SNAPSHOT');
+ assert.equal(event.filled,undefined);
+ const bad={ticker:'KXBTC15M-TEST',action:'BUY DOWN'};
+ recordDemoWakeAcknowledgment(bad,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+  'x-demo-failure-stage':'SECRET_TOKEN_VALUE'
+ }}));
+ assert.equal(bad.failureStage,'UNVERIFIED_STAGE');
+ const waiting={ticker:'KXBTC15M-TEST',action:'SELL FAST DOWN'};
+ recordDemoWakeAcknowledgment(waiting,new Response(null,{status:204,headers:{
+  'x-demo-lifecycle-status':'DEMO_WAITING_FOR_CHAMPION_ENTRY',
+  'x-demo-failure-stage':'ACCOUNT_SNAPSHOT'
+ }}));
+ assert.equal(waiting.failureStage,undefined);
+});
