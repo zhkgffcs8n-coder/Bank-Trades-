@@ -46,7 +46,10 @@ function paint(data){
   else if(m?.status==='ENTERED'){label='BUY '+String(m.side).toUpperCase()+' '+pct(m.ask);color=m.side==='down'?'#991b1b':'#166534'}
   else if(m?.status==='ERROR'){label='ERROR';color='#991b1b'}
   else if(m?.status==='SKIPPED'){label='WAIT';color='#475569'}
-  fragment.append(badge(coin,label,color));
+  else if(m?.status==='PAPER_ENTRIES_PAUSED'){label='PAUSED';color='#92400e'}
+  const chip=badge(coin,label,color);
+  if(m?.reason){chip.title=String(m.reason);if(m.status==='SKIPPED'){chip.textContent=coin+' · '+label+' · '+String(m.reason).slice(0,72);chip.style.maxWidth='100%';chip.style.whiteSpace='normal';}}
+  fragment.append(chip);
  }
  root.replaceChildren(fragment);
  const sorted=trades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
