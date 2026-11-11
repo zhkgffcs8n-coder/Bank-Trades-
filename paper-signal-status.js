@@ -4,7 +4,8 @@ const root=document.getElementById('paperTradeCoinStatus'),rows=document.getElem
 if(!root||!rows||!status)return;
 let busy=false,lastSeen=new Map(),initialized=false;
 const pct=v=>v==null||v===''||!Number.isFinite(Number(v))?'—':Number(v).toFixed(1)+'%';
-const date=v=>Number(v)>0?new Date(Number(v)).toLocaleTimeString():'unknown';
+const date=v=>Number(v)>0?new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date(Number(v))):'unknown';
+const ago=ms=>{const d=Date.now()-Number(ms);if(!Number.isFinite(d)||d<0)return 'unknown age';const m=Math.floor(d/60000);return m<1?'under 1 min ago':m<60?m+' min ago':Math.floor(m/60)+'h '+m%60+'m ago'};
 function badge(coin,label,color){const x=document.createElement('span');x.style.cssText='padding:5px 8px;border-radius:7px;color:#fff;background:'+color+';font-size:11px;font-weight:800';x.textContent=coin+' · '+label;return x}
 function announce(t,kind){
  const el=document.createElement('div');el.setAttribute('role','alert');
@@ -28,8 +29,13 @@ function paint(data){
   }else scoreboard.textContent='W — · L — · Not yet verified';
  }
  const active=running&&health.fresh&&!paused;
- status.textContent='PAPER BOT '+(running?'ENABLED':'STOPPED')+' · Runner '+(health.fresh?'last checked '+health.ageSeconds+'s ago':'NOT VERIFIED')+' · '+(paused?'ENTRIES PAUSED BY SAFETY GATE':running?'Waiting for qualified entries':'Not searching')+' · '+trades.length+' recorded trades · Updates checked every 3s (runner scheduled every 60s)';
- status.style.color=active?'#86efac':'#fbbf24';
+ const latest=trades.filter(t=>Number.isFinite(Number(t?.at))&&Number(t.at)>0).sort((a,b)=>Number(b.at)-Number(a.at))[0];
+ const lastEntry=latest?' · LAST ENTRY '+(latest.asset||latest.ticker||'market')+' '+date(latest.at)+' ('+ago(latest.at)+')':' · NO RECORDED ENTRIES';
+ const staleEntry=latest&&Date.now()-Number(latest.at)>60*60000;
+ const marketStatuses=Object.entries(markets).map(([coin,m])=>coin+': '+(m?.reason||m?.status||'no status')).slice(0,8);
+ const runnerNote=!running?'BOT STOPPED':!health.fresh?'RUNNER STALE — NOT ACTIVELY VERIFIED':paused?'ENTRIES PAUSED':staleEntry?'NO ENTRY IN OVER 1 HOUR — CHECK REJECTION REASONS':'MONITORING QUALIFIED SIGNALS';
+ status.textContent='PAPER BOT '+(running?'ENABLED':'STOPPED')+' · '+runnerNote+' · Runner '+(health.fresh?'checked '+health.ageSeconds+'s ago':'NOT VERIFIED')+lastEntry+' · '+trades.length+' recorded trades · '+(staleEntry?'Latest market checks: '+marketStatuses.join(' | ')+' · ':'')+'Display refresh 3s / runner scheduled 60s';
+ status.style.color=active&&!staleEntry?'#86efac':'#fbbf24';
  const fragment=document.createDocumentFragment();
  for(const coin of coins){
   const open=trades.find(t=>t?.asset===coin&&t?.status==='OPEN');
