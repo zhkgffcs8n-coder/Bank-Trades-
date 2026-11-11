@@ -142,6 +142,7 @@ test('live execution enforces the $5 exposure cap independently of Demo trial mo
  const x=setup();
  x.state.limits.maxPositions=2;
  x.state.limits.lossCents=500;
+ x.state.limits.dailyCents=500;
  x.state.intents.push({id:'prior',ticker:'OLD-ROUND',side:'up',action:'buy',qty:5,status:'RECONCILED',orderId:'prior-order'});
  x.snapshot.orders.push({order_id:'prior-order',client_order_id:'prior',ticker:'OLD-ROUND',fill_count_fp:'5.00',status:'executed'});
  x.snapshot.fills.push({fill_id:'prior-fill',order_id:'prior-order',ticker:'OLD-ROUND',count_fp:'5.00',yes_price_dollars:'0.90',fee_cost:'0',created_time:new Date(Date.now()-1000).toISOString()});
