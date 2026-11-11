@@ -52,6 +52,9 @@ export function createDemoSnapshotDiagnostic({
  return async req=>{try{
   const user=await getOwner(),configuredOwner=ownerId();
   if(!configuredOwner||user.id!==configuredOwner)fail(403,'Configured owner required');
+  if(req.method==='GET')return new Response(
+   '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Kalshi Demo snapshot</title><h1>Kalshi Demo snapshot</h1><form method="post"><button>Run read-only Demo check</button></form></html>',
+   {headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store','Content-Security-Policy':"default-src 'none'; form-action 'self'; frame-ancestors 'none'"}});
   if(req.method!=='POST')fail(405,'Method not allowed');
   if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
   let saved;
