@@ -2,7 +2,7 @@
 'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
-let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
+let paperPositions=[];let paperBotRunning=false;let paperStatusError='';let paperLastRun=null;let paperRiskAudit=null;
 function renderPaperTradeSignals(){
  const panel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
  const flip=document.getElementById('btVerifiedAlertFeed');
@@ -12,7 +12,11 @@ function renderPaperTradeSignals(){
  const recent=paperPositions.filter(t=>t&&['up','down'].includes(t.side)&&['OPEN','CLOSED','SETTLED'].includes(t.status))
   .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at||0)-Number(a.exitAt||a.settledAt||a.at||0)).slice(0,15);
  const percent=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toFixed(1)+'%':'—';
- status.textContent=paperStatusError||('Paper bot: '+(paperBotRunning?'RUNNING (server reports active)':'STOPPED')+' · '+recent.length+' recorded positions');
+ const runAge=Number(paperLastRun?.at)>0?Date.now()-Number(paperLastRun.at):Infinity;
+ const fresh=runAge>=0&&runAge<180000;
+ const reasons=Object.entries(paperLastRun?.markets||{}).filter(([,v])=>v?.status==='ERROR'||v?.status==='SKIPPED').slice(0,3).map(([coin,v])=>coin+': '+String(v.reason||v.status).slice(0,90));
+ status.textContent=paperStatusError||('Paper bot: '+(paperBotRunning?'ENABLED':'STOPPED')+' · Runner: '+(fresh?'ACTIVE ('+Math.round(runAge/1000)+'s ago)':'NOT RECENTLY VERIFIED')+' · '+recent.length+' recorded positions'+(paperRiskAudit?.entryPaused?' · ENTRIES PAUSED BY RISK GATE':'')+(reasons.length?' · '+reasons.join(' | '):'')+(paperLastRun?.extremeCoverage?.status?' · Round: '+paperLastRun.extremeCoverage.status:''));
+ status.style.color=paperStatusError||!paperBotRunning||!fresh?'#fbbf24':'#86efac';
  rows.replaceChildren();
  if(!recent.length){const empty=document.createElement('div');empty.textContent='No recorded paper entries yet. No trades are being claimed.';rows.append(empty);return;}
  for(const trade of recent){
@@ -36,7 +40,7 @@ async function refreshPaperPositions(){
   if(!response.ok){paperStatusError='Paper ledger HTTP '+response.status;syncSignals();return;}
   const data=await response.json();
   paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
-  paperBotRunning=!!data?.state?.running;paperStatusError='';
+  paperBotRunning=!!data?.state?.running;paperLastRun=data?.lastRun||data?.last_run||null;paperRiskAudit=data?.riskAudit||data?.risk_audit||null;paperStatusError='';
   syncSignals();
  }catch(e){paperStatusError='Paper positions unavailable';syncSignals();}
  finally{renderPaperTradeSignals();}
