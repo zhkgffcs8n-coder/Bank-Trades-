@@ -94,6 +94,9 @@ export default async()=>{
    const exitQuote=assessPaperExitQuote(t,m,now);
    if(!exitQuote.eligible)continue;
    const {bid,secondsLeft,roi}=exitQuote;
+   // Indicative paper mark, based on the latest observed executable bid; not a guaranteed fill.
+   t.lastObservedExitBid=bid;t.lastObservedExitAt=now;
+   t.lastObservedUnrealizedPnl=Math.round((Math.round(Number(t.qty)*bid)/100-Number(t.cost))*100)/100;
    // Track the best observed sellable bid for a conservative paper trailing exit.
    // Observations are only as frequent as the scheduled runner, not tick-by-tick.
    t.peakObservedBid=Math.max(Number.isFinite(Number(t.peakObservedBid))?Number(t.peakObservedBid):0,bid);
