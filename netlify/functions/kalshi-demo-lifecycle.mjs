@@ -8,6 +8,7 @@ import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
 import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
+import {sanitizedDemoSnapshotFailure} from '../../src/demo-snapshot-telemetry.mjs';
 export async function runScheduledDemo(worker){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
@@ -46,17 +47,9 @@ export async function runScheduledDemo(worker){
    try{
     return await snapshot();
    }catch(error){
-    const phase=['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMENTS'].includes(error?.snapshotPhase)?
-     error.snapshotPhase:'UNKNOWN';
-    const cause=demoWakeFailureCode(error?.message);
-    const category={
-     TimeoutError:'TIMEOUT',AbortError:'ABORTED',SyntaxError:'INVALID_JSON',TypeError:'REQUEST_ERROR'
-    };
-    console.warn(JSON.stringify({
-     event:'DEMO_SNAPSHOT_READ_FAILED',phase,cause,
-     category:Object.hasOwn(category,error?.name)?category[error.name]:'UNKNOWN',
+    console.warn(JSON.stringify(sanitizedDemoSnapshotFailure(error,{
      durationMs:Date.now()-startedAt,trigger:worker?'worker':'schedule'
-    }));
+    })));
     throw error;
    }
   };
