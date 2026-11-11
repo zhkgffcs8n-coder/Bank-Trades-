@@ -13,7 +13,7 @@ Use a private state directory with mode 0700. Back up state.json. The ledger is 
 |---|---|
 | PREDATOR_STATE_DIR | Required persistent state directory |
 | PREDATOR_KALSHI_KEY_ID | Kalshi API key ID for authenticated depth |
-| PREDATOR_KALSHI_PRIVATE_KEY_PEM | Multiline RSA private key, stored as a sealed Railway service variable |
+| PREDATOR_KALSHI_PRIVATE_KEY_PEM | Multiline RSA-PSS or Ed25519 private key, stored as a sealed Railway service variable |
 | PREDATOR_KALSHI_PRIVATE_KEY_FILE | Alternative to the PEM variable. Mounted private PEM file, readable only by the worker |
 | PREDATOR_NETLIFY_SITE_ID | Optional Netlify site ID for publishing health |
 | PREDATOR_NETLIFY_TOKEN | Optional Netlify credential with access to the site's Blobs store |
