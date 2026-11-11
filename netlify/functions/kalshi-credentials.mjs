@@ -49,8 +49,9 @@ export function createCredentialHandler({getOwner=owner,getDb=db,getLive=(userId
  // Fail closed if encryption is not configured. Never store plaintext credentials.
  if(!/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''))fail(503,'Secure credential storage is not configured');
  let parsed;
- try{parsed=createPrivateKey(body.privateKeyPem)}catch{fail(400,'Invalid RSA private key')}
- if(parsed.asymmetricKeyType!=='rsa'||(parsed.asymmetricKeyDetails?.modulusLength||0)<2048)fail(400,'RSA private key must be at least 2048 bits');
+ try{parsed=createPrivateKey(body.privateKeyPem)}catch{fail(400,'Invalid Kalshi private key')}
+ if(!['rsa','ed25519'].includes(parsed.asymmetricKeyType))fail(400,'Kalshi key must be RSA or Ed25519');
+ if(parsed.asymmetricKeyType==='rsa'&&(parsed.asymmetricKeyDetails?.modulusLength||0)<2048)fail(400,'RSA private key must be at least 2048 bits');
  let envelope;
  try{envelope=sealKalshiCredentials({userId:user.id,keyId:body.keyId,privateKeyPem:body.privateKeyPem,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY})}
  catch{fail(400,'Invalid credentials or encryption configuration')}
