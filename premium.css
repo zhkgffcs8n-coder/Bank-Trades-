@@ -365,3 +365,30 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  .bt-compact-live-signals .bt-command-middle>#liveTerminal{grid-area:signals!important}
  .bt-compact-live-signals #liveTerminal .premium-panel>div:has(.premium-table){max-height:210px}
 }
+
+/* Show all eight 15-minute markets without scrolling inside Live Market Signals. */
+.bt-compact-live-signals #liveTerminal .premium-panel>div:has(.premium-table){
+ max-height:none!important;overflow:visible!important
+}
+.bt-compact-live-signals #liveTerminal .premium-table{
+ table-layout:auto!important;font-size:10px!important;line-height:1.12!important
+}
+.bt-compact-live-signals #liveTerminal .premium-table th{
+ padding:2px 3px!important;font-size:9px!important;line-height:1.1!important
+}
+.bt-compact-live-signals #liveTerminal .premium-table td{
+ padding:3px 3px!important;font-size:10px!important;line-height:1.15!important
+}
+.bt-compact-live-signals #liveTerminal .premium-table tr{
+ height:auto!important;min-height:0!important
+}
+.bt-compact-live-signals #liveTerminal .premium-panel{
+ padding:6px 8px!important
+}
+.bt-compact-live-signals #liveTerminal .between{margin-bottom:3px!important}
+@media(max-width:800px){
+ .bt-compact-live-signals #liveTerminal .premium-panel>div:has(.premium-table){
+  max-height:none!important;overflow:visible!important
+ }
+ .bt-compact-live-signals #liveTerminal .premium-table td{font-size:10px!important;padding:3px 2px!important}
+}
