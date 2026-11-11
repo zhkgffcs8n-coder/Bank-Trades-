@@ -1,5 +1,5 @@
 export function eligibleDemoLifecycleMarket(m,excluded,now=Date.now()){
- return m.exchange_index===0&&m.status==='active'&&m.market_type==='binary'&&
+ return (m.exchange_index===0||m.exchange_index==null)&&m.status==='active'&&m.market_type==='binary'&&
    !excluded.includes(m.ticker)&&Date.parse(m.close_time)>now+300000&&['yes','no'].every(side=>{
     const ask=Number(m[side+'_ask_dollars']),bid=Number(m[side+'_bid_dollars']);
     return ask>=.1&&ask<=.8&&bid>0&&ask>=bid&&ask-bid<=.05;
@@ -32,7 +32,7 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now){
  */
 export function demoLifecycleMarketRejection(m,excluded,now=Date.now()){
  if(!m)return 'DEMO_MARKET_NOT_FOUND';
- if(m.exchange_index!==0)return 'DEMO_MARKET_NONDEFAULT_EXCHANGE';
+ if(m.exchange_index!=null&&m.exchange_index!==0)return 'DEMO_MARKET_NONDEFAULT_EXCHANGE';
  if(m.status!=='active')return 'DEMO_MARKET_INACTIVE';
  if(m.market_type!=='binary')return 'DEMO_MARKET_NOT_BINARY';
  if(excluded.includes(m.ticker))return 'DEMO_MARKET_ALREADY_USED';
