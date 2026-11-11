@@ -2,7 +2,7 @@ import {getStore} from '@netlify/blobs';
 import {inspectChampionIntake} from '../../src/champion-kaibot-intake.mjs';
 import {runtime,liveStore} from './lib/live-runtime.mjs';
 import {liveRepository} from './lib/live-state.mjs';
-import {releaseStatus} from './lib/kalshi-release-gate.mjs';
+import {liveBuildCommit,releaseStatus} from './lib/kalshi-release-gate.mjs';
 export default async()=>{
  const status=releaseStatus();
  const id=process.env.KALSHI_LIVE_OWNER_ID;
@@ -23,7 +23,7 @@ export default async()=>{
    const champion=inspectChampionIntake(worker,at);
    await history.setJSON('champion-kaibot/shadow-intake',{at,...champion});
    await db.setJSON('runner-status',{at,status:'RELEASE_BLOCKED',...status,champion});
-   if(idleOwner)await db.setJSON('heartbeat/'+id,{at,result:{status:'RELEASE_BLOCKED',canTrade:false},commit:process.env.COMMIT_REF||null});
+   if(idleOwner)await db.setJSON('heartbeat/'+id,{at,result:{status:'RELEASE_BLOCKED',canTrade:false},commit:liveBuildCommit()});
    return new Response(null,{status:204});
   }
   if(!id)return new Response('OWNER_NOT_CONFIGURED',{status:503});
