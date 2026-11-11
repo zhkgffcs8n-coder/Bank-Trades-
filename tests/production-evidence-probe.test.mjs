@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {probeProductionEvidence,summarizeHealth,summarizePaper,evidenceSummary} from '../scripts/probe-production-evidence.mjs';
+import {probeProductionEvidence,summarizeHealth,summarizePaper,summarizeDemo,evidenceSummary} from '../scripts/probe-production-evidence.mjs';
 
-test('only GETs the two public read-only endpoints and preserves verified counts',async()=>{
+test('only GETs the three public read-only endpoints and preserves verified counts',async()=>{
  const requested=[];
  const fetchImpl=async(url,options)=>{
   requested.push({url,options});
@@ -14,6 +14,10 @@ test('only GETs the two public read-only endpoints and preserves verified counts
    omegaPaperMonitoring:{open:1,exits:1,holds:2,settled:0,unpriced:0,backfilled:0},
    paperLastAction:'PAPER_EXIT',realOrdersAuthorized:false
   }),{status:200});
+  if(url.endsWith('kalshi-demo-status'))return new Response(JSON.stringify({
+   savedBalanceProbe:{status:'KALSHI_HTTP_401',checkedAt:'2026-11-11T12:00:00Z',commit:'3489e5b',operation:'GET_PORTFOLIO_BALANCE',durationMs:101},
+   lifecycleTest:{status:'DEMO_LIFECYCLE_FAILED',stage:'ACCOUNT_SNAPSHOT',error:'DEMO_SNAPSHOT_BALANCE_READ_FAILED',snapshotCause:'KALSHI_HTTP_401'}
+  }),{status:200});
   return new Response(JSON.stringify({
    status:'COMPLETE_INSPECTED_ARCHIVE',historyTruncated:false,invalidPositions:0,
    inspectedPositions:2,openPositions:1,simulatedBidExits:1,officiallySettledPositions:0,
@@ -22,14 +26,17 @@ test('only GETs the two public read-only endpoints and preserves verified counts
   }),{status:200});
  };
  const result=await probeProductionEvidence({fetchImpl,origin:'https://example.test',now:new Date('2026-11-09T20:00:00Z')});
- assert.equal(requested.length,2);
+ assert.equal(requested.length,3);
  assert.ok(requested.every(x=>x.options.method==='GET'&&x.options.redirect==='error'));
  assert.deepEqual(requested.map(x=>new URL(x.url).pathname).sort(),
-  ['/.netlify/functions/omega-live-health','/.netlify/functions/omega-paper-summary']);
+  ['/.netlify/functions/kalshi-demo-status','/.netlify/functions/omega-live-health','/.netlify/functions/omega-paper-summary']);
  assert.equal(result.health.collectorLastRunCounts.trained,2);
  assert.equal(result.health.omegaExternalProvidersRunning,false);
  assert.equal(result.paper.realizedNetDollars,-0.17);
  assert.equal(result.paper.officiallySettledPositions,0);
+ assert.equal(result.demo.savedBalanceProbe.status,'KALSHI_HTTP_401');
+ assert.equal(result.demo.lifecycle.failureCode,'DEMO_SNAPSHOT_BALANCE_READ_FAILED');
+ assert.equal(result.demo.verifiedNewFills,null);
  assert.match(evidenceSummary(result),/unverified|false/);
 });
 
@@ -54,6 +61,7 @@ test('transport failure is recorded as unavailable without leaking exception tex
  const result=await probeProductionEvidence({fetchImpl:async()=>{throw Error('SECRET_TOKEN=never-print');}});
  assert.equal(result.health.status,'UNAVAILABLE');
  assert.equal(result.paper.status,'UNAVAILABLE');
+ assert.equal(result.demo.status,'UNAVAILABLE');
  assert.doesNotMatch(JSON.stringify(result),/SECRET_TOKEN/);
 });
 
@@ -64,6 +72,7 @@ test('HTTP errors and invalid JSON cannot be mistaken for running providers or p
  assert.equal(result.health.status,'UNAVAILABLE');
  assert.equal(result.health.httpStatus,503);
  assert.equal(result.paper.status,'UNAVAILABLE');
+ assert.equal(result.demo.status,'UNAVAILABLE');
  assert.equal(result.verifiedProfitableTrading,false);
 });
 
@@ -159,4 +168,42 @@ test('missing asset reasons are allowlisted and never expose raw exceptions or f
  assert.doesNotMatch(JSON.stringify(report),/SECRET_TOKEN|FAKE/);
  assert.equal(summarizeHealth({sampledAssetCount:2,sampledAssets:['BTC','BTC'],
   collectorFailureReasons:{ETH:'SERIES_UNAVAILABLE'}}).collectorFailureReasons,null);
+});
+
+test('Demo diagnostics only retain allowlisted fields and never expose account or credential data',()=>{
+ const demo=summarizeDemo({
+  savedBalanceProbe:{status:'KALSHI_HTTP_429',checkedAt:'2026-11-11T12:00:00Z',
+   commit:'3489e5b5e60d02b4f9dffc7c8e9102706d695817',operation:'GET_PORTFOLIO_BALANCE',
+   durationMs:750,secret:'SECRET_TOKEN=never-emit',requestId:'private'},
+  lifecycleTest:{status:'DEMO_LIFECYCLE_FAILED',stage:'ACCOUNT_SNAPSHOT',
+   error:'DEMO_SNAPSHOT_BALANCE_READ_FAILED',snapshotCause:'KALSHI_HTTP_429',
+   orders:[{orderId:'private-order-id'}],key:'SECRET_TOKEN=never-emit'}
+ });
+ assert.equal(demo.savedBalanceProbe.status,'KALSHI_HTTP_429');
+ assert.equal(demo.lifecycle.snapshotCause,'KALSHI_HTTP_429');
+ assert.equal(demo.verifiedNewFills,null);
+ assert.doesNotMatch(JSON.stringify(demo),/SECRET_TOKEN|private-order-id|requestId/);
+ const invalid=summarizeDemo({
+  savedBalanceProbe:{status:'SECRET_TOKEN=leak',commit:'SECRET_TOKEN=leak',durationMs:-1,
+   operation:'POST_ORDER',checkedAt:'not-a-date'},
+  lifecycleTest:{status:'SECRET_TOKEN=leak',stage:'SECRET_TOKEN=leak',
+   error:'SECRET_TOKEN=leak',snapshotCause:'SECRET_TOKEN=leak'}
+ });
+ assert.equal(invalid.savedBalanceProbe.status,'NOT_VERIFIED');
+ assert.equal(invalid.savedBalanceProbe.commit,null);
+ assert.equal(invalid.savedBalanceProbe.durationMs,null);
+ assert.equal(invalid.lifecycle.snapshotCause,'NOT_VERIFIED');
+ assert.doesNotMatch(JSON.stringify(invalid),/SECRET_TOKEN/);
+ assert.equal(summarizeDemo(null).status,'INVALID_RESPONSE');
+});
+
+test('Demo endpoint unavailable does not block independent OMEGA or paper evidence',async()=>{
+ const result=await probeProductionEvidence({fetchImpl:async url=>
+  url.endsWith('kalshi-demo-status')?new Response('unavailable',{status:503}):
+  new Response('{}',{status:200})});
+ assert.equal(result.demo.status,'UNAVAILABLE');
+ assert.equal(result.demo.httpStatus,503);
+ assert.equal(result.health.status,'NOT_VERIFIED');
+ assert.equal(result.paper.status,'NOT_VERIFIED');
+ assert.equal(result.verifiedProfitableTrading,false);
 });
