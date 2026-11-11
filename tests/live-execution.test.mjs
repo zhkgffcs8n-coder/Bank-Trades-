@@ -2,6 +2,7 @@ import test from 'node:test';import assert from 'node:assert/strict';
 import {qualifiesLiveEntry,initialState,makeOrder,reconcile,exitAction,submitIntent,emergencyStop,releaseFailures,validateLimits} from '../src/live-execution.mjs';
 import {releaseStatus} from '../netlify/functions/lib/kalshi-release-gate.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
+import {checkDemoConnection} from '../netlify/functions/kalshi-demo-check.mjs';
 import {generateKeyPairSync,verify,constants} from 'node:crypto';
 const pair=generateKeyPairSync('rsa',{modulusLength:2048});const credentials={keyId:'test-key',privateKeyPem:pair.privateKey.export({type:'pkcs8',format:'pem'})};
 const snapshot=()=>({complete:true,at:Date.now(),balanceCents:10000,orders:[],fills:[],positions:[]});
