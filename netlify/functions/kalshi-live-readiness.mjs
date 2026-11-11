@@ -6,7 +6,8 @@ export default async req=>{try{
  const user=await owner(),live=await runtime(user.id),record=await live.repo.read();
  const heartbeat=await live.db.get('heartbeat/'+user.id,{type:'json'});
  const runner=await live.db.get('runner-status',{type:'json'});
- return json({...releaseStatus(),mode:'LIVE DISABLED',canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
+ const release=releaseStatus();
+ return json({...release,mode:release.canTrade?'LIVE READY':'LIVE DISABLED',canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
   ownerConfigured:process.env.KALSHI_LIVE_OWNER_ID===user.id,busy:!!record.lock,limits:record.state.limits,
   accountReconciledAt:record.state.lastReconciledAt||null,heartbeat,runner,
   monitoring:{scheduledSeconds:60,foregroundSeconds:5,latencyVerified:false},
