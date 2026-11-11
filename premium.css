@@ -413,3 +413,26 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  white-space:nowrap!important;
 }
 #btVerifiedAlertFeed .bt-command-history>div{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;font-size:13px!important}
+
+/* Bright yellow, high-contrast coin labels in Live Market Signals. */
+#premiumRows tr[data-asset] td:first-child{
+ color:#ffe45c!important;
+ font-size:clamp(13px,3.6vw,16px)!important;
+ font-weight:900!important;
+ letter-spacing:.35px!important;
+ text-shadow:0 0 5px rgba(255,225,45,.85),0 0 11px rgba(250,204,21,.48)!important;
+ white-space:nowrap!important;
+}
+#premiumRows tr[data-asset] td:first-child strong,
+#premiumRows tr[data-asset] td:first-child b,
+#premiumRows tr[data-asset] td:first-child span{
+ color:#ffe45c!important;
+ font-weight:900!important;
+}
+#premiumRows tr[data-asset] td:first-child{
+ background:linear-gradient(90deg,rgba(250,204,21,.15),rgba(250,204,21,.025))!important;
+ border-left:2px solid #facc15!important;
+}
+@media(max-width:800px){
+ #premiumRows tr[data-asset] td:first-child{font-size:13px!important;padding:4px 3px!important;letter-spacing:0!important}
+}
