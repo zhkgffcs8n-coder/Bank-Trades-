@@ -245,3 +245,17 @@ body {
  .bt-command-stacked .bt-command-picker{grid-area:picker!important}
  .bt-command-stacked .bt-command-tools,.bt-command-stacked .bt-command-column{display:contents}
 }
+
+/* Paper trade strip is above coin picker; show flip history without internal scrolling. */
+section:has(>#paperTradeSignalsTitle){margin:4px 0 8px!important;padding:9px 12px!important;background:#101e30;border:1px solid #334155;border-radius:12px}
+section:has(>#paperTradeSignalsTitle) #paperTradeSignalsTitle{font-size:15px;margin:0 0 4px}
+section:has(>#paperTradeSignalsTitle) #paperTradeSignalsStatus{font-size:11px;margin:3px 0}
+section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows{max-height:none!important;overflow:visible!important;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:6px}
+section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!important;padding:6px 8px!important;font-size:12px!important}
+.bt-command-stacked #btVerifiedAlertFeed{max-height:none!important;overflow:visible!important}
+.bt-command-stacked .bt-command-history{max-height:none!important;overflow:visible!important}
+@media(max-width:800px){
+ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .bt-command-stacked #btVerifiedAlertFeed{max-height:none!important;overflow:visible!important}
+ .bt-command-stacked .bt-command-history{max-height:none!important;overflow:visible!important}
+}
