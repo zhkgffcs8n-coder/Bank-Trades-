@@ -293,3 +293,20 @@ test('forged, stale and future wake receipts fail closed and never authorize fil
  assert.equal(stale.demo.championWakeAgeSeconds,540);
  assert.equal(stale.demo.verifiedNewFills,null);
 });
+
+test('Demo balance transport causes are allowlisted, independent of terminal lifecycle, and never leak secrets',()=>{
+ const demo=summarizeDemo({
+  savedBalanceProbe:{status:'DEMO_TRANSPORT_ERROR',transportCause:'DEMO_REQUEST_TIMEOUT',
+   checkedAt:'2026-11-11T19:00:00Z',operation:'GET_PORTFOLIO_BALANCE',
+   secret:'SECRET_PRIVATE_KEY_VALUE'},
+  lifecycleTest:{status:'DEMO_EXECUTION_TEST_VERIFIED',checkedAt:1794394985834}
+ });
+ assert.equal(demo.savedBalanceProbe.transportCause,'DEMO_REQUEST_TIMEOUT');
+ assert.equal(demo.verifiedNewFills,null);
+ assert.match(evidenceSummary({checkedAt:'2026-11-11T19:00:00Z',health:{},paper:{},demo}),/transport DEMO_REQUEST_TIMEOUT/);
+ assert.equal(summarizeDemo({savedBalanceProbe:{status:'DEMO_TRANSPORT_ERROR',
+  transportCause:'SECRET_PRIVATE_KEY_VALUE'}}).savedBalanceProbe.transportCause,'NOT_VERIFIED');
+ assert.equal(summarizeDemo({savedBalanceProbe:{status:'DEMO_AUTHENTICATED',
+  transportCause:'DEMO_REQUEST_TIMEOUT'}}).savedBalanceProbe.transportCause,null);
+ assert.doesNotMatch(JSON.stringify(demo),/SECRET_PRIVATE_KEY_VALUE/);
+});
