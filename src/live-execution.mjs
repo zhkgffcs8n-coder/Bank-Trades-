@@ -90,7 +90,7 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  const day=new Date(now).toISOString().slice(0,10),reserve=action==='buy'?Math.ceil(qty*price+qty*10):0;
  const risk=accountRisk(state,snapshot,now);
  if(action==='buy'&&risk.dailyLossCents+risk.openCostCents+reserve>Math.min(state.limits.lossCents,trialCaps?300:Infinity))throw Error('DAILY_LOSS_LIMIT');
- if(action==='buy'&&trialCaps&&risk.openCostCents+reserve>500)throw Error('EXPOSURE_LIMIT');
+ if(action==='buy'&&risk.openCostCents+reserve>500)throw Error('EXPOSURE_LIMIT');
  if(action==='buy'&&quote.expiresAt-now<75000)throw Error('LATE_ENTRY');
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
  if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
