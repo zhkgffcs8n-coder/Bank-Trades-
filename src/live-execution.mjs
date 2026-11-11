@@ -81,6 +81,13 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  const price=action==='buy'?quote[side+'Ask']:quote[side+'Bid'];
  const qty=action==='sell'?position?.qty:1;
  const order=makeOrder({ticker:quote.ticker,side,action,qty,priceCents:price});
+ const exchangeIndex=quote.exchangeIndex;
+ if(exchangeIndex!==undefined){
+  if(!Number.isSafeInteger(exchangeIndex)||exchangeIndex<0)throw Error('INVALID_EXCHANGE_INDEX');
+  const prior=state.intents.find(i=>i.ticker===quote.ticker&&i.action==='buy');
+  if(action==='sell'&&(prior?.exchangeIndex??0)!==exchangeIndex)throw Error('POSITION_EXCHANGE_MISMATCH');
+  order.exchange_index=exchangeIndex;
+ }
  if(action==='buy'&&state.intents.some(i=>i.ticker===quote.ticker&&i.action==='buy'))throw Error('ROUND_ALREADY_ENTERED');
  const open=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0);
  if(action==='sell'){
@@ -96,8 +103,9 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
  if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
  if(action==='buy'&&(reserve>Math.min(state.limits.orderCents,trialCaps?100:Infinity)||reserve+(state.spent[day]||0)>dailyLimit||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
+ if(action==='buy'&&exchangeIndex!==undefined&&reserve>await client.buyingPower(exchangeIndex))throw Error('EXCHANGE_BUYING_POWER_LIMIT');
  // Conservative budget includes a 10-cent per-contract fee reserve and is never released on retries.
- const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};
+ const intent={id:order.client_order_id,ticker:quote.ticker,...(exchangeIndex===undefined?{}:{exchangeIndex}),side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};
  state.intents.push(intent);state.spent[day]=(state.spent[day]||0)+reserve;await persist(state);
  if(await checkStopped()){intent.status='ABORTED';await persist(state);throw Error('STOPPED_BEFORE_SUBMISSION');}
  intent.status='SUBMITTING';await persist(state);
