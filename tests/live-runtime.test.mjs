@@ -149,3 +149,28 @@ test('live controls report capped legacy limits and reject an over-cap configura
  assert.equal(response.status,400);
  assert.equal(state.limits.lossCents,500);
 });
+
+test('authenticated reconciliation records a server-build receipt even when START is blocked',async()=>{
+ const {repo}=await started();
+ const receipts=new Map();
+ const client=exchange();
+ const commit='7999e89e7326c25c90cd6edfb9ae1f1c10aeb822';
+ const control=createLiveControl({
+  getOwner:async()=>({id}),
+  getRuntime:async()=>({repo,client:async()=>client,db:{setJSON:async(key,value)=>receipts.set(key,value)}}),
+  getCommit:()=>commit,
+  getRelease:()=>({canTrade:false})
+ });
+ const response=await control(new Request('https://site.test/control',{
+  method:'POST',
+  headers:{origin:'https://site.test','content-type':'application/json'},
+  body:JSON.stringify({action:'reconcile',commit:'untrusted-browser-build'})
+ }));
+ assert.equal(response.status,200);
+ assert.equal((await response.json()).canTrade,false);
+ const receipt=receipts.get('release-receipts/'+id+'/'+commit+'/authentication');
+ assert.equal(receipt.commit,commit);
+ assert.equal(receipt.test,'production-authenticated-account-snapshot');
+ assert.equal(receipt.verified,true);
+ assert.ok(Number.isFinite(receipt.at));
+});
