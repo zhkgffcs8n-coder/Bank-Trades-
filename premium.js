@@ -18,10 +18,23 @@ function renderPaperTradeSignals(){
  status.textContent=paperStatusError||('Paper bot: '+(paperBotRunning?'ENABLED':'STOPPED')+' · Runner: '+(fresh?'ACTIVE ('+Math.round(runAge/1000)+'s ago)':'NOT RECENTLY VERIFIED')+' · '+recent.length+' recorded positions'+(paperRiskAudit?.entryPaused?' · ENTRIES PAUSED BY RISK GATE':'')+(reasons.length?' · '+reasons.join(' | '):'')+(paperLastRun?.extremeCoverage?.status?' · Round: '+paperLastRun.extremeCoverage.status:''));
  status.style.color=paperStatusError||!paperBotRunning||!fresh?'#fbbf24':'#86efac';
  rows.replaceChildren();
+ const summary=document.createElement('div');summary.style.cssText='grid-column:1/-1;display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px';
+ const marketStatus=paperLastRun?.markets||{};
+ for(const coin of assets){
+  const item=marketStatus[coin];
+  const open=paperPositions.find(t=>t.asset===coin&&t.status==='OPEN');
+  const entered=item?.status==='ENTERED';
+  const badge=document.createElement('span');
+  const tone=open||entered?'#166534':item?.status==='ERROR'?'#7f1d1d':'#1e293b';
+  badge.style.cssText='padding:4px 7px;border-radius:7px;background:'+tone+';color:#fff;font-size:11px;font-weight:700';
+  badge.textContent=coin+' · '+(open?'HOLD '+String(open.side||'').toUpperCase():entered?'BUY '+String(item.side||'').toUpperCase():!paperBotRunning?'OFF':!fresh?'RUNNER STALE':item?.status==='ERROR'?'ERROR':item?.status==='SKIPPED'?'WAIT':'MONITORING');
+  summary.append(badge);
+ }
+ rows.append(summary);
  if(!recent.length){const empty=document.createElement('div');empty.textContent='No recorded paper entries yet. No trades are being claimed.';rows.append(empty);return;}
  for(const trade of recent){
-  const row=document.createElement('div');row.style.cssText='padding:12px;margin:8px 0;border:1px solid '+(up?'#166534':'#991b1b')+';border-left:5px solid '+(up?'#22c55e':'#ef4444')+';border-radius:10px;background:'+(up?'#0c2b24':'#321a27')+';font-size:13px;line-height:1.7';
   const side=String(trade.side).toUpperCase(),up=side==='UP',asset=trade.asset||trade.ticker||'Market';
+  const row=document.createElement('div');row.style.cssText='padding:12px;margin:8px 0;border:1px solid '+(up?'#166534':'#991b1b')+';border-left:5px solid '+(up?'#22c55e':'#ef4444')+';border-radius:10px;background:'+(up?'#0c2b24':'#321a27')+';font-size:13px;line-height:1.7';
   const heading=document.createElement('strong');heading.style.cssText='color:'+(up?'#86efac':'#fecaca')+';font-size:15px';
   heading.textContent=asset+' · BUY '+side+' · Entry '+percent(trade.ask);
   const exit=document.createElement('div');
@@ -636,5 +649,6 @@ update();refreshSharedSignalTable();refreshPaperPositions();
 function resumeLiveMonitoring(){if(document.hidden)return;lastFetch=0;signalLastFetch=0;update();refreshSharedSignalTable();refreshPaperPositions();reconcileHealth()}
 document.addEventListener('visibilitychange',resumeLiveMonitoring);
 window.addEventListener('online',resumeLiveMonitoring);
+window.addEventListener('paper-bot-state-changed',refreshPaperPositions);
 setInterval(refreshPaperPositions,12000);setInterval(()=>{update();refreshSharedSignalTable();reconcileHealth()},1000);
 })();
