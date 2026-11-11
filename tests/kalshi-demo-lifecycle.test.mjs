@@ -73,3 +73,30 @@ test('unrecognized snapshot phases never leak raw error data',async()=>{
  assert.equal(result.error,'DEMO_TRANSPORT_OR_STORAGE_ERROR');
  assert.equal(result.stage,'ACCOUNT_SNAPSHOT');
 });
+
+test('snapshot phase overrides generic uppercase transport error without submitting an order',async()=>{
+ const state=initialState(),now=Date.now();let snapshots=0,orders=0;
+ const options={
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{
+   snapshot:async()=>{
+    snapshots++;
+    if(snapshots===1){
+     const error=Error('DEMO_TRANSPORT_OR_STORAGE_ERROR');
+     error.snapshotPhase='POSITIONS';
+     throw error;
+    }
+    return {at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]};
+   },
+   create:async()=>{orders++;throw Error('unexpected order')}
+  },
+  findMarket:async()=>null,clock:()=>now
+ };
+ const failure=await runDemoLifecycle(options);
+ assert.equal(failure.stage,'ACCOUNT_SNAPSHOT');
+ assert.equal(failure.error,'DEMO_SNAPSHOT_POSITIONS_READ_FAILED');
+ assert.equal(failure.status,'DEMO_LIFECYCLE_FAILED');
+ assert.equal(orders,0);
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_RETRY_ARMED');
+ assert.equal(orders,0);
+});
