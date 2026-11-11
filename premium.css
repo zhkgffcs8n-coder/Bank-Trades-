@@ -259,3 +259,17 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  .bt-command-stacked #btVerifiedAlertFeed{max-height:none!important;overflow:visible!important}
  .bt-command-stacked .bt-command-history{max-height:none!important;overflow:visible!important}
 }
+
+/* Swap chart and live market signals while retaining the three-column command layout. */
+.bt-command-stacked .bt-command-left>.premium-panel{width:100%;min-width:0;margin:0!important}
+.bt-command-stacked .bt-command-middle>#liveTerminal{display:block;width:100%;min-width:0;margin:0!important}
+.bt-command-stacked .bt-command-middle>#liveTerminal>.premium-panel{padding:10px!important;min-width:0}
+.bt-command-stacked .bt-command-middle #premiumRows td,
+.bt-command-stacked .bt-command-middle #premiumRows th{font-size:11px}
+@media(max-width:800px){
+ .bt-command-stacked{grid-template-areas:"picker picker" "history history" "radar scalper" "signals signals" "contract contract" "spot spot"!important}
+ .bt-command-stacked .bt-command-left>.premium-panel{grid-area:contract}
+ .bt-command-stacked .bt-command-middle>#liveTerminal{grid-area:signals}
+ .bt-command-stacked #liveTerminal{grid-area:signals}
+ .bt-command-stacked .bt-command-middle>.premium-panel{grid-area:contract}
+}
