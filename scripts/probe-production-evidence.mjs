@@ -5,6 +5,7 @@ import {pathToFileURL} from 'node:url';
 export const PRODUCTION_ORIGIN='https://neon-gecko-046bff.netlify.app';
 const HEALTH_PATH='/.netlify/functions/omega-live-health';
 const PAPER_PATH='/.netlify/functions/omega-paper-summary';
+const DEMO_PATH='/.netlify/functions/kalshi-demo-status';
 const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
 const money=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const bool=x=>typeof x==='boolean'?x:null;
@@ -88,6 +89,43 @@ export function summarizePaper(body){
   realOrdersAuthorized:bool(body.ordersAuthorized)
  };
 }
+
+const DEMO_STATES=new Set([
+ 'DEMO_AUTHENTICATED','DEMO_CREDENTIALS_MISSING','DEMO_CREDENTIAL_ENVELOPE_UNAVAILABLE',
+ 'DEMO_OWNER_MISSING','DEMO_TRANSPORT_ERROR','DEMO_INVALID_BALANCE_RESPONSE',
+ 'DEMO_LIFECYCLE_FAILED','DEMO_LIFECYCLE_UNAVAILABLE','DEMO_WAITING_FOR_CHAMPION_ENTRY',
+ 'DEMO_WAITING_FOR_CHAMPION_EXIT','DEMO_CHAMPION_CONTRACT_INELIGIBLE',
+ 'DEMO_NO_ELIGIBLE_DEFAULT_EXCHANGE_MARKET','DEMO_ENTRY_RECONCILED','DEMO_EXIT_RECONCILED',
+ 'DEMO_EXECUTION_TEST_VERIFIED','DEMO_PREVIOUS_RUN_FINISHED','DEMO_RETRY_ARMED',
+ 'DEMO_EXECUTION_TEST_STOPPED','DEMO_NO_TEST_POSITION','DEMO_CHAMPION_ROUND_TRIP_VERIFIED'
+]);
+const safeDemoCode=x=>DEMO_STATES.has(x)||/^KALSHI_HTTP_(?:400|401|403|404|408|409|422|429|500|502|503|504)$/.test(x||'')?x:'NOT_VERIFIED';
+const safeIso=x=>typeof x==='string'&&Number.isFinite(Date.parse(x))?new Date(x).toISOString():null;
+const safeCommit=x=>typeof x==='string'&&/^[0-9a-f]{7,40}$/i.test(x)?x:null;
+const SNAPSHOT_FAILURES=new Set(['DEMO_SNAPSHOT_BALANCE_READ_FAILED','DEMO_SNAPSHOT_ORDERS_READ_FAILED',
+ 'DEMO_SNAPSHOT_FILLS_READ_FAILED','DEMO_SNAPSHOT_POSITIONS_READ_FAILED','DEMO_SNAPSHOT_SETTLEMENTS_READ_FAILED']);
+const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
+export function summarizeDemo(body){
+ if(!body||typeof body!=='object'||Array.isArray(body))return {status:'INVALID_RESPONSE'};
+ const p=body.savedBalanceProbe,l=body.lifecycleTest;
+ return {
+  status:'READ_ONLY_OBSERVATION',
+  savedBalanceProbe:p&&typeof p==='object'?{
+   status:safeDemoCode(p.status),checkedAt:safeIso(p.checkedAt),commit:safeCommit(p.commit),
+   operation:p.operation==='GET_PORTFOLIO_BALANCE'?p.operation:'NOT_VERIFIED',
+   durationMs:count(p.durationMs)
+  }:null,
+  lifecycle:l&&typeof l==='object'?{
+   status:safeDemoCode(l.status),checkedAt:typeof l.checkedAt==='number'&&Number.isSafeInteger(l.checkedAt)?l.checkedAt:null,
+   failureStage:SNAPSHOT_STAGES.has(l.stage)?l.stage:'NOT_VERIFIED',
+   failureCode:SNAPSHOT_FAILURES.has(l.error)?l.error:'NOT_VERIFIED',
+   snapshotCause:/^KALSHI_HTTP_(?:400|401|403|404|408|409|422|429|500|502|503|504)$/.test(l.snapshotCause||'')?l.snapshotCause:'NOT_VERIFIED'
+  }:null,
+  // A previous completed lifecycle and HTTP 204 are never proof of a fresh exchange fill.
+  verifiedNewFills:null
+ };
+}
+
 async function readEndpoint(path,summarize,{fetchImpl,origin}){
  try{
   const response=await fetchImpl(origin+path,{
@@ -103,16 +141,17 @@ async function readEndpoint(path,summarize,{fetchImpl,origin}){
  }
 }
 export async function probeProductionEvidence({fetchImpl=fetch,origin=PRODUCTION_ORIGIN,now=new Date()}={}){
- const [health,paper]=await Promise.all([
+ const [health,paper,demo]=await Promise.all([
   readEndpoint(HEALTH_PATH,summarizeHealth,{fetchImpl,origin}),
-  readEndpoint(PAPER_PATH,summarizePaper,{fetchImpl,origin})
+  readEndpoint(PAPER_PATH,summarizePaper,{fetchImpl,origin}),
+  readEndpoint(DEMO_PATH,summarizeDemo,{fetchImpl,origin})
  ]);
- return {checkedAt:now.toISOString(),mode:'READ_ONLY_EVIDENCE',health,paper,
+ return {checkedAt:now.toISOString(),mode:'READ_ONLY_EVIDENCE',health,paper,demo,
   verifiedProfitableTrading:false,
   notice:'Endpoint diagnostics are not proof of exchange fills, official learning, or improved strategy performance.'};
 }
 export function evidenceSummary(report){
- const h=report.health,p=report.paper;
+ const h=report.health,p=report.paper,d=report.demo||{status:'NOT_VERIFIED'};
  const orders=(h.realOrdersAuthorized===true||p.realOrdersAuthorized===true)?'TRUE - REVIEW':
   (h.realOrdersAuthorized===false&&p.realOrdersAuthorized===false)?'false (both endpoints)':'unverified';
  const value=x=>x===null||x===undefined?'unverified':String(x);
@@ -132,6 +171,10 @@ export function evidenceSummary(report){
   '| Provider diagnostics | '+(h.omegaProviderStatus?.length?h.omegaProviderStatus.map(x=>x.provider+':'+x.status+(x.httpStatus?' HTTP '+x.httpStatus:'')).join('; '):'none verified')+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
   '| OMEGA paper monitoring: exits | '+value(h.omegaPaperMonitoring?.exits)+' |',
+  '| KaiBot Demo read-only endpoint | '+value(d.status)+' |',
+  '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+') |',
+  '| Demo lifecycle | '+value(d.lifecycle?.status)+'; failure '+value(d.lifecycle?.failureCode)+'; underlying '+value(d.lifecycle?.snapshotCause)+' |',
+  '| New exchange-confirmed Demo fills | unverified (read-only metadata is not fill evidence) |',
   '| Paper archive | '+value(p.status)+' |',
   '| Officially settled paper positions | '+value(p.officiallySettledPositions)+' |',
   '| Net modeled paper P&L after recorded costs | '+value(p.realizedNetDollars)+' |',
@@ -145,5 +188,5 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
  await mkdir('evidence',{recursive:true});
  await writeFile('evidence/production-evidence.json',JSON.stringify(report,null,2)+'\n');
  if(process.env.GITHUB_STEP_SUMMARY)await appendFile(process.env.GITHUB_STEP_SUMMARY,evidenceSummary(report));
- console.log('Production evidence: collector='+report.health.status+' paper='+report.paper.status);
+ console.log('Production evidence: collector='+report.health.status+' paper='+report.paper.status+' demo='+report.demo.status);
 }
