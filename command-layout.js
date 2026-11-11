@@ -5,8 +5,7 @@ function arrange(){
  const signals=document.getElementById('liveTerminal');
  const radar=document.getElementById('btcLockDesk');
  if(!grid||!middle||!signals||!radar)return false;
- // Restore original signal location directly beneath Lock & Flip Radar.
- if(signals.parentElement!==middle)radar.after(signals);
+ if(radar.previousElementSibling!==signals)radar.before(signals);
  const lower=document.getElementById('btLowerCommandRow');
  if(lower){const easy=document.getElementById('quickAssets')?.closest('.card');const desk=document.getElementById('signalDesk');if(easy&&easy.parentElement===lower)grid.querySelector('.bt-command-left')?.append(easy);if(desk&&desk.parentElement===lower)grid.querySelector('.bt-command-right')?.append(desk);lower.remove()}
  grid.classList.remove('bt-command-bottom-filled');
