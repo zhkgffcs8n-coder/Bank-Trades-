@@ -184,7 +184,7 @@ export default async()=>{
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
     // Late-round coverage experiment uses one simulated contract across all markets.
     const up=(yesAsk+yesBid)>=100,ask=up?yesAsk:noAsk,bid=up?yesBid:noBid,spread=ask-bid;
-    if(!previous.length&&m._e-now<=300000&&ask>=10&&ask<=90&&bid>0&&spread<=5&&
+    if(mode==='extreme'&&!previous.length&&m._e-now<=900000&&m._e-now>=180000&&ask>=10&&ask<=90&&bid>0&&spread<=5&&
      (!extremeCandidate||spread<extremeCandidate.spread)){
      extremeCandidate={asset,ticker:m.ticker,side:up?'up':'down',ask,bid,spread,expiresAt:m._e};
     }
@@ -203,8 +203,8 @@ export default async()=>{
   }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
  }
  const enteredRound=ledger.trades.some(t=>Math.floor(Number(t.at)/900000)===round);
- roundAudit.extremeCoverage={round,status:entryPaused?'PAUSED':enteredRound?'ALREADY_ENTERED':'NO_ELIGIBLE_QUOTE'};
- if(!entryPaused&&!enteredRound&&extremeCandidate&&Math.floor(Date.now()/900000)===round&&extremeCandidate.expiresAt-Date.now()>=120000){
+ roundAudit.extremeCoverage={round,mode,status:mode!=='extreme'?'MODE_NOT_EXTREME':entryPaused?'PAUSED':enteredRound?'ALREADY_ENTERED':'NO_ELIGIBLE_QUOTE'};
+ if(mode==='extreme'&&!entryPaused&&!enteredRound&&extremeCandidate&&Math.floor(Date.now()/900000)===round&&extremeCandidate.expiresAt-Date.now()>=120000){
   const {asset,ticker,side,ask,bid,expiresAt}=extremeCandidate;
   const cost=ask/100;
   if(ledger.cash>=cost){
@@ -212,7 +212,7 @@ export default async()=>{
    if(reservation.modified){
     ledger.cash=Math.round((ledger.cash-cost)*100)/100;
     ledger.trades.push({id:'extreme_'+round,asset,ticker,side,qty:1,ask,cost,at:now,status:'OPEN',
-     source:'SERVER KAIBOT PAPER',entryBasis:'UNVALIDATED QUOTE-BASED PAPER TEST',extremeCoverage:true,
+     source:'SERVER KAIBOT PAPER',entryBasis:'UNVALIDATED QUOTE-BASED PAPER TEST',extremeCoverage:true,unverifiedResearchOnly:true,
      secondsToExpiryAtEntry:(expiresAt-now)/1000,entryQuote:side==='up'?{yesAsk:ask,yesBid:bid}:{noAsk:ask,noBid:bid}});
     roundAudit.extremeCoverage={round,status:'ENTERED',asset,side,ask};
    }else roundAudit.extremeCoverage.status='ROUND_ALREADY_RESERVED';
