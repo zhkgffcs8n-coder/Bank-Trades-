@@ -300,3 +300,49 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  .bt-command-professional .bt-command-left>.premium-panel{grid-area:contract!important}
  .bt-command-professional .bt-command-right>section:has(#btcSpotChart){grid-area:spot}
 }
+
+/* Explicit three-panel lower row: no empty sides beside Live Market Signals. */
+.bt-command-bottom-filled{align-items:start!important}
+.bt-command-bottom-filled #btLowerCommandRow{
+ grid-column:1/-1;grid-area:auto!important;display:grid!important;
+ grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) minmax(0,1fr);
+ gap:10px;align-items:start;width:100%;min-width:0;margin:0!important
+}
+.bt-command-bottom-filled #btLowerCommandRow>#liveTerminal,
+.bt-command-bottom-filled #btLowerCommandRow>#signalDesk,
+.bt-command-bottom-filled #btLowerCommandRow>.card{
+ display:block!important;grid-area:auto!important;min-width:0;width:100%;
+ margin:0!important;align-self:start
+}
+.bt-command-bottom-filled #btLowerCommandRow>#liveTerminal>.premium-panel{
+ min-width:0;padding:10px!important
+}
+.bt-command-bottom-filled #btLowerCommandRow .premium-table{
+ width:100%;font-size:12px;line-height:1.45
+}
+.bt-command-bottom-filled #btLowerCommandRow .premium-table td,
+.bt-command-bottom-filled #btLowerCommandRow .premium-table th{
+ padding:7px 5px!important
+}
+.bt-command-bottom-filled #btLowerCommandRow #signalDesk,
+.bt-command-bottom-filled #btLowerCommandRow>.card{padding:12px!important}
+@media(max-width:800px){
+ .bt-command-bottom-filled{grid-template-areas:"picker picker" "history history" "radar scalper" "contract contract" "spot spot" "lower lower"!important}
+ .bt-command-bottom-filled #btLowerCommandRow{grid-area:lower!important;grid-column:1/-1;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr);gap:6px}
+ .bt-command-bottom-filled #btLowerCommandRow>#liveTerminal,
+ .bt-command-bottom-filled #btLowerCommandRow>#signalDesk,
+ .bt-command-bottom-filled #btLowerCommandRow>.card{grid-area:auto!important}
+ .bt-command-bottom-filled #btLowerCommandRow .premium-table{font-size:10px}
+ .bt-command-bottom-filled #btLowerCommandRow .premium-table td,
+ .bt-command-bottom-filled #btLowerCommandRow .premium-table th{padding:4px 2px!important}
+ .bt-command-bottom-filled #btLowerCommandRow #signalDesk,
+ .bt-command-bottom-filled #btLowerCommandRow>.card{padding:7px!important}
+ .bt-command-bottom-filled #btLowerCommandRow #quickAssets{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:560px){
+ .bt-command-bottom-filled #btLowerCommandRow{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"signals signals" "easy desk"}
+ .bt-command-bottom-filled #btLowerCommandRow>#liveTerminal{grid-area:signals!important}
+ .bt-command-bottom-filled #btLowerCommandRow>.card{grid-area:easy!important}
+ .bt-command-bottom-filled #btLowerCommandRow>#signalDesk{grid-area:desk!important}
+ .bt-command-bottom-filled #btLowerCommandRow .premium-table{font-size:12px}
+}
