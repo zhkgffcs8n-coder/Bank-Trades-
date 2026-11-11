@@ -849,7 +849,7 @@ function mountScalper(){
     row.classList.add('bt-command-stacked');
     const tools=document.createElement('div');
     tools.className='bt-command-tools';
-    tools.append(picker,column('middle',box,terminal),column('right',scalper,spot));
+    tools.append(picker,column('middle',terminal,box),column('right',scalper,spot));
     row.append(column('left',feed,contract),tools);
     const paper=document.getElementById('paperTradeSignalsTitle')?.closest('section');
     if(paper)row.before(paper);

@@ -19,7 +19,6 @@ function paint(data){
  const running=!!data?.state?.running,health=data?.runnerHealth||{},markets=data?.lastRun?.markets||{};
  const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
  const paused=!!(data?.entriesPaused||data?.riskAudit?.entryPaused);
- const heading=document.getElementById('paperTradeSignalsTitle');
  const oldScore=document.getElementById('paperTradeVerifiedScore');if(oldScore)oldScore.remove();
  const mode=['lock','balanced','extreme'].includes(data?.state?.mode)?data.state.mode:'balanced';
  for(const button of document.querySelectorAll('[data-paper-entry-mode]')){
@@ -54,7 +53,7 @@ function paint(data){
  root.replaceChildren(fragment);
  const sessionAt=Number(data?.state?.paperPnlSessionStartedAt)||0;
  const sessionTrades=trades.filter(t=>Number(t.at)>=sessionAt);
- const sorted=sessionTrades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
+ const sorted=trades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
  rows.replaceChildren();
  if(!sorted.length){const p=document.createElement('p');p.textContent='No paper positions recorded yet. Watching for the next qualified signal; no trade is being claimed.';rows.append(p)}
  for(const t of sorted){
