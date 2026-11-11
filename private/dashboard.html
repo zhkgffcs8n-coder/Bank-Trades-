@@ -82,6 +82,7 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
 <button type="button" id="demoConnect">VERIFY &amp; SAVE DEMO KEY</button>
 <button type="button" data-demo-execution="DEMO_EXECUTION_TEST" data-demo-side="UP">DEMO BUY UP</button>
 <button type="button" data-demo-execution="DEMO_EXECUTION_TEST" data-demo-side="DOWN">DEMO BUY DOWN</button>
+<button type="button" data-demo-execution="SELL_DEMO_EXECUTION_TEST">DEMO SELL</button>
 <button type="button" data-demo-execution="STOP_DEMO_EXECUTION_TEST">STOP DEMO TEST</button>
 </div><p id="demoUploadStatus" role="status"></p>
 </div>
@@ -96,8 +97,7 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
    const response=await fetch('/.netlify/functions/kalshi-demo-status',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:control.dataset.demoExecution,side:control.dataset.demoSide})});
    const data=await response.json();
-   status.textContent=response.ok?(data.status==='DEMO_EXECUTION_TEST_ARMED'?
-    'Demo test armed. KaiBot will check for an executable quote on its next scheduled run.':'Demo test stopped.'):data.error||'Demo test request rejected.';
+   status.textContent=data.error||data.status?.replaceAll('_',' ')||'Demo test request failed.';
   }catch{status.textContent='Demo test request failed.';}
   finally{control.disabled=false;}
  }));
