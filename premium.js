@@ -114,7 +114,7 @@ function showScreenAlert(asset,kind,label,ticker,isTest=false){
  overlay.querySelector('.bank-head').textContent=asset+' · 15-MIN KALSHI · '+(kind==='sell'?'🚨 SELL / EXIT':kind==='down'?'🟢 BUY DOWN':kind==='up'?'🟢 BUY UP':kind==='hold'?'🟣 HOLD · REVIEW':kind==='stay'?'🔴 STAY OUT':kind==='near'?'🟡 NEAR ENTRY':'🟡 DEMO / WAIT');
  overlay.querySelector('.bank-detail').textContent=(isTest?'DEMO ONLY · NO REAL TRADE · ':'')+label;
  clearTimeout(overlay._autoDismissTimer);
- overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},2000);
+ overlay._autoDismissTimer=setTimeout(()=>{if(overlay.isConnected)overlay.remove();},15000);
  // Non-modal toast: do not steal keyboard focus from the trading dashboard.
 }
 const voicedMarketStatuses=new Set();
@@ -167,29 +167,41 @@ function evaluateScreenAlerts(){
 document.addEventListener('DOMContentLoaded',()=>{
  const button=document.getElementById('enablePush');if(!button)return;
  const style=document.createElement('style');
- style.textContent='#enablePush[data-screen-alerts="on"]{background:#facc15!important;color:#171717!important;border:4px solid #fff176!important;box-shadow:0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)!important;font-weight:900!important}';
+ style.textContent=`
+ .bank-signal-toolbar{flex-wrap:wrap;gap:6px}
+ .bank-signal-toolbar #enablePush,.bank-signal-toolbar #bankTestScreenAlerts,.bank-signal-toolbar button{padding:5px 7px!important;min-height:28px;font-size:11px!important;white-space:nowrap}
+ #enablePush[data-screen-alerts="on"]{background:#facc15!important;color:#171717!important;border:1px solid #fff176!important;font-weight:900!important}
+ #bankResearchSignalNotice{margin-top:6px;font-size:11px;color:#fde68a}
+ #bankResearchSignalNotice summary{cursor:pointer}
+ `;
  document.head.append(style);
+ button.parentElement.classList.add('bank-signal-toolbar');
  const testButton=document.createElement('button');
  testButton.type='button';testButton.id='bankTestScreenAlerts';
- testButton.textContent='🧪 TEST SCREEN ALERTS';
- testButton.style.cssText='margin-left:8px;padding:12px;border:2px solid #facc15;border-radius:10px;font-weight:800;cursor:pointer;background:#273449;color:#fff';
+ testButton.textContent='Test';
+ testButton.title='Test the screen alert with a simulated entry';
+ testButton.setAttribute('aria-label',testButton.title);
  button.insertAdjacentElement('afterend',testButton);
- const researchNotice=document.createElement('div');
+ const researchNotice=document.createElement('details');
  researchNotice.id='bankResearchSignalNotice';
- researchNotice.style.cssText='margin:8px 0;padding:9px 12px;border:2px solid #facc15;border-radius:9px;background:rgba(250,204,21,.18);color:#fde68a;font-size:13px;font-weight:900;line-height:1.4';
- researchNotice.textContent='⚠️ R: UP ↗ / R: DOWN ↘ ARE RESEARCH ONLY — NOT OFFICIAL BUY SIGNALS. Wait for a qualified BUY UP or BUY DOWN alert. Test screen alerts are demos; no trades are placed automatically.';
- testButton.insertAdjacentElement('afterend',researchNotice);
+ const summary=document.createElement('summary');
+ summary.textContent='Signal & alert guide';
+ const explanation=document.createElement('p');
+ explanation.textContent='R: UP and R: DOWN are research forecasts. Wait for a qualified BUY UP or BUY DOWN alert. Alert tests simulate entry and exit without placing orders.';
+ researchNotice.append(summary,explanation);
+ document.getElementById('liveTerminal')?.append(researchNotice);
  let nextTest='buy';
  testButton.addEventListener('click',()=>{
   if(document.hidden)return;
   const kind=nextTest;nextTest=kind==='buy'?'sell':'buy';
   showScreenAlert('BTC',kind==='buy'?'up':'sell',kind==='buy'?'DEMO BUY UP — GREEN SCREEN TEST':'DEMO SELL FAST — RED SCREEN TEST','demo',true);
-  testButton.textContent=kind==='buy'?'🧪 TEST RED EXIT NEXT':'🧪 TEST GREEN ENTRY NEXT';
+  testButton.title=kind==='buy'?'Test the simulated exit alert':'Test the simulated entry alert';
+  testButton.setAttribute('aria-label',testButton.title);
  });
  const paint=()=>{
   button.dataset.screenAlerts=screenAlertsEnabled?'on':'off';
   button.setAttribute('aria-pressed',String(screenAlertsEnabled));
-  button.textContent=screenAlertsEnabled?'🔔 SCREEN ALERTS ON':'🔔 ENABLE SCREEN ALERTS';
+  button.textContent=screenAlertsEnabled?'Alerts on':'Alerts off';
   button.title=screenAlertsEnabled?'Green entry / red exit screen alerts ON while dashboard is open. Background push not configured.':'Turn on green entry / red exit screen alerts while dashboard is open.';
  };
  button.addEventListener('click',()=>{
