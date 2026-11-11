@@ -3,6 +3,7 @@ const el=id=>document.getElementById(id);
 const start=el('kaiStart'),stop=el('kaiStop'),status=el('kaiState'),logBox=el('kaiLog');
 if(!start||!stop||!status)return;
 const previewStart=el('primalPaperStart'),previewStop=el('primalPaperStop');
+const signalStart=el('paperSignalStart'),signalStop=el('paperSignalStop');
 let busy=false;
 start.disabled=true;stop.disabled=true;
 const hasNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
@@ -108,15 +109,19 @@ async function configureControls(){
   start.disabled=!allowed;stop.disabled=!allowed;
   if(previewStart)previewStart.disabled=!allowed;
   if(previewStop)previewStop.disabled=!allowed;
+  if(signalStart)signalStart.disabled=!allowed;
+  if(signalStop)signalStop.disabled=!allowed;
   if(!allowed)log('Start/stop controls are owner-only; members can view paper results.');
  }catch{
   start.disabled=true;stop.disabled=true;
+  if(signalStart)signalStart.disabled=true;
+  if(signalStop)signalStop.disabled=true;
   log('Owner permissions unavailable; controls disabled.');
  }
 }
-for(const [button,name] of [[previewStart,'start'],[previewStop,'stop']]){
+for(const [button,name] of [[previewStart,'start'],[previewStop,'stop'],[signalStart,'start'],[signalStop,'stop']]){
  button?.addEventListener('click',()=>{
-  document.querySelector('[data-protab="kaibot"]')?.click();
+  if(button===previewStart||button===previewStop)document.querySelector('[data-protab="kaibot"]')?.click();
   action(name);
  });
 }
