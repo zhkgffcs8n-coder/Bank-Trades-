@@ -25,9 +25,9 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch,diagno
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance');
   return Number.isSafeInteger(balance?.balance)&&balance.balance>=0?'DEMO_AUTHENTICATED':'DEMO_INVALID_BALANCE_RESPONSE';
  }catch(error){
-  if(!/^KALSHI_HTTP_\\d{3}$/.test(error?.message)&&diagnostics&&typeof diagnostics==='object')
+  if(!/^KALSHI_HTTP_\d{3}$/.test(error?.message)&&diagnostics&&typeof diagnostics==='object')
    diagnostics.transportCause=classifyDemoBalanceTransport(error);
-  return /^KALSHI_HTTP_\\d{3}$/.test(error?.message)?error.message:'DEMO_TRANSPORT_ERROR';
+  return /^KALSHI_HTTP_\d{3}$/.test(error?.message)?error.message:'DEMO_TRANSPORT_ERROR';
  }
 }
 
