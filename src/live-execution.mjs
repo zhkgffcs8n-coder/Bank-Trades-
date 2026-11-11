@@ -42,6 +42,10 @@ export function reconcile(state,snapshot,now=Date.now()){
  for(const order of snapshot.orders){if(!order.order_id||orders.has(order.order_id))throw Error('DUPLICATE_OR_INVALID_ORDER');orders.set(order.order_id,order);}
  for(const fill of snapshot.fills){const id=fill.fill_id||fill.trade_id;if(!id||!fill.order_id)throw Error('INVALID_FILL');if(fills.has(id)&&JSON.stringify(fills.get(id))!==JSON.stringify(fill))throw Error('CONFLICTING_FILL');fills.set(id,fill);}
  for(const p of snapshot.positions){const qty=Number(p.position_fp??p.position);if(!p.ticker||!Number.isFinite(qty)||positions.has(p.ticker))throw Error('INVALID_POSITION');positions.set(p.ticker,qty);}
+ const indexedIntents=new Map(state.intents.filter(i=>i.status!=='ABORTED'&&i.exchangeIndex!==undefined).map(i=>[i.ticker,i.exchangeIndex]));
+ for(const row of [...snapshot.positions,...(snapshot.settlements||[])]){
+  if(indexedIntents.has(row.ticker)&&row.exchange_index!==indexedIntents.get(row.ticker))throw Error('POSITION_OR_SETTLEMENT_EXCHANGE_MISMATCH');
+ }
  const quantities=new Map();
  for(const intent of state.intents){
   if(intent.status==='ABORTED')continue;
@@ -49,6 +53,7 @@ export function reconcile(state,snapshot,now=Date.now()){
   if(matches.length!==1){if(intent.status!=='PREPARED')throw Error('UNRESOLVED_ORDER_'+intent.id);continue;}
   const o=matches[0];if(o.ticker!==intent.ticker)throw Error('ORDER_TICKER_MISMATCH');
   const ownFills=[...fills.values()].filter(f=>f.order_id===o.order_id);
+  if(intent.exchangeIndex!==undefined&&(o.exchange_index!==intent.exchangeIndex||ownFills.some(f=>f.exchange_index!==intent.exchangeIndex)))throw Error('ORDER_OR_FILL_EXCHANGE_MISMATCH');
   const count=ownFills.reduce((n,f)=>{const q=Number(f.count_fp??f.count);if(!Number.isFinite(q)||q<=0)throw Error('INVALID_FILL_COUNT');return n+q;},0);
   const reported=Number(o.fill_count_fp??o.fill_count);
   if(!Number.isFinite(reported)||Math.abs(count-reported)>1e-7||count>intent.qty+1e-7)throw Error('FILL_COUNT_MISMATCH');
