@@ -1,6 +1,7 @@
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
+import {runScheduledDemo} from './kalshi-demo-lifecycle.mjs';
 import {checkDemoConnection} from './kalshi-demo-check.mjs';
 
 export default async req=>{try{
@@ -35,7 +36,7 @@ export default async req=>{try{
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const {action,side,keyId,privateKeyPem}=await req.json();
- if(action==='DEMO_EXECUTION_TEST'||action==='STOP_DEMO_EXECUTION_TEST'){
+ if(['DEMO_EXECUTION_TEST','STOP_DEMO_EXECUTION_TEST','SELL_DEMO_EXECUTION_TEST'].includes(action)){
   const key='execution-test/authorization';
   if(action==='STOP_DEMO_EXECUTION_TEST'){
    await store.setJSON(key,{ownerId:null});
@@ -43,9 +44,14 @@ export default async req=>{try{
   }
   const saved=await store.get('uploaded-connection',{type:'json'});
   if(saved?.status!=='DEMO_AUTHENTICATED')fail(409,'Authenticated Demo credentials required');
+  if(action==='SELL_DEMO_EXECUTION_TEST'){
+   const result=await runScheduledDemo(undefined,{exitOnly:true});
+   return json({status:result.headers.get('x-demo-lifecycle-status')},result.ok?200:503);
+  }
   if(side!==undefined&&!['UP','DOWN'].includes(side))fail(400,'Choose UP or DOWN');
   await store.setJSON(key,{ownerId:user.id,side:side??'UP'});
-  return json({status:'DEMO_EXECUTION_TEST_ARMED'},202);
+  const result=await runScheduledDemo(undefined,{entryOnly:true,testSide:side??'UP'});
+  return json({status:result.headers.get('x-demo-lifecycle-status')},result.ok?200:503);
  }
  if(typeof keyId!=='string'||typeof privateKeyPem!=='string'||privateKeyPem.length>16000)fail(400,'Enter the demo key ID and choose the downloaded private key file.');
  const status=await checkDemoConnection({KALSHI_DEMO_KEY_ID:keyId,KALSHI_DEMO_PRIVATE_KEY:privateKeyPem});
