@@ -10,3 +10,6 @@ await build({entryPoints:['src/btc-predator.mjs'],bundle:true,minify:true,platfo
 if((await readdir('dist')).some(n=>/dashboard\.html|private|\.env|package/.test(n)))throw Error('Private file in public output');
 
 await writeFile('dist/build-version.json',JSON.stringify({version:process.env.COMMIT_REF||process.env.DEPLOY_ID||'local-build'}));
+
+const commit = process.env.COMMIT_REF;
+await writeFile('netlify/functions/lib/live-build-commit.json', JSON.stringify({commit: /^[a-f0-9]{40}$/.test(commit || '') ? commit : null}) + '\n');
