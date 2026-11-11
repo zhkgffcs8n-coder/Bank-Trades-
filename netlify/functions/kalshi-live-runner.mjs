@@ -11,9 +11,11 @@ export default async()=>{
    const db=liveStore();
    // Keep draining existing bot orders even when new orders are release-blocked.
    // A disabled deployment with no bot intents never authenticates to Kalshi.
+   let idleOwner=false;
    if(id){
     const {state}=await liveRepository(db,id).read();
     if(state.intents.length){const live=await runtime(id);await live.tick();}
+    else idleOwner=true;
    }
    const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
    const worker=await history.get('predator-v13/health',{type:'json'});
@@ -21,6 +23,7 @@ export default async()=>{
    const champion=inspectChampionIntake(worker,at);
    await history.setJSON('champion-kaibot/shadow-intake',{at,...champion});
    await db.setJSON('runner-status',{at,status:'RELEASE_BLOCKED',...status,champion});
+   if(idleOwner)await db.setJSON('heartbeat/'+id,{at,result:{status:'RELEASE_BLOCKED',canTrade:false},commit:process.env.COMMIT_REF||null});
    return new Response(null,{status:204});
   }
   if(!id)return new Response('OWNER_NOT_CONFIGURED',{status:503});
