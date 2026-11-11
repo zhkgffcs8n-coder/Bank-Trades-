@@ -30,7 +30,8 @@ export async function runScheduledDemo(worker){
   const championSignals=async()=>championExecutionSignals(worker??await history.get('predator-v13/health',{type:'json'}));
   let marketRejectionReason='DEMO_MARKET_NOT_VERIFIED';
   const testKey='execution-test/authorization';
-  const executionTest=(await db.get(testKey,{type:'json'}))?.ownerId===id;
+  const authorization=await db.get(testKey,{type:'json'});
+  const executionTest=authorization?.ownerId===id;
   const checkStopped=async()=>(await db.get(testKey,{type:'json'}))?.ownerId!==id;
   const findMarket=async(excluded,ticker)=>{
    if(!ticker&&executionTest)return findDemoLifecycleMarket(readOnly,excluded);
@@ -57,7 +58,7 @@ export async function runScheduledDemo(worker){
     throw error;
    }
   };
-  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,checkStopped,commit:process.env.COMMIT_REF||null});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,testSide:authorization?.side,checkStopped,commit:process.env.COMMIT_REF||null});
   await db.setJSON('lifecycle-status',outcome);
   const headers={'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)};
   if(outcome?.status==='DEMO_CHAMPION_CONTRACT_INELIGIBLE')

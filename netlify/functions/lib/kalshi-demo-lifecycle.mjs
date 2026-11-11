@@ -6,7 +6,7 @@ const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERI
 const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
 const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
 export const DEMO_EXECUTION_TEST='DEMO_EXECUTION_TEST';
-export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,checkStopped=async()=>false,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,testSide,checkStopped=async()=>false,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false,legacyRecovery=false,balanceRecovery=false;
@@ -47,6 +47,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   if(executionTest&&state.demo.attempts===0&&!risk.open.length&&
    state.intents.slice(state.demo.intentOffset||0).length===0){
    state.demo.mode=DEMO_EXECUTION_TEST;
+   state.demo.phase=testSide==='DOWN'?'DOWN':'UP';
   }
   const quick=state.demo.mode===DEMO_EXECUTION_TEST;
   if(quick){
