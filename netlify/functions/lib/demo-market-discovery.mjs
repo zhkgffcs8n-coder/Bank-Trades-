@@ -32,6 +32,8 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now){
  */
 export function demoLifecycleMarketRejection(m,excluded,now=Date.now()){
  if(!m)return 'DEMO_MARKET_NOT_FOUND';
+ if(m.exchange_index==null)return 'DEMO_MARKET_EXCHANGE_INDEX_MISSING';
+ if(!Number.isSafeInteger(m.exchange_index)||m.exchange_index<0)return 'DEMO_MARKET_EXCHANGE_INDEX_INVALID';
  if(m.exchange_index!==0)return 'DEMO_MARKET_NONDEFAULT_EXCHANGE';
  if(m.status!=='active')return 'DEMO_MARKET_INACTIVE';
  if(m.market_type!=='binary')return 'DEMO_MARKET_NOT_BINARY';

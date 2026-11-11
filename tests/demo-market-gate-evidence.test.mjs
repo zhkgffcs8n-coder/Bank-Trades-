@@ -15,6 +15,9 @@ const base=()=>({
 test('diagnostic reason matches every existing Demo market rejection without relaxing eligibility',()=>{
  const cases=[
   [null,'DEMO_MARKET_NOT_FOUND'],
+  [{exchange_index:undefined},'DEMO_MARKET_EXCHANGE_INDEX_MISSING'],
+  [{exchange_index:null},'DEMO_MARKET_EXCHANGE_INDEX_MISSING'],
+  [{exchange_index:'0'},'DEMO_MARKET_EXCHANGE_INDEX_INVALID'],
   [{exchange_index:1},'DEMO_MARKET_NONDEFAULT_EXCHANGE'],
   [{status:'closed'},'DEMO_MARKET_INACTIVE'],
   [{market_type:'scalar'},'DEMO_MARKET_NOT_BINARY'],
