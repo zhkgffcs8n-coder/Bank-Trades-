@@ -4,7 +4,7 @@ const start=el('kaiStart'),stop=el('kaiStop'),status=el('kaiState'),logBox=el('k
 if(!start||!stop||!status)return;
 const previewStart=el('primalPaperStart'),previewStop=el('primalPaperStop');
 const signalStart=el('paperSignalStart'),signalStop=el('paperSignalStop');
-let busy=false;
+let busy=false;let ownerAllowed=false;
 start.disabled=true;stop.disabled=true;
 const hasNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
 const money=n=>(n>=0?'+':'-')+'$'+Math.abs(n).toFixed(2);
@@ -89,16 +89,19 @@ async function refresh(){
  }
 }
 async function action(name){
- if(busy||start.disabled||stop.disabled)return;
+ if(busy||!ownerAllowed)return;
  busy=true;
  try{
   const max=Math.min(1000,Math.max(1,Number(el('kaiMax')?.value)||50));
-  await request('/.netlify/functions/kaibot-state',{
+  const result=await request('/.netlify/functions/kaibot-state',{
    method:'POST',headers:{'Content-Type':'application/json'},
    body:JSON.stringify({action:name,maxSpend:max})
   });
-  log(name==='start'?'Paper monitoring enabled':'Paper monitoring stopped');
-  await refresh();
+  if(result?.state?.running!==(name==='start'))throw Error('Server did not confirm '+name);
+  const verified=await request('/.netlify/functions/kaibot-state');
+  if(verified?.state?.running!==(name==='start'))throw Error('Persistent server state did not confirm '+name);
+  render(verified);
+  log(name==='start'?'Paper monitoring enabled and saved on server':'Paper monitoring stopped and saved on server');
  }catch(e){status.textContent=(name==='start'?'START':'STOP')+' FAILED · '+e.message}
  finally{busy=false}
 }
@@ -106,6 +109,7 @@ async function configureControls(){
  try{
   const access=await request('/api/membership');
   const allowed=access?.owner===true;
+  ownerAllowed=allowed;
   start.disabled=!allowed;stop.disabled=!allowed;
   if(previewStart)previewStart.disabled=!allowed;
   if(previewStop)previewStop.disabled=!allowed;
@@ -113,6 +117,7 @@ async function configureControls(){
   if(signalStop)signalStop.disabled=!allowed;
   if(!allowed)log('Start/stop controls are owner-only; members can view paper results.');
  }catch{
+  ownerAllowed=false;
   start.disabled=true;stop.disabled=true;
   if(signalStart)signalStart.disabled=true;
   if(signalStop)signalStop.disabled=true;
