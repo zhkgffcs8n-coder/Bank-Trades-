@@ -195,6 +195,19 @@ export default async()=>{
    const chooseUp=signal.action==='BUY UP'?true:signal.action==='BUY DOWN'?false:Number.isFinite(modelUp)&&modelUp>=0&&modelUp<=1?modelUp>=0.5:yesAsk<=noAsk;
    const side=chooseUp?'up':'down',ask=chooseUp?yesAsk:noAsk;
    if(previous.length&&(!['BUY UP','BUY DOWN'].includes(signal.action)||previous.at(-1).side===side&&Math.abs(ask-Number(previous.at(-1).ask))<5)){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Re-entry requires fresh qualified signal and meaningful price change',signal:signal.action};continue;}
+   // Preserve the shared BUY signal, but prevent last-minute paper entries
+   // when a reversal cannot be monitored reliably by the minute scheduler.
+   const secondsRemaining=(m._e-now)/1000;
+   if(secondsRemaining<240){
+    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,signal:signal.action,secondsLeft:Math.round(secondsRemaining),reason:'LATE_ENTRY_PROTECTION: under 4 minutes left; minute runner cannot reliably react to a fast flip'};
+    continue;
+   }
+   const currentSideBid=side==='up'?yesBid:noBid;
+   const spreadAtEntry=ask-currentSideBid;
+   if(!Number.isFinite(currentSideBid)||spreadAtEntry>5){
+    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,signal:signal.action,reason:'ENTRY_SPREAD_PROTECTION: executable bid unavailable or spread over 5 cents'};
+    continue;
+   }
    if(ask<=0||ask>=100){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Selected side not tradable'};continue;}
    const entryBasis='QUALIFIED PAPER SIGNAL';
    const max=Math.min(20,Math.max(1,Number(state.maxSpend)||20)),qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
