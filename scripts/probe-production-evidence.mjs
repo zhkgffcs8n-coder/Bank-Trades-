@@ -106,6 +106,30 @@ const safeCommit=x=>typeof x==='string'&&/^[0-9a-f]{7,40}$/i.test(x)?x:null;
 const SNAPSHOT_FAILURES=new Set(['DEMO_SNAPSHOT_BALANCE_READ_FAILED','DEMO_SNAPSHOT_ORDERS_READ_FAILED',
  'DEMO_SNAPSHOT_FILLS_READ_FAILED','DEMO_SNAPSHOT_POSITIONS_READ_FAILED','DEMO_SNAPSHOT_SETTLEMENTS_READ_FAILED']);
 const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
+const WAKE_INTAKE_STATES=['NO_SIGNAL','STALE_OR_UNAUTHENTICATED','INVALID_CONTRACT','PARITY_MISMATCH','SHADOW_PARITY_MATCH'];
+const WAKE_ACTIONS=['BUY UP','BUY DOWN','HOLD UP','HOLD DOWN','TAKE PROFIT UP','TAKE PROFIT DOWN',
+ 'SELL FAST UP','SELL FAST DOWN','TIME EXIT UP','TIME EXIT DOWN','EXIT UP','EXIT DOWN'];
+const WAKE_MARKET_REASONS=['DEMO_MARKET_NOT_FOUND','DEMO_MARKET_NONDEFAULT_EXCHANGE',
+ 'DEMO_MARKET_EXCHANGE_INDEX_MISSING','DEMO_MARKET_EXCHANGE_INDEX_INVALID','DEMO_MARKET_INACTIVE',
+ 'DEMO_MARKET_NOT_BINARY','DEMO_MARKET_ALREADY_USED','DEMO_MARKET_CLOSING_SOON',
+ 'DEMO_MARKET_ASK_OUT_OF_RANGE','DEMO_MARKET_BID_UNAVAILABLE',
+ 'DEMO_MARKET_SPREAD_UNSAFE','DEMO_MARKET_NOT_VERIFIED'];
+// Only allowlisted wake receipt metadata is retained. A 204 is never a fill.
+function summarizeWake(w){
+ if(!w||typeof w!=='object'||Array.isArray(w))return null;
+ return {
+  status:state(w.status,WAKE_INTAKE_STATES),
+  action:state(w.action,WAKE_ACTIONS),
+  ticker:typeof w.ticker==='string'&&/^KXBTC15M-[A-Z0-9-]{1,48}$/.test(w.ticker)?w.ticker:null,
+  observedAt:count(w.observedAt),receivedAt:count(w.receivedAt),completedAt:count(w.completedAt),
+  httpStatus:Number.isSafeInteger(w.httpStatus)&&w.httpStatus>=100&&w.httpStatus<=599?w.httpStatus:null,
+  lifecycleStatus:safeDemoCode(w.lifecycleStatus),
+  marketRejectionReason:state(w.marketRejectionReason,WAKE_MARKET_REASONS),
+  failureStage:state(w.failureStage,[...SNAPSHOT_STAGES]),
+  failureCode:SNAPSHOT_FAILURES.has(w.failureCode)?w.failureCode:safeDemoCode(w.failureCode),
+  snapshotCause:safeDemoCode(w.snapshotCause)
+ };
+}
 // The deployed public asset records the Netlify build ref, not a live API authorization.
 export function summarizeVersion(body){
  return {status:'READ_ONLY_VERSION',commit:safeCommit(body?.version)};
@@ -115,6 +139,7 @@ export function summarizeDemo(body){
  const p=body.savedBalanceProbe,l=body.lifecycleTest;
  return {
   status:'READ_ONLY_OBSERVATION',
+  championWake:summarizeWake(body.championWake),
   savedBalanceProbe:p&&typeof p==='object'?{
    status:safeDemoCode(p.status),checkedAt:safeIso(p.checkedAt),commit:safeCommit(p.commit),
    operation:p.operation==='GET_PORTFOLIO_BALANCE'?p.operation:'NOT_VERIFIED',
@@ -162,6 +187,8 @@ export async function probeProductionEvidence({fetchImpl=fetch,origin=PRODUCTION
  if(demo.status==='READ_ONLY_OBSERVATION'){
   demo.savedBalanceProbeAgeSeconds=evidenceAgeSeconds(demo.savedBalanceProbe?.checkedAt,now);
   demo.lifecycleAgeSeconds=evidenceAgeSeconds(demo.lifecycle?.checkedAt,now);
+  demo.championWakeAgeSeconds=evidenceAgeSeconds(demo.championWake?.completedAt,now);
+  demo.championWakeFresh=demo.championWakeAgeSeconds!==null&&demo.championWakeAgeSeconds<=300;
   demo.savedBalanceProbeFresh=demo.savedBalanceProbeAgeSeconds!==null&&demo.savedBalanceProbeAgeSeconds<=900;
   demo.lifecycleFresh=demo.lifecycleAgeSeconds!==null&&demo.lifecycleAgeSeconds<=300;
  }
@@ -194,6 +221,8 @@ export function evidenceSummary(report){
   '| KaiBot Demo read-only endpoint | '+value(d.status)+' |',
   '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+') |',
   '| Demo lifecycle | '+value(d.lifecycle?.status)+'; failure '+value(d.lifecycle?.failureCode)+'; underlying '+value(d.lifecycle?.snapshotCause)+' |',
+  '| Latest champion wake | '+value(d.championWake?.status)+'; '+value(d.championWake?.action)+'; runner '+value(d.championWake?.lifecycleStatus)+'; HTTP '+value(d.championWake?.httpStatus)+' |',
+  '| Champion wake freshness | '+value(d.championWakeFresh)+' (age '+value(d.championWakeAgeSeconds)+'s; 5m limit; not a fill) |',
   '| Saved Demo balance probe freshness | '+value(d.savedBalanceProbeFresh)+' (age '+value(d.savedBalanceProbeAgeSeconds)+'s; 15m limit) |',
   '| Demo lifecycle freshness | '+value(d.lifecycleFresh)+' (age '+value(d.lifecycleAgeSeconds)+'s; 5m limit; prior completed tests are historical) |',
   '| New exchange-confirmed Demo fills | unverified (read-only metadata is not fill evidence) |',

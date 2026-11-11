@@ -244,3 +244,52 @@ test('public build-version evidence rejects local builds and secret-bearing valu
  assert.equal(summarizeVersion({version:'89b1f44'}).commit,'89b1f44');
  assert.doesNotMatch(JSON.stringify(summarizeVersion({version:'SECRET_TOKEN=never-print'})),/SECRET_TOKEN/);
 });
+
+test('read-only champion wake is timestamped, sanitized and never proof of a Demo fill',async()=>{
+ const received=Date.parse('2026-11-11T15:19:40Z'),completed=received+900;
+ const response={championWake:{
+  status:'SHADOW_PARITY_MATCH',ticker:'KXBTC15M-26NOV111130-30',action:'BUY UP',
+  observedAt:received-100,receivedAt:received,completedAt:completed,httpStatus:204,
+  lifecycleStatus:'DEMO_PREVIOUS_RUN_FINISHED',secret:'SECRET_TOKEN=never-emit',
+  orders:[{orderId:'private-order-id'}],snapshotCause:'SECRET_TOKEN=never-emit'
+ },lifecycleTest:{status:'DEMO_EXECUTION_TEST_VERIFIED',checkedAt:Date.parse('2026-11-11T11:03:05Z')}};
+ const fetchImpl=async url=>new Response(JSON.stringify(url.endsWith('kalshi-demo-status')?response:{}),{status:200});
+ const report=await probeProductionEvidence({fetchImpl,now:new Date('2026-11-11T15:20:00Z')});
+ assert.equal(report.demo.championWake.status,'SHADOW_PARITY_MATCH');
+ assert.equal(report.demo.championWake.action,'BUY UP');
+ assert.equal(report.demo.championWake.ticker,'KXBTC15M-26NOV111130-30');
+ assert.equal(report.demo.championWake.lifecycleStatus,'DEMO_PREVIOUS_RUN_FINISHED');
+ assert.equal(report.demo.championWakeFresh,true);
+ assert.equal(report.demo.championWakeAgeSeconds,19);
+ assert.equal(report.demo.lifecycleFresh,false);
+ assert.equal(report.demo.verifiedNewFills,null);
+ assert.match(evidenceSummary(report),/Champion wake freshness.*true/);
+ assert.doesNotMatch(JSON.stringify(report),/SECRET_TOKEN|private-order-id|orders/);
+});
+
+test('forged, stale and future wake receipts fail closed and never authorize fills',async()=>{
+ const forged=summarizeDemo({championWake:{
+  status:'SECRET_TOKEN=bad',ticker:'BTC;SECRET_TOKEN=bad',action:'BUY LIVE',
+  receivedAt:-10,completedAt:'now',httpStatus:900,lifecycleStatus:'SECRET_TOKEN=bad',
+  failureStage:'SECRET_TOKEN=bad',failureCode:'SECRET_TOKEN=bad',
+  marketRejectionReason:'SECRET_TOKEN=bad',snapshotCause:'SECRET_TOKEN=bad'
+ }});
+ assert.equal(forged.championWake.status,'NOT_VERIFIED');
+ assert.equal(forged.championWake.ticker,null);
+ assert.equal(forged.championWake.httpStatus,null);
+ assert.equal(forged.championWake.completedAt,null);
+ assert.equal(forged.verifiedNewFills,null);
+ assert.doesNotMatch(JSON.stringify(forged),/SECRET_TOKEN/);
+ const fetchImpl=async url=>new Response(JSON.stringify(url.endsWith('kalshi-demo-status')?{
+  championWake:{status:'SHADOW_PARITY_MATCH',completedAt:Date.parse('2026-11-11T15:21:00Z'),
+   lifecycleStatus:'DEMO_CHAMPION_ROUND_TRIP_VERIFIED'}
+ }:{}),{status:200});
+ const future=await probeProductionEvidence({fetchImpl,now:new Date('2026-11-11T15:20:00Z')});
+ assert.equal(future.demo.championWakeFresh,false);
+ assert.equal(future.demo.championWakeAgeSeconds,null);
+ assert.equal(future.demo.verifiedNewFills,null);
+ const stale=await probeProductionEvidence({fetchImpl,now:new Date('2026-11-11T15:30:00Z')});
+ assert.equal(stale.demo.championWakeFresh,false);
+ assert.equal(stale.demo.championWakeAgeSeconds,540);
+ assert.equal(stale.demo.verifiedNewFills,null);
+});
