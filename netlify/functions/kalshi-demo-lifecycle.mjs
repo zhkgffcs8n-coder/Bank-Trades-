@@ -48,6 +48,7 @@ export async function runScheduledDemo(worker){
   if(outcome?.status==='DEMO_LIFECYCLE_FAILED'){
    headers['x-demo-failure-stage']=demoWakeFailureStage(outcome?.stage);
    headers['x-demo-failure-code']=demoWakeFailureCode(outcome?.error);
+   if(outcome?.snapshotCause)headers['x-demo-snapshot-cause']=demoWakeFailureCode(outcome.snapshotCause);
   }
   return new Response(null,{status:204,headers});
  }catch(e){
