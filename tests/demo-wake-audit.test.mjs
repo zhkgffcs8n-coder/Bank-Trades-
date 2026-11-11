@@ -120,3 +120,35 @@ test('durable Demo wake records only allowlisted account snapshot failure codes'
  }}));
  assert.equal(waiting.failureCode,undefined);
 });
+
+
+test('durable Railway audit retains only sanitized underlying snapshot cause',()=>{
+ for(const [cause,expected] of [
+  ['KALSHI_HTTP_429','KALSHI_HTTP_429'],
+  ['KALSHI_HTTP_401','KALSHI_HTTP_401'],
+  ['INVALID_FILLS','INVALID_FILLS'],
+  ['PRIVATE_KEY_VALUE','UNVERIFIED_FAILURE_CODE']
+ ]){
+  const event={ticker:'KXBTC15M-TEST',action:'BUY UP',status:'SENDING'};
+  recordDemoWakeAcknowledgment(event,new Response(null,{status:204,headers:{
+   'x-demo-lifecycle-status':'DEMO_LIFECYCLE_FAILED',
+   'x-demo-failure-stage':'ACCOUNT_SNAPSHOT',
+   'x-demo-failure-code':'DEMO_SNAPSHOT_BALANCE_READ_FAILED',
+   'x-demo-snapshot-cause':cause
+  }}));
+  assert.equal(event.snapshotCause,expected);
+  assert.equal(event.failureCode,'DEMO_SNAPSHOT_BALANCE_READ_FAILED');
+  assert.equal(event.filled,undefined);
+ }
+ for(const [status,stage] of [
+  ['DEMO_WAITING_FOR_CHAMPION_ENTRY','ACCOUNT_SNAPSHOT'],
+  ['DEMO_LIFECYCLE_FAILED','SUBMIT_ENTRY']
+ ]){
+  const event={status:'SENDING'};
+  recordDemoWakeAcknowledgment(event,new Response(null,{status:204,headers:{
+   'x-demo-lifecycle-status':status,'x-demo-failure-stage':stage,
+   'x-demo-snapshot-cause':'KALSHI_HTTP_401'
+  }}));
+  assert.equal(event.snapshotCause,undefined);
+ }
+});
