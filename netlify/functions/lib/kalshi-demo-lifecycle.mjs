@@ -8,10 +8,17 @@ const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||S
 export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
- let retry=false;
+ let retry=false,legacyRecovery=false;
  try{
+  // Older runs could consume the retry before failing on their first account read.
+  // A separate one-time recovery is limited to the legacy zero-attempt record.
+  const previous=state.demo;
+  legacyRecovery=state.demoRetryUsed===true&&!state.demoLegacySnapshotRecoveryUsed&&
+   previous?.stage==='ACCOUNT_SNAPSHOT'&&previous.error==='DEMO_TRANSPORT_OR_STORAGE_ERROR'&&
+   previous.commit==null&&previous.attempts===0&&previous.intentOffset===state.intents.length&&
+   state.intents.every(intent=>['ABORTED','RECONCILED'].includes(intent.status));
   retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
-   !state.demoRetryUsed&&retryableSnapshotFailure(state.demo.error);
+   (!state.demoRetryUsed||legacyRecovery)&&retryableSnapshotFailure(state.demo.error);
   if(state.demo?.finished&&!retry)return state.demo;
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
@@ -24,6 +31,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    if(risk.open.length)return state.demo;
    state.demoHistory=[...(state.demoHistory||[]),state.demo];
    state.demoRetryUsed=true;
+   if(legacyRecovery)state.demoLegacySnapshotRecoveryUsed=true;
    state.demo={startedAt:clock(),commit,phase:'UP',attempts:0,intentOffset:state.intents.length};
    state.enabled=true;state.stopped=false;
    result('DEMO_RETRY_ARMED');

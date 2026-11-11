@@ -146,3 +146,30 @@ test('retry records the current account read failure without consuming the retry
  assert.equal(state.stopped,true);
  assert.equal(orders,0);
 });
+
+test('legacy zero-attempt snapshot gets one read-only recovery even when its original retry was consumed',async()=>{
+ const now=Date.now(),state=initialState();
+ const old={finished:true,status:'DEMO_LIFECYCLE_FAILED',stage:'ACCOUNT_SNAPSHOT',commit:null,
+  error:'DEMO_TRANSPORT_OR_STORAGE_ERROR',attempts:0,intentOffset:1};
+ state.demo=old;
+ state.demoRetryUsed=true;
+ state.intents=[{id:'old',status:'ABORTED',ticker:'OLD'}];
+ let snapshots=0;
+ const options={
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>{snapshots++;return {at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]};},
+   create:async()=>assert.fail('recovery must never submit an order')},
+  clock:()=>now
+ };
+ state.intents[0].status='UNKNOWN';
+ assert.equal(await runDemoLifecycle(options),old);
+ assert.equal(snapshots,0);
+ state.intents[0].status='ABORTED';
+ assert.equal((await runDemoLifecycle(options)).status,'DEMO_RETRY_ARMED');
+ assert.equal(state.demoLegacySnapshotRecoveryUsed,true);
+ assert.deepEqual(state.demoHistory,[old]);
+ assert.equal(state.demo.intentOffset,1);
+ state.demo=old;
+ assert.equal(await runDemoLifecycle(options),old);
+ assert.equal(snapshots,1);
+});
