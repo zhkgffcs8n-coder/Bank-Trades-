@@ -23,10 +23,10 @@ test('Ed25519 credentials are verified before encrypted storage',async()=>{
   getOwner:async()=>({id:'owner1234'}),
   getDb:()=>({get:async()=>stored,setJSON:async(k,v)=>{stored=v}}),
   getLive:()=>({acquire:async()=>({state:initialState(),release:async()=>{}})}),
-  verify:async(keyId,key)=>{assert.equal(keyId,'ed-key');assert.equal(key,edPem);return {ok:true,status:200};}
+  verify:async(keyId,key)=>{assert.equal(keyId,'ed-test-key');assert.equal(key,edPem);return {ok:true,status:200};}
  });
  try{
-  const response=await handler(req({keyId:'ed-key',privateKeyPem:edPem,rotationConfirmed:true}));
+  const response=await handler(req({keyId:'ed-test-key',privateKeyPem:edPem,rotationConfirmed:true}));
   assert.equal(response.status,200);assert.equal(stored.securityVersion,2);assert.ok(stored.envelope.ciphertext);
  }finally{if(original===undefined)delete process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY;else process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY=original;}
 });
