@@ -173,3 +173,38 @@ test('legacy zero-attempt snapshot gets one read-only recovery even when its ori
  assert.equal(await runDemoLifecycle(options),old);
  assert.equal(snapshots,1);
 });
+
+test('owner-armed Demo execution test bypasses champion intake and never retries an unknown submission', async()=>{
+ const state=initialState(),now=Date.now();
+ let submitted=0;
+ const options={
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  executionTest:true,
+  championSignals:async()=>assert.fail('test must not read champion signals'),
+  client:{
+   snapshot:async()=>({at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]}),
+   create:async order=>{submitted++;assert.equal(order.count,'1.00');throw Error('connection lost');}
+  },
+  findMarket:async(excluded,ticker)=>{assert.equal(ticker,undefined);return {ticker:'TEST-ROUND'};},
+  quoteFor:async ticker=>({ticker,at:now,expiresAt:now+600000,upAsk:50,upBid:49}),
+  clock:()=>now
+ };
+ const failed=await runDemoLifecycle(options);
+ assert.equal(failed.mode,'DEMO_EXECUTION_TEST');
+ assert.equal(failed.error,'ORDER_OUTCOME_UNKNOWN_RECONCILE_REQUIRED');
+ assert.equal((await runDemoLifecycle(options)).error,failed.error);
+ assert.equal(submitted,1);
+});
+
+test('a stopped Demo execution test cannot submit after a restart',async()=>{
+ const state=initialState(),now=Date.now();
+ state.demo={mode:'DEMO_EXECUTION_TEST',attempts:0,phase:'UP'};
+ const result=await runDemoLifecycle({
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>({at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]})},
+  checkStopped:async()=>true,
+  findMarket:async()=>assert.fail('stopped test must not select a market'),
+  clock:()=>now
+ });
+ assert.equal(result.status,'DEMO_EXECUTION_TEST_STOPPED');
+});
