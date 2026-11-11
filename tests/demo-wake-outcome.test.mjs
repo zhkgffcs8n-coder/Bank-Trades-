@@ -75,3 +75,18 @@ test('Demo failure code is allowlisted and cannot leak raw errors or imply fills
   assert.equal(make('DEMO_LIFECYCLE_FAILED',code).failureCode,'UNVERIFIED_FAILURE_CODE');
  assert.equal(make('DEMO_WAITING_FOR_CHAMPION_ENTRY','KALSHI_HTTP_401').failureCode,undefined);
 });
+
+test('snapshot underlying cause is independently allowlisted in a failed wake receipt',()=>{
+ const make=(code,status='DEMO_LIFECYCLE_FAILED')=>demoWakeReceipt({
+  response:new Response(null,{status:204,headers:{
+   'x-demo-lifecycle-status':status,'x-demo-failure-stage':'ACCOUNT_SNAPSHOT',
+   'x-demo-failure-code':'DEMO_SNAPSHOT_FILLS_READ_FAILED','x-demo-snapshot-cause':code
+  }}),intake:{status:'SHADOW_PARITY_MATCH'},receivedAt:1,completedAt:2
+ });
+ assert.equal(make('KALSHI_HTTP_401').snapshotCause,'KALSHI_HTTP_401');
+ assert.equal(make('INVALID_FILLS').snapshotCause,'INVALID_FILLS');
+ assert.equal(make('API_KEY_SECRET').snapshotCause,'UNVERIFIED_FAILURE_CODE');
+ assert.equal(make('KALSHI_HTTP_200').snapshotCause,'UNVERIFIED_FAILURE_CODE');
+ assert.equal(make('KALSHI_HTTP_401','DEMO_WAITING_FOR_CHAMPION_ENTRY').snapshotCause,undefined);
+ assert.equal(make('KALSHI_HTTP_401').filled,undefined);
+});

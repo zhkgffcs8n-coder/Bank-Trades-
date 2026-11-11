@@ -94,8 +94,13 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   const safeError=SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)?
     'DEMO_SNAPSHOT_'+e.snapshotPhase+'_READ_FAILED':
    /^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:'DEMO_TRANSPORT_OR_STORAGE_ERROR';
+  // Preserve the read phase and an independently allowlisted underlying API/data
+  // failure. The phase alone cannot distinguish a 401 from a malformed response.
+  const snapshotCause=SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)&&
+   /^(?:KALSHI_HTTP_(?:400|401|403|404|408|409|422|429|500|502|503|504)|INVALID_(?:ORDERS|FILLS|MARKET_POSITIONS|SETTLEMENTS)|CURSOR_LOOP|PAGINATION_LIMIT)$/.test(e?.message)?e.message:null;
   state.enabled=false;state.stopped=true;
-  state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:safeError,finished:true,checkedAt:clock()};
+  state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:safeError,
+   ...(snapshotCause?{snapshotCause}:{}),finished:true,checkedAt:clock()};
   await session.persist(state);return state.demo;
  }
  finally{await session.release();}
