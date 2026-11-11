@@ -127,3 +127,22 @@ test('Demo snapshot never persists untrusted exception text as a cause',async()=
  assert.equal(result.error,'DEMO_SNAPSHOT_ORDERS_READ_FAILED');
  assert.equal(result.snapshotCause,undefined);
 });
+
+test('retry records the current account read failure without consuming the retry or placing orders',async()=>{
+ const state=initialState();
+ state.demo={status:'DEMO_LIFECYCLE_FAILED',finished:true,error:'DEMO_TRANSPORT_OR_STORAGE_ERROR',attempts:0};
+ let persisted, orders=0;
+ const result=await runDemoLifecycle({
+  repo:{acquire:async()=>({state,persist:async next=>{persisted=structuredClone(next.demo);},release:async()=>{}})},
+  client:{snapshot:async()=>{const error=Error('KALSHI_HTTP_401');error.snapshotPhase='BALANCE';throw error;},
+   create:async()=>{orders++;}},
+  clock:()=>1000
+ });
+ assert.equal(result.error,'DEMO_SNAPSHOT_BALANCE_READ_FAILED');
+ assert.equal(persisted.snapshotCause,'KALSHI_HTTP_401');
+ assert.equal(persisted.checkedAt,1000);
+ assert.equal(persisted.attempts,0);
+ assert.equal(state.demoRetryUsed,undefined);
+ assert.equal(state.stopped,true);
+ assert.equal(orders,0);
+});
