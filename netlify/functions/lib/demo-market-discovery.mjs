@@ -16,7 +16,7 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now,onR
  };
  let cursor='';
  for(let page=0;page<4;page++){
-  const query=new URLSearchParams({status:'open',limit:'400',mve_filter:'exclude'});
+  const query=new URLSearchParams({status:'open',limit:'1000',mve_filter:'exclude'});
   if(cursor)query.set('cursor',cursor);
   const result=await client.request('GET','/trade-api/v2/markets?'+query);
   if(!Array.isArray(result?.markets))throw Error('DEMO_MARKET_LIST_INVALID');
