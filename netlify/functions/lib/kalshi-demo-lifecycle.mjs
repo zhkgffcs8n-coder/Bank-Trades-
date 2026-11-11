@@ -108,6 +108,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    /^(?:KALSHI_HTTP_(?:400|401|403|404|408|409|422|429|500|502|503|504)|INVALID_(?:ORDERS|FILLS|MARKET_POSITIONS|SETTLEMENTS)|CURSOR_LOOP|PAGINATION_LIMIT)$/.test(e?.message)?e.message:null;
   state.enabled=false;state.stopped=true;
   state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:safeError,
+   snapshotPhase:SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)?e.snapshotPhase:undefined,
    snapshotCause:snapshotCause||undefined,finished:true,checkedAt:clock()};
   await session.persist(state);return state.demo;
  }
