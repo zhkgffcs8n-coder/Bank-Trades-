@@ -4,7 +4,16 @@ import {shouldRefreshSavedDemoBalanceProbe} from './lib/demo-balance-probe-polic
 import {getStore} from '@netlify/blobs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 
-export async function checkDemoConnection(env=process.env,fetchImpl=fetch){
+// Sanitized, read-only Demo balance transport classification. Never log error.message,
+// response bodies, URLs, credentials, or underlying network details.
+export function classifyDemoBalanceTransport(error){
+ if(error?.name==='TimeoutError'||error?.name==='AbortError')return 'DEMO_REQUEST_TIMEOUT';
+ if(error?.name==='SyntaxError')return 'DEMO_RESPONSE_INVALID_JSON';
+ if(error?.name==='TypeError')return 'DEMO_NETWORK_OR_TLS_FAILURE';
+ return 'DEMO_TRANSPORT_UNCLASSIFIED';
+}
+
+export async function checkDemoConnection(env=process.env,fetchImpl=fetch,diagnostics=null){
  const keyId=env.KALSHI_DEMO_KEY_ID?.trim();
  const privateKeyPem=env.KALSHI_DEMO_PRIVATE_KEY?.replace(/\\n/g,'\n').trim();
  if(!keyId||!privateKeyPem)return 'DEMO_CREDENTIALS_MISSING';
@@ -16,7 +25,9 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch){
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance');
   return Number.isSafeInteger(balance?.balance)&&balance.balance>=0?'DEMO_AUTHENTICATED':'DEMO_INVALID_BALANCE_RESPONSE';
  }catch(error){
-  return /^KALSHI_HTTP_\d{3}$/.test(error.message)?error.message:'DEMO_TRANSPORT_ERROR';
+  if(!/^KALSHI_HTTP_\\d{3}$/.test(error?.message)&&diagnostics&&typeof diagnostics==='object')
+   diagnostics.transportCause=classifyDemoBalanceTransport(error);
+  return /^KALSHI_HTTP_\\d{3}$/.test(error?.message)?error.message:'DEMO_TRANSPORT_ERROR';
  }
 }
 
@@ -30,6 +41,7 @@ export default async()=>{
   const requestId=randomUUID(),startedAt=Date.now();
   const ownerId=process.env.KALSHI_LIVE_OWNER_ID;
   let status='DEMO_OWNER_MISSING';
+  const diagnostics={};
   if(ownerId){
    let credentials;
    try{
@@ -37,9 +49,9 @@ export default async()=>{
    }catch{status='DEMO_CREDENTIAL_ENVELOPE_UNAVAILABLE';}
    if(credentials)status=await checkDemoConnection({
     KALSHI_DEMO_KEY_ID:credentials.keyId,KALSHI_DEMO_PRIVATE_KEY:credentials.privateKeyPem
-   });
+   },fetch,diagnostics);
   }
-  const receipt={status,requestId,commit,operation:'GET_PORTFOLIO_BALANCE',
+  const receipt={status,transportCause:diagnostics.transportCause??null,requestId,commit,operation:'GET_PORTFOLIO_BALANCE',
    checkedAt:new Date().toISOString(),durationMs:Date.now()-startedAt};
   await store.setJSON('saved-balance-probe',{...receipt,credentialCheckedAt:saved.checkedAt??null});
   console.info(JSON.stringify({event:'DEMO_SAVED_BALANCE_PROBE',...receipt}));
