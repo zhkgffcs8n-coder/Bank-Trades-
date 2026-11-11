@@ -346,3 +346,22 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  .bt-command-bottom-filled #btLowerCommandRow>#signalDesk{grid-area:desk!important}
  .bt-command-bottom-filled #btLowerCommandRow .premium-table{font-size:12px}
 }
+
+/* Compact signal monitor directly under radar; preserve every market row and legibility. */
+.bt-compact-live-signals .bt-command-middle{align-content:start;gap:6px!important}
+.bt-compact-live-signals .bt-command-middle>#liveTerminal{display:block!important;margin:0!important;width:100%;min-width:0;grid-area:auto!important}
+.bt-compact-live-signals .bt-command-middle>#liveTerminal>.premium-panel{padding:7px 9px!important}
+.bt-compact-live-signals #liveTerminal .between{gap:4px!important;margin:0 0 4px!important;align-items:center}
+.bt-compact-live-signals #liveTerminal h2{font-size:13px!important;line-height:1.2!important;margin:0!important}
+.bt-compact-live-signals #liveTerminal .premium-table{font-size:11px!important;line-height:1.18!important;width:100%}
+.bt-compact-live-signals #liveTerminal .premium-table th{font-size:9px!important;padding:3px 3px!important;white-space:nowrap}
+.bt-compact-live-signals #liveTerminal .premium-table td{font-size:11px!important;padding:4px 3px!important;line-height:1.2!important}
+.bt-compact-live-signals #liveTerminal .premium-table tr{height:auto!important}
+.bt-compact-live-signals #liveTerminal .premium-panel>div:has(.premium-table){max-height:235px;overflow-y:auto;overflow-x:auto}
+.bt-compact-live-signals #liveTerminal #premiumVoice,
+.bt-compact-live-signals #liveTerminal #enablePush{font-size:10px!important;padding:4px 6px!important;min-height:28px!important}
+@media(max-width:800px){
+ .bt-compact-live-signals{grid-template-areas:"picker picker" "history history" "radar scalper" "signals signals" "contract contract" "spot spot"!important}
+ .bt-compact-live-signals .bt-command-middle>#liveTerminal{grid-area:signals!important}
+ .bt-compact-live-signals #liveTerminal .premium-panel>div:has(.premium-table){max-height:210px}
+}
