@@ -2,62 +2,19 @@
 'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
-let paperPositions=[];let paperBotRunning=false;let paperStatusError='';let paperLastRun=null;let paperRiskAudit=null;
-function renderPaperTradeSignals(){
- const panel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
- const flip=document.getElementById('btVerifiedAlertFeed');
- if(panel&&flip){const command=flip.closest('.bt-command-grid');if(command&&panel.nextElementSibling!==command)command.before(panel);}
- const status=document.getElementById('paperTradeSignalsStatus'),rows=document.getElementById('paperTradeSignalsRows');
- if(!status||!rows)return;
- const recent=paperPositions.filter(t=>t&&['up','down'].includes(t.side)&&['OPEN','CLOSED','SETTLED'].includes(t.status))
-  .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at||0)-Number(a.exitAt||a.settledAt||a.at||0)).slice(0,15);
- const percent=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toFixed(1)+'%':'—';
- const californiaTime=ms=>new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date(ms));
- const runAge=Number(paperLastRun?.at)>0?Date.now()-Number(paperLastRun.at):Infinity;
- const fresh=runAge>=0&&runAge<180000;
- const reasons=Object.entries(paperLastRun?.markets||{}).filter(([,v])=>v?.status==='ERROR'||v?.status==='SKIPPED').slice(0,3).map(([coin,v])=>coin+': '+String(v.reason||v.status).slice(0,90));
- status.textContent=paperStatusError||('Paper bot: '+(paperBotRunning?'ENABLED':'STOPPED')+' · Runner: '+(fresh?'ACTIVE ('+Math.round(runAge/1000)+'s ago)':'NOT RECENTLY VERIFIED')+' · '+recent.length+' recorded positions'+(paperRiskAudit?.entryPaused?' · ENTRIES PAUSED BY RISK GATE':'')+(reasons.length?' · '+reasons.join(' | '):'')+(paperLastRun?.extremeCoverage?.status?' · Round: '+paperLastRun.extremeCoverage.status:''));
- status.style.color=paperStatusError||!paperBotRunning||!fresh?'#fbbf24':'#86efac';
- rows.replaceChildren();
- const summary=document.createElement('div');summary.style.cssText='grid-column:1/-1;display:flex;gap:5px;flex-wrap:wrap;margin-bottom:4px';
- const marketStatus=paperLastRun?.markets||{};
- for(const coin of assets){
-  const item=marketStatus[coin];
-  const open=paperPositions.find(t=>t.asset===coin&&t.status==='OPEN');
-  const entered=item?.status==='ENTERED';
-  const badge=document.createElement('span');
-  const tone=open||entered?'#166534':item?.status==='ERROR'?'#7f1d1d':'#1e293b';
-  badge.style.cssText='padding:4px 7px;border-radius:7px;background:'+tone+';color:#fff;font-size:11px;font-weight:700';
-  badge.textContent=coin+' · '+(open?'HOLD '+String(open.side||'').toUpperCase():entered?'BUY '+String(item.side||'').toUpperCase():!paperBotRunning?'OFF':!fresh?'RUNNER STALE':item?.status==='ERROR'?'ERROR':item?.status==='SKIPPED'?'WAIT':'MONITORING');
-  summary.append(badge);
- }
- rows.append(summary);
- if(!recent.length){const empty=document.createElement('div');empty.textContent='No recorded paper entries yet. No trades are being claimed.';rows.append(empty);return;}
- for(const trade of recent){
-  const side=String(trade.side).toUpperCase(),up=side==='UP',asset=trade.asset||trade.ticker||'Market';
-  const row=document.createElement('div');row.style.cssText='padding:12px;margin:8px 0;border:1px solid '+(up?'#166534':'#991b1b')+';border-left:5px solid '+(up?'#22c55e':'#ef4444')+';border-radius:10px;background:'+(up?'#0c2b24':'#321a27')+';font-size:13px;line-height:1.7';
-  const heading=document.createElement('strong');heading.style.cssText='color:'+(up?'#86efac':'#fecaca')+';font-size:15px';
-  heading.textContent=asset+' · BUY '+side+' · Entry '+percent(trade.ask);
-  const exit=document.createElement('div');
-  const sold=trade.status!=='OPEN'&&trade.exitBid!==null&&trade.exitBid!==undefined;
-  exit.style.cssText='font-weight:700;color:'+(sold?'#67e8f9':'#e2e8f0');exit.textContent=sold?'PAPER SOLD '+side+' · Exit '+percent(trade.exitBid):trade.status==='OPEN'?'HOLD '+side+' · OPEN PAPER POSITION':trade.status+' · Exit not recorded';
-  const time=document.createElement('small');time.style.opacity='.75';
-  const entryAt=Number(trade.at),exitAt=Number(trade.exitAt||trade.settledAt);
-  time.textContent='Entry: '+(Number.isFinite(entryAt)&&entryAt>0?californiaTime(entryAt):'unknown')+
-   (Number.isFinite(exitAt)&&exitAt>0?' · Exit: '+californiaTime(exitAt):'');
-  row.append(heading,exit,time);rows.append(row);
- }
-}
+let paperPositions=[];let paperBotRunning=false;
+const paperPanel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
+const flipPanel=document.getElementById('btVerifiedAlertFeed')?.closest('.bt-command-grid');
+if(paperPanel&&flipPanel&&paperPanel.nextElementSibling!==flipPanel)flipPanel.before(paperPanel);
 async function refreshPaperPositions(){
  try{
   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
-  if(!response.ok){paperStatusError='Paper ledger HTTP '+response.status;syncSignals();return;}
+  if(!response.ok){syncSignals();return;}
   const data=await response.json();
   paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
-  paperBotRunning=!!data?.state?.running;paperLastRun=data?.lastRun||data?.last_run||null;paperRiskAudit=data?.riskAudit||data?.risk_audit||null;paperStatusError='';
+  paperBotRunning=!!data?.state?.running;
   syncSignals();
- }catch(e){paperStatusError='Paper positions unavailable';syncSignals();}
- finally{renderPaperTradeSignals();}
+ }catch{syncSignals();}
 }
 
 // Lightweight comic-style signal effects; respect reduced-motion settings.
