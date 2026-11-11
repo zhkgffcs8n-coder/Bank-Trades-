@@ -13,7 +13,7 @@ function announce(t,kind){
  const el=document.createElement('div');el.setAttribute('role','alert');
  el.style.cssText='position:fixed;z-index:99999;top:12px;left:10px;right:10px;margin:auto;max-width:550px;padding:16px;border:2px solid #fff;border-radius:12px;color:#fff;font-weight:900;font-size:18px;text-align:center;background:'+(kind==='exit'?'#155e75':t.side==='down'?'#991b1b':'#166534')+';box-shadow:0 10px 35px #0009';
  el.textContent='PAPER '+(kind==='exit'?'EXIT':'BUY '+String(t.side).toUpperCase())+' · '+(t.asset||t.ticker||'MARKET')+' · '+pct(kind==='exit'?t.exitBid:t.ask)+' · SIMULATED';
- document.body.append(el);setTimeout(()=>el.remove(),7500);
+ document.body.append(el);setTimeout(()=>el.remove(),15000);
 }
 function paint(data){
  const running=!!data?.state?.running,health=data?.runnerHealth||{},markets=data?.lastRun?.markets||{};
