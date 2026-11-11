@@ -101,6 +101,7 @@ async function action(name){
   const verified=await request('/.netlify/functions/kaibot-state');
   if(verified?.state?.running!==(name==='start'))throw Error('Persistent server state did not confirm '+name);
   render(verified);
+  window.dispatchEvent(new Event('paper-bot-state-changed'));
   log(name==='start'?'Paper monitoring enabled and saved on server':'Paper monitoring stopped and saved on server');
  }catch(e){status.textContent=(name==='start'?'START':'STOP')+' FAILED · '+e.message}
  finally{busy=false}
