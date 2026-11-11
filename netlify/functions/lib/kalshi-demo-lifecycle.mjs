@@ -5,7 +5,8 @@ const SNAPSHOT_PHASES=new Set(['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMEN
 const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
 const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
 const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
-export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,clock=Date.now}){
+export const DEMO_EXECUTION_TEST='DEMO_EXECUTION_TEST';
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,checkStopped=async()=>false,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false,legacyRecovery=false,balanceRecovery=false;
@@ -43,6 +44,16 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    await session.persist(state);
    return state.demo;
   }
+  if(executionTest&&state.demo.attempts===0&&!risk.open.length&&
+   state.intents.slice(state.demo.intentOffset||0).length===0){
+   state.demo.mode=DEMO_EXECUTION_TEST;
+  }
+  const quick=state.demo.mode===DEMO_EXECUTION_TEST;
+  if(quick){
+   championSignals=null;
+   if(await checkStopped()){result('DEMO_EXECUTION_TEST_STOPPED');await session.persist(state);return state.demo;}
+  }
+  const stoppedForSubmission=quick?checkStopped:async()=>false;
   state.risk=risk;await session.persist(state);
   const open=risk.open[0];
   if(open){
@@ -59,7 +70,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    stage='RECORD_EXIT_ATTEMPT';
    state.demo.attempts++;await session.persist(state);
    stage='SUBMIT_EXIT';
-   await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot,signal:exit||{ticker:open.ticker,at:clock()},quote,action:'sell',position:open,now:clock(),clock});
+   await submitIntent({state,client,persist:session.persist,checkStopped:stoppedForSubmission,snapshot,signal:exit||{ticker:open.ticker,at:clock()},quote,action:'sell',position:open,now:clock(),clock});
    stage='VERIFY_EXIT';
    const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
    result('DEMO_EXIT_RECONCILED');await session.persist(state);return state.demo;
@@ -71,6 +82,15 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    const sold=currentIntents.filter(i=>i.action==='sell'&&i.side===side).reduce((n,i)=>n+(i.filled||0),0);
    if(!(buy.filled>0)||Math.abs(sold-buy.filled)>1e-7){result('DEMO_LIFECYCLE_NOT_FILLED',{finished:true});await session.persist(state);return state.demo;}
    state.demo[side+'RoundTripVerified']=true;
+   if(quick){
+    const orders=currentIntents.filter(i=>i.filled>0).map(i=>({
+     orderId:i.orderId,action:i.action,filled:i.filled,
+     feesCents:state.evidence.fills.filter(f=>f.order_id===i.orderId)
+      .reduce((total,f)=>total+Number(f.fee_cost)*100,0)
+    }));
+    result('DEMO_EXECUTION_TEST_VERIFIED',{finished:true,orders});
+    await session.persist(state);return state.demo;
+   }
    if(championSignals){result('DEMO_CHAMPION_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
    if(phase==='DOWN'){result('DEMO_BOTH_SIDES_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
    state.demo.phase='DOWN';await session.persist(state);return state.demo;
@@ -96,7 +116,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   stage='RECORD_ENTRY_ATTEMPT';
   state.demo.attempts++;await session.persist(state);
   stage='SUBMIT_ENTRY';
-  await submitIntent({state,client,persist:session.persist,checkStopped:async()=>false,snapshot:entrySnapshot,signal:entry||{ticker:market.ticker,action:'BUY '+phase,at:clock()},quote,trialCaps:!!entry,now:clock(),clock});
+  await submitIntent({state,client,persist:session.persist,checkStopped:stoppedForSubmission,snapshot:entrySnapshot,signal:entry||{ticker:market.ticker,action:'BUY '+phase,at:clock()},quote,trialCaps:quick||!!entry,now:clock(),clock});
   stage='VERIFY_ENTRY';
   const after=await client.snapshot();reconcile(state,after);state.risk=accountRisk(state,after,clock());
   result('DEMO_ENTRY_RECONCILED');await session.persist(state);return state.demo;

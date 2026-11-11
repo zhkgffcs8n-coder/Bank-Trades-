@@ -34,7 +34,18 @@ export default async req=>{try{
  if(user.id!==process.env.KALSHI_LIVE_OWNER_ID)fail(403,'Configured owner required');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
- const {keyId,privateKeyPem}=await req.json();
+ const {action,keyId,privateKeyPem}=await req.json();
+ if(action==='DEMO_EXECUTION_TEST'||action==='STOP_DEMO_EXECUTION_TEST'){
+  const key='execution-test/authorization';
+  if(action==='STOP_DEMO_EXECUTION_TEST'){
+   await store.setJSON(key,{ownerId:null});
+   return json({status:'DEMO_EXECUTION_TEST_STOPPED'});
+  }
+  const saved=await store.get('uploaded-connection',{type:'json'});
+  if(saved?.status!=='DEMO_AUTHENTICATED')fail(409,'Authenticated Demo credentials required');
+  await store.setJSON(key,{ownerId:user.id});
+  return json({status:'DEMO_EXECUTION_TEST_ARMED'},202);
+ }
  if(typeof keyId!=='string'||typeof privateKeyPem!=='string'||privateKeyPem.length>16000)fail(400,'Enter the demo key ID and choose the downloaded private key file.');
  const status=await checkDemoConnection({KALSHI_DEMO_KEY_ID:keyId,KALSHI_DEMO_PRIVATE_KEY:privateKeyPem});
  if(status!=='DEMO_AUTHENTICATED')return json({status},422);
