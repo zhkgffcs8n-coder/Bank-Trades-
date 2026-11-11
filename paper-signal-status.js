@@ -16,6 +16,17 @@ function paint(data){
  const running=!!data?.state?.running,health=data?.runnerHealth||{},markets=data?.lastRun?.markets||{};
  const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
  const paused=!!(data?.entriesPaused||data?.riskAudit?.entryPaused);
+ const stats=data?.performance||{};
+ const total=stats?.overall||stats?.total||stats?.summary||null;
+ const heading=document.getElementById('paperTradeSignalsTitle');
+ if(heading){
+  let scoreboard=document.getElementById('paperTradeVerifiedScore');
+  if(!scoreboard){scoreboard=document.createElement('span');scoreboard.id='paperTradeVerifiedScore';scoreboard.style.cssText='display:inline-block;margin-left:8px;font-size:12px;font-weight:800;color:#a7f3d0';heading.append(scoreboard)}
+  if(total&&Number.isFinite(Number(total.wins))&&Number.isFinite(Number(total.losses))){
+   const wins=Number(total.wins),losses=Number(total.losses),ties=Number(total.ties)||0,n=Number(total.trades)||wins+losses+ties;
+   scoreboard.textContent='W '+wins+' · L '+losses+' · '+(n?(wins/n*100).toFixed(1)+'%':'—')+' verified paper · '+n+' scored';
+  }else scoreboard.textContent='W — · L — · Not yet verified';
+ }
  const active=running&&health.fresh&&!paused;
  status.textContent='PAPER BOT '+(running?'ENABLED':'STOPPED')+' · Runner '+(health.fresh?'last checked '+health.ageSeconds+'s ago':'NOT VERIFIED')+' · '+(paused?'ENTRIES PAUSED BY SAFETY GATE':running?'Waiting for qualified entries':'Not searching')+' · '+trades.length+' recorded trades · Updates checked every 3s (runner scheduled every 60s)';
  status.style.color=active?'#86efac':'#fbbf24';
