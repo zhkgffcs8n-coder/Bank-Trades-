@@ -392,3 +392,6 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  }
  .bt-compact-live-signals #liveTerminal .premium-table td{font-size:10px!important;padding:3px 2px!important}
 }
+
+.paper-mode-buttons>button{min-width:0!important;width:100%!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:clip!important;word-break:normal!important;overflow-wrap:normal!important;padding:8px 2px!important;font-size:clamp(10px,2.7vw,13px)!important;line-height:1.15!important;letter-spacing:-.15px!important;border-radius:7px!important}
+.paper-mode-buttons>button[aria-pressed="true"]{background:#164e63!important;color:#e0faff!important;border-color:#67e8f9!important}
