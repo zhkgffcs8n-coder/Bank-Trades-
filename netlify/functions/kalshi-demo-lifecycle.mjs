@@ -8,6 +8,7 @@ import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
 import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
+import {sanitizedDemoSnapshotFailure} from '../../src/demo-snapshot-telemetry.mjs';
 export async function runScheduledDemo(worker){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
@@ -37,6 +38,18 @@ export async function runScheduledDemo(worker){
     return null;
    }catch(error){
     if(error.message==='KALSHI_HTTP_404'){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
+    throw error;
+   }
+  };
+  const snapshot=client.snapshot;
+  client.snapshot=async()=>{
+   const startedAt=Date.now();
+   try{
+    return await snapshot();
+   }catch(error){
+    console.warn(JSON.stringify(sanitizedDemoSnapshotFailure(error,{
+     durationMs:Date.now()-startedAt,trigger:worker?'worker':'schedule'
+    })));
     throw error;
    }
   };
