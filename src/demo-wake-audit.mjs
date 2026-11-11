@@ -28,6 +28,12 @@ export function recordDemoWakeAcknowledgment(event,response){
  if(event.lifecycleStatus==='DEMO_LIFECYCLE_FAILED'){
   event.failureStage=demoWakeFailureStage(response?.headers?.get?.('x-demo-failure-stage'));
   event.failureCode=demoWakeFailureCode(response?.headers?.get?.('x-demo-failure-code'));
+  // Preserve only the separately allowlisted HTTP/data cause for failed snapshot reads.
+  // A 204 wake is still not evidence of an exchange order or fill.
+  if(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT'].includes(event.failureStage)){
+   const cause=response?.headers?.get?.('x-demo-snapshot-cause');
+   if(cause)event.snapshotCause=demoWakeFailureCode(cause);
+  }
  }
  return event;
 }
