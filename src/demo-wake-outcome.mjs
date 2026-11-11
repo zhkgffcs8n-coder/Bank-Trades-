@@ -46,6 +46,9 @@ export function demoWakeReceipt({response,intake,receivedAt,completedAt}){
   }:{}),
   ...(lifecycleStatus==='DEMO_LIFECYCLE_FAILED'?{
    failureStage:demoWakeFailureStage(response?.headers?.get?.('x-demo-failure-stage')),
-   failureCode:demoWakeFailureCode(response?.headers?.get?.('x-demo-failure-code'))
+   failureCode:demoWakeFailureCode(response?.headers?.get?.('x-demo-failure-code')),
+   ...(response?.headers?.get?.('x-demo-snapshot-cause')?{
+    snapshotCause:demoWakeFailureCode(response.headers.get('x-demo-snapshot-cause'))
+   }:{})
   }:{})};
 }
