@@ -5,7 +5,7 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {recoverTerminalDemoState} from './lib/demo-lock-recovery.mjs';
 import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
-import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection} from './lib/demo-market-discovery.mjs';
+import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection,findDemoLifecycleMarket} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 import {sanitizedDemoSnapshotFailure} from '../../src/demo-snapshot-telemetry.mjs';
@@ -29,7 +29,11 @@ export async function runScheduledDemo(worker){
   const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
   const championSignals=async()=>championExecutionSignals(worker??await history.get('predator-v13/health',{type:'json'}));
   let marketRejectionReason='DEMO_MARKET_NOT_VERIFIED';
+  const testKey='execution-test/authorization';
+  const executionTest=(await db.get(testKey,{type:'json'}))?.ownerId===id;
+  const checkStopped=async()=>(await db.get(testKey,{type:'json'}))?.ownerId!==id;
   const findMarket=async(excluded,ticker)=>{
+   if(!ticker&&executionTest)return findDemoLifecycleMarket(readOnly,excluded);
    try{
     const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
     if(!market||market.ticker!==ticker){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
@@ -53,7 +57,7 @@ export async function runScheduledDemo(worker){
     throw error;
    }
   };
-  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,commit:process.env.COMMIT_REF||null});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,checkStopped,commit:process.env.COMMIT_REF||null});
   await db.setJSON('lifecycle-status',outcome);
   const headers={'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)};
   if(outcome?.status==='DEMO_CHAMPION_CONTRACT_INELIGIBLE')
