@@ -17,16 +17,13 @@ function paint(data){
  const running=!!data?.state?.running,health=data?.runnerHealth||{},markets=data?.lastRun?.markets||{};
  const trades=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
  const paused=!!(data?.entriesPaused||data?.riskAudit?.entryPaused);
- const stats=data?.performance||{};
- const total=stats?.overall||stats?.total||stats?.summary||null;
  const heading=document.getElementById('paperTradeSignalsTitle');
- if(heading){
-  let scoreboard=document.getElementById('paperTradeVerifiedScore');
-  if(!scoreboard){scoreboard=document.createElement('span');scoreboard.id='paperTradeVerifiedScore';scoreboard.style.cssText='display:inline-block;margin-left:8px;font-size:12px;font-weight:800;color:#a7f3d0';heading.append(scoreboard)}
-  if(total&&Number.isFinite(Number(total.wins))&&Number.isFinite(Number(total.losses))){
-   const wins=Number(total.wins),losses=Number(total.losses),ties=Number(total.ties)||0,n=Number(total.trades)||wins+losses+ties;
-   scoreboard.textContent='W '+wins+' · L '+losses+' · '+(n?(wins/n*100).toFixed(1)+'%':'—')+' verified paper · '+n+' scored';
-  }else scoreboard.textContent='W — · L — · Not yet verified';
+ const oldScore=document.getElementById('paperTradeVerifiedScore');if(oldScore)oldScore.remove();
+ const mode=['lock','balanced','extreme'].includes(data?.state?.mode)?data.state.mode:'balanced';
+ for(const button of document.querySelectorAll('[data-paper-entry-mode]')){
+  const selected=button.dataset.paperEntryMode===mode;
+  button.setAttribute('aria-pressed',String(selected));
+  button.style.outline=selected?'2px solid #67e8f9':'none';
  }
  const active=running&&health.fresh&&!paused;
  const latest=trades.filter(t=>Number.isFinite(Number(t?.at))&&Number(t.at)>0).sort((a,b)=>Number(b.at)-Number(a.at))[0];
