@@ -36,7 +36,7 @@ export async function runScheduledDemo(worker,manual={}){
    return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_SELECTION_CHANGED'}});
   const checkStopped=async()=>(await db.get(testKey,{type:'json'}))?.ownerId!==id;
   const findMarket=async(excluded,ticker)=>{
-   if(!ticker&&executionTest)return findDemoLifecycleMarket(readOnly,excluded,Date.now,reason=>{marketRejectionReason=reason;});
+   if(!ticker&&executionTest)return findDemoLifecycleMarket(readOnly,excluded,Date.now,reason=>{marketRejectionReason=reason;},authorization.side??'UP');
    try{
     const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
     if(!market||market.ticker!==ticker){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
