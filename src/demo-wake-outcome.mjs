@@ -6,6 +6,13 @@ const MARKET_REASONS=new Set([
  'DEMO_MARKET_ASK_OUT_OF_RANGE','DEMO_MARKET_BID_UNAVAILABLE',
  'DEMO_MARKET_SPREAD_UNSAFE','DEMO_MARKET_NOT_VERIFIED'
 ]);
+// A completed earlier Demo test is not evidence that a new champion wake traded.
+// Keep its durable result intact, but report a distinct outcome for this invocation.
+export function demoWakeStatusForOutcome(outcome,invokedAt){
+ if(outcome?.finished===true&&(!Number.isFinite(outcome.checkedAt)||outcome.checkedAt<=invokedAt))
+  return 'DEMO_PREVIOUS_RUN_FINISHED';
+ return demoWakeLifecycleStatus(outcome?.status);
+}
 export function demoWakeLifecycleStatus(status){
  return typeof status==='string'&&SAFE_STATUS.test(status)?status:'DEMO_OUTCOME_UNVERIFIED';
 }

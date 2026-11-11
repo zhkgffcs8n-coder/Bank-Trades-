@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {demoWakeLifecycleStatus,demoWakeReceipt} from '../src/demo-wake-outcome.mjs';
+import {demoWakeLifecycleStatus,demoWakeStatusForOutcome,demoWakeReceipt} from '../src/demo-wake-outcome.mjs';
+
+test('stale completed Demo test never impersonates a new champion wake',()=>{
+ const previous={status:'DEMO_EXECUTION_TEST_VERIFIED',finished:true,checkedAt:1000,orders:[{orderId:'old'}]};
+ assert.equal(demoWakeStatusForOutcome(previous,2000),'DEMO_PREVIOUS_RUN_FINISHED');
+ assert.equal(previous.status,'DEMO_EXECUTION_TEST_VERIFIED');
+ assert.equal(demoWakeStatusForOutcome({status:'DEMO_CHAMPION_ROUND_TRIP_VERIFIED',finished:true,checkedAt:2001},2000),'DEMO_CHAMPION_ROUND_TRIP_VERIFIED');
+ assert.equal(demoWakeStatusForOutcome({status:'DEMO_EXECUTION_TEST_VERIFIED',finished:true},2000),'DEMO_PREVIOUS_RUN_FINISHED');
+ assert.equal(demoWakeStatusForOutcome({status:'DEMO_WAITING_FOR_CHAMPION_ENTRY',checkedAt:1000},2000),'DEMO_WAITING_FOR_CHAMPION_ENTRY');
+ const receipt=demoWakeReceipt({response:new Response(null,{status:204,headers:{'x-demo-lifecycle-status':demoWakeStatusForOutcome(previous,2000)}}),intake:{status:'SHADOW_PARITY_MATCH',action:'BUY UP'},receivedAt:2000,completedAt:2010});
+ assert.equal(receipt.lifecycleStatus,'DEMO_PREVIOUS_RUN_FINISHED');
+ assert.equal(receipt.filled,undefined);
+});
 
 test('204 wake reports a lifecycle rejection, not an exchange fill',()=>{
  const response=new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_CHAMPION_CONTRACT_INELIGIBLE'}});
