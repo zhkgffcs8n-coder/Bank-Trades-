@@ -139,12 +139,19 @@ export default async()=>{
  const round=Math.floor(now/900000);
  const mode=['lock','balanced','extreme'].includes(state.mode)?state.mode:'balanced';
  const roundAudit={at:now,running:true,mode,entriesPaused:entryPaused,markets:{}};
- let extremeCandidate=null;
+ // Fetch the eight market lists concurrently to reduce scan latency without changing signal qualification.
+ const marketLists=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
+  try{return [asset,{data:await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}))}];}
+  catch(error){return [asset,{error}];}
+ }));
+ const marketListByAsset=new Map(marketLists);
  // Per-contract deduplication below prevents duplicate entries without skipping a new round.
  for(const [asset,series] of Object.entries(SERIES)){
   try{
    roundAudit.markets[asset]={status:'CHECKING'};
-   const d=await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}));
+   const marketResponse=marketListByAsset.get(asset);
+   if(marketResponse?.error)throw marketResponse.error;
+   const d=marketResponse?.data||{};
    const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m){roundAudit.markets[asset]={status:'SKIPPED',reason:'No active contract with 2–15.5 minutes remaining'};continue;}roundAudit.markets[asset]={status:'CHECKING',ticker:m.ticker};const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=(mode==='extreme'?5:3)||previous.some(t=>now-Number(t.at)<(mode==='extreme'?60000:120000))){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Position open, mode entry limit, or mode cooldown',entries:previous.length};continue;}
    const recent=await hdb.get('recent/'+asset,{type:'json'}).catch(()=>[]),records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
@@ -182,12 +189,6 @@ export default async()=>{
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
-    // Late-round coverage experiment uses one simulated contract across all markets.
-    const up=(yesAsk+yesBid)>=100,ask=up?yesAsk:noAsk,bid=up?yesBid:noBid,spread=ask-bid;
-    if(false&&mode==='extreme'&&!previous.length&&m._e-now<=900000&&m._e-now>=180000&&ask>=10&&ask<=90&&bid>0&&spread<=5&&
-     (!extremeCandidate||spread<extremeCandidate.spread)){
-     extremeCandidate={asset,ticker:m.ticker,side:up?'up':'down',ask,bid,spread,expiresAt:m._e};
-    }
     roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Unqualified signal; research observation retained',signal:signal.action};
     continue;
    }
