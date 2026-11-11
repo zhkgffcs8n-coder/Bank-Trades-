@@ -273,3 +273,30 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
  .bt-command-stacked #liveTerminal{grid-area:signals}
  .bt-command-stacked .bt-command-middle>.premium-panel{grid-area:contract}
 }
+
+/* Compact professional command center: fill left/right columns and keep signals legible. */
+.bt-command-professional{align-items:start!important;gap:9px!important}
+.bt-command-professional .bt-command-column{align-content:start;gap:9px;min-width:0}
+.bt-command-professional #liveTerminal{margin:0!important;padding:0!important}
+.bt-command-professional #liveTerminal>.premium-panel{padding:9px!important}
+.bt-command-professional #liveTerminal .between{margin-bottom:5px!important;gap:4px!important}
+.bt-command-professional #liveTerminal h2{font-size:14px!important;line-height:1.2!important;margin:0!important}
+.bt-command-professional #liveTerminal .premium-table{width:100%;font-size:11px;line-height:1.35}
+.bt-command-professional #liveTerminal .premium-table th,
+.bt-command-professional #liveTerminal .premium-table td{padding:5px 4px!important;vertical-align:middle}
+.bt-command-professional #liveTerminal .premium-table th{font-size:10px!important;letter-spacing:0!important}
+.bt-command-professional #signalDesk,.bt-command-professional .bt-command-left>.card{margin:0!important;padding:10px!important;min-width:0}
+.bt-command-professional #signalDesk .metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}
+.bt-command-professional #signalDesk h2{font-size:16px;margin:4px 0}
+.bt-command-professional #quickAssets{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:5px!important}
+.bt-command-professional #quickAssets button{min-width:0!important;padding:7px 2px!important;font-size:11px!important}
+.bt-command-professional .premium-chart{height:220px}
+@media(max-width:800px){
+ .bt-command-professional{grid-template-columns:repeat(2,minmax(0,1fr))!important;grid-template-areas:"picker picker" "history history" "radar scalper" "signals signals" "contract contract" "easy desk" "spot spot"!important}
+ .bt-command-professional .bt-command-left>.card{grid-area:easy}
+ .bt-command-professional #signalDesk{grid-area:desk}
+ .bt-command-professional #quickAssets{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .bt-command-professional #liveTerminal{grid-area:signals!important}
+ .bt-command-professional .bt-command-left>.premium-panel{grid-area:contract!important}
+ .bt-command-professional .bt-command-right>section:has(#btcSpotChart){grid-area:spot}
+}
