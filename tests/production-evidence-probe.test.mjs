@@ -207,3 +207,30 @@ test('Demo endpoint unavailable does not block independent OMEGA or paper eviden
  assert.equal(result.paper.status,'NOT_VERIFIED');
  assert.equal(result.verifiedProfitableTrading,false);
 });
+
+test('read-only Demo evidence flags old completed tests without claiming fresh fills',async()=>{
+ const fetchImpl=async url=>new Response(JSON.stringify(url.endsWith('kalshi-demo-status')?{
+  savedBalanceProbe:{status:'DEMO_AUTHENTICATED',checkedAt:'2026-11-11T13:16:00Z',operation:'GET_PORTFOLIO_BALANCE'},
+  lifecycleTest:{status:'DEMO_EXECUTION_TEST_VERIFIED',checkedAt:Date.parse('2026-11-11T11:03:05Z')}
+ }:{}),{status:200});
+ const report=await probeProductionEvidence({fetchImpl,now:new Date('2026-11-11T13:20:00Z')});
+ assert.equal(report.demo.savedBalanceProbeFresh,true);
+ assert.equal(report.demo.savedBalanceProbeAgeSeconds,240);
+ assert.equal(report.demo.lifecycleFresh,false);
+ assert.equal(report.demo.lifecycleAgeSeconds,8215);
+ assert.equal(report.demo.verifiedNewFills,null);
+ assert.match(evidenceSummary(report),/Demo lifecycle freshness.*false/);
+ assert.doesNotMatch(JSON.stringify(report),/orderId|privateKey/);
+});
+test('missing and future-dated Demo evidence is never considered fresh',async()=>{
+ const fetchImpl=async url=>new Response(JSON.stringify(url.endsWith('kalshi-demo-status')?{
+  savedBalanceProbe:{status:'DEMO_AUTHENTICATED',checkedAt:'2026-11-11T13:21:00Z'},
+  lifecycleTest:{status:'DEMO_EXECUTION_TEST_VERIFIED'}
+ }:{}),{status:200});
+ const report=await probeProductionEvidence({fetchImpl,now:new Date('2026-11-11T13:20:00Z')});
+ assert.equal(report.demo.savedBalanceProbeFresh,false);
+ assert.equal(report.demo.savedBalanceProbeAgeSeconds,null);
+ assert.equal(report.demo.lifecycleFresh,false);
+ assert.equal(report.demo.lifecycleAgeSeconds,null);
+ assert.equal(report.demo.verifiedNewFills,null);
+});
