@@ -162,10 +162,10 @@ export default async()=>{
    const yesAsk=q(m,'yes_ask'),noAsk=q(m,'no_ask'),yesBid=q(m,'yes_bid'),noBid=q(m,'no_bid');
    if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote',secondsLeft:Math.round((m._e-now)/1000),quote:{yesAsk,noAsk,yesBid,noBid}};continue;}
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
-   const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
+   const validHistory=fresh&&records.length>=2&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t))&&Number(records.at(-1).t)-Number(records[0].t)>=45000;
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
    const assetResearch={model:assetModel?.count>=20?assetModel:globalModel,status:training?.perAsset?.[asset]||training};
-   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (4 required)'};
+   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (2 spanning at least 45s required)'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    // Immutable first eligible observation per round, including WAIT decisions.
    // Store both hypothetical sides so avoided losses and missed wins can be measured.
