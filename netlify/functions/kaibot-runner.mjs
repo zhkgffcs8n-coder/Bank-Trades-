@@ -155,7 +155,7 @@ export default async()=>{
    const marketResponse=marketListByAsset.get(asset);
    if(marketResponse?.error)throw marketResponse.error;
    const d=marketResponse?.data||{};
-   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=120000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m){roundAudit.markets[asset]={status:'SKIPPED',reason:'No active contract with 2–15.5 minutes remaining'};continue;}roundAudit.markets[asset]={status:'CHECKING',ticker:m.ticker};const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=(mode==='extreme'?5:3)||previous.some(t=>now-Number(t.at)<(mode==='extreme'?60000:120000))){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Position open, mode entry limit, or mode cooldown',entries:previous.length};continue;}
+   const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=240000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m){roundAudit.markets[asset]={status:'SKIPPED',reason:'No contract with at least 4 minutes remaining (late-entry protection)'};continue;}roundAudit.markets[asset]={status:'CHECKING',ticker:m.ticker};const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=(mode==='extreme'?5:3)||previous.some(t=>now-Number(t.at)<(mode==='extreme'?60000:120000))){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Position open, mode entry limit, or mode cooldown',entries:previous.length};continue;}
    const recent=await hdb.get('recent/'+asset,{type:'json'}).catch(()=>[]),records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
    // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
    // A quote-implied direction is not a validated edge and is never a real-money order.
@@ -165,7 +165,7 @@ export default async()=>{
    const validHistory=fresh&&records.length>=4&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t));
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
    const assetResearch={model:assetModel?.count>=20?assetModel:globalModel,status:training?.perAsset?.[asset]||training};
-   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh training samples'};
+   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (4 required)'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    // Immutable first eligible observation per round, including WAIT decisions.
    // Store both hypothetical sides so avoided losses and missed wins can be measured.
@@ -192,7 +192,7 @@ export default async()=>{
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
-    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Unqualified signal; research observation retained',signal:signal.action};
+    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:signal.reason||'Unqualified signal; research observation retained',signal:signal.action,score:signal.score,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null};
     continue;
    }
    const modelUp=Number(signal.probability??signal.prediction);
