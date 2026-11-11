@@ -1,4 +1,5 @@
 import {paperSignal} from './lib/shared-paper-signals.mjs';
+import {modelValidated} from '../../src/research-model.mjs';
 import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition,duplicatePaperTradeIds} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
@@ -164,7 +165,7 @@ export default async()=>{
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
    const validHistory=fresh&&records.length>=2&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t))&&Number(records.at(-1).t)-Number(records[0].t)>=45000;
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
-   const assetResearch={model:assetModel?.count>=20?assetModel:globalModel,status:training?.perAsset?.[asset]||training};
+   const assetResearch={model:modelValidated(assetModel)?assetModel:modelValidated(globalModel)?globalModel:assetModel||globalModel,status:training?.perAsset?.[asset]||training};
    const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (2 spanning at least 45s required)'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    // Immutable first eligible observation per round, including WAIT decisions.
