@@ -34,7 +34,7 @@ export default async req=>{try{
  if(user.id!==process.env.KALSHI_LIVE_OWNER_ID)fail(403,'Configured owner required');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
- const {action,keyId,privateKeyPem}=await req.json();
+ const {action,side,keyId,privateKeyPem}=await req.json();
  if(action==='DEMO_EXECUTION_TEST'||action==='STOP_DEMO_EXECUTION_TEST'){
   const key='execution-test/authorization';
   if(action==='STOP_DEMO_EXECUTION_TEST'){
@@ -43,7 +43,8 @@ export default async req=>{try{
   }
   const saved=await store.get('uploaded-connection',{type:'json'});
   if(saved?.status!=='DEMO_AUTHENTICATED')fail(409,'Authenticated Demo credentials required');
-  await store.setJSON(key,{ownerId:user.id});
+  if(side!==undefined&&!['UP','DOWN'].includes(side))fail(400,'Choose UP or DOWN');
+  await store.setJSON(key,{ownerId:user.id,side:side??'UP'});
   return json({status:'DEMO_EXECUTION_TEST_ARMED'},202);
  }
  if(typeof keyId!=='string'||typeof privateKeyPem!=='string'||privateKeyPem.length>16000)fail(400,'Enter the demo key ID and choose the downloaded private key file.');
