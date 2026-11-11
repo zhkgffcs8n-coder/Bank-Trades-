@@ -80,7 +80,8 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
 <label>Paste demo private key <textarea id="demoKeyText" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="16000"></textarea></label>
 <label>Demo private key file <input id="demoKeyFile" type="file"></label>
 <button type="button" id="demoConnect">VERIFY &amp; SAVE DEMO KEY</button>
-<button type="button" data-demo-execution="DEMO_EXECUTION_TEST">RUN ONE-CONTRACT DEMO TEST</button>
+<button type="button" data-demo-execution="DEMO_EXECUTION_TEST" data-demo-side="UP">DEMO BUY UP</button>
+<button type="button" data-demo-execution="DEMO_EXECUTION_TEST" data-demo-side="DOWN">DEMO BUY DOWN</button>
 <button type="button" data-demo-execution="STOP_DEMO_EXECUTION_TEST">STOP DEMO TEST</button>
 </div><p id="demoUploadStatus" role="status"></p>
 </div>
@@ -93,7 +94,7 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
   control.disabled=true;
   try{
    const response=await fetch('/.netlify/functions/kalshi-demo-status',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action:control.dataset.demoExecution})});
+    body:JSON.stringify({action:control.dataset.demoExecution,side:control.dataset.demoSide})});
    const data=await response.json();
    status.textContent=response.ok?(data.status==='DEMO_EXECUTION_TEST_ARMED'?
     'Demo test armed. KaiBot will check for an executable quote on its next scheduled run.':'Demo test stopped.'):data.error||'Demo test request rejected.';
