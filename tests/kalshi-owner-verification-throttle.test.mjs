@@ -41,3 +41,19 @@ test('concurrent verification and cooldown suppress additional exchange reads',a
  await guardedVerification(store,'owner',verify,()=>now);
  assert.equal(calls,2);
 });
+
+test('cooldown displays only the matching saved credential outcome and never reuses it for a save',async()=>{
+ let record;
+ const store={getWithMetadata:async()=>record,setJSON:async (key,data)=>{
+  record={data,etag:'1'};
+  return {modified:true,etag:'1'};
+ }};
+ const verify=async()=>({ok:true,status:200});
+ await guardedVerification(store,'owner',verify,()=>1000,{revision:'saved'});
+ const noFetch=async()=>assert.fail('cooldown must not send another request');
+ assert.deepEqual(await guardedVerification(store,'owner',noFetch,()=>1100,{revision:'saved',allowCached:true}),
+  {ok:true,status:200,checkedAt:1000,cached:true});
+ for(const options of [{revision:'different',allowCached:true},{revision:'saved'}]){
+  assert.equal((await guardedVerification(store,'owner',noFetch,()=>1100,options)).locallyThrottled,true);
+ }
+});
