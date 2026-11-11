@@ -16,13 +16,13 @@ function renderPaperTradeSignals(){
  rows.replaceChildren();
  if(!recent.length){const empty=document.createElement('div');empty.textContent='No recorded paper entries yet. No trades are being claimed.';rows.append(empty);return;}
  for(const trade of recent){
-  const row=document.createElement('div');row.style.cssText='padding:9px 4px;border-bottom:1px solid #334155;font-size:13px;line-height:1.6';
+  const row=document.createElement('div');row.style.cssText='padding:12px;margin:8px 0;border:1px solid '+(up?'#166534':'#991b1b')+';border-left:5px solid '+(up?'#22c55e':'#ef4444')+';border-radius:10px;background:'+(up?'#0c2b24':'#321a27')+';font-size:13px;line-height:1.7';
   const side=String(trade.side).toUpperCase(),up=side==='UP',asset=trade.asset||trade.ticker||'Market';
-  const heading=document.createElement('strong');heading.style.color=up?'#4ade80':'#fb7185';
+  const heading=document.createElement('strong');heading.style.cssText='color:'+(up?'#86efac':'#fecaca')+';font-size:15px';
   heading.textContent=asset+' · BUY '+side+' · Entry '+percent(trade.ask);
   const exit=document.createElement('div');
   const sold=trade.status!=='OPEN'&&trade.exitBid!==null&&trade.exitBid!==undefined;
-  exit.textContent=sold?'PAPER SOLD '+side+' · Exit '+percent(trade.exitBid):trade.status==='OPEN'?'HOLD '+side+' · OPEN PAPER POSITION':trade.status+' · Exit not recorded';
+  exit.style.cssText='font-weight:700;color:'+(sold?'#67e8f9':'#e2e8f0');exit.textContent=sold?'PAPER SOLD '+side+' · Exit '+percent(trade.exitBid):trade.status==='OPEN'?'HOLD '+side+' · OPEN PAPER POSITION':trade.status+' · Exit not recorded';
   const time=document.createElement('small');time.style.opacity='.75';
   const entryAt=Number(trade.at),exitAt=Number(trade.exitAt||trade.settledAt);
   time.textContent='Entry: '+(Number.isFinite(entryAt)&&entryAt>0?new Date(entryAt).toLocaleString():'unknown')+
