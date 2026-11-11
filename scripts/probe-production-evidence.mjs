@@ -106,6 +106,7 @@ const safeCommit=x=>typeof x==='string'&&/^[0-9a-f]{7,40}$/i.test(x)?x:null;
 const SNAPSHOT_FAILURES=new Set(['DEMO_SNAPSHOT_BALANCE_READ_FAILED','DEMO_SNAPSHOT_ORDERS_READ_FAILED',
  'DEMO_SNAPSHOT_FILLS_READ_FAILED','DEMO_SNAPSHOT_POSITIONS_READ_FAILED','DEMO_SNAPSHOT_SETTLEMENTS_READ_FAILED']);
 const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
+const DEMO_TRANSPORT_CAUSES=['DEMO_REQUEST_TIMEOUT','DEMO_RESPONSE_INVALID_JSON','DEMO_NETWORK_OR_TLS_FAILURE','DEMO_TRANSPORT_UNCLASSIFIED'];
 const WAKE_INTAKE_STATES=['NO_SIGNAL','STALE_OR_UNAUTHENTICATED','INVALID_CONTRACT','PARITY_MISMATCH','SHADOW_PARITY_MATCH'];
 const WAKE_ACTIONS=['BUY UP','BUY DOWN','HOLD UP','HOLD DOWN','TAKE PROFIT UP','TAKE PROFIT DOWN',
  'SELL FAST UP','SELL FAST DOWN','TIME EXIT UP','TIME EXIT DOWN','EXIT UP','EXIT DOWN'];
@@ -141,7 +142,8 @@ export function summarizeDemo(body){
   status:'READ_ONLY_OBSERVATION',
   championWake:summarizeWake(body.championWake),
   savedBalanceProbe:p&&typeof p==='object'?{
-   status:safeDemoCode(p.status),checkedAt:safeIso(p.checkedAt),commit:safeCommit(p.commit),
+   status:safeDemoCode(p.status),transportCause:p.status==='DEMO_TRANSPORT_ERROR'?state(p.transportCause,DEMO_TRANSPORT_CAUSES):null,
+    checkedAt:safeIso(p.checkedAt),commit:safeCommit(p.commit),
    operation:p.operation==='GET_PORTFOLIO_BALANCE'?p.operation:'NOT_VERIFIED',
    durationMs:count(p.durationMs)
   }:null,
@@ -219,7 +221,7 @@ export function evidenceSummary(report){
   '| OMEGA paper monitoring: exits | '+value(h.omegaPaperMonitoring?.exits)+' |',
   '| Netlify public deployed build commit | '+value(report.version?.commit)+' |',
   '| KaiBot Demo read-only endpoint | '+value(d.status)+' |',
-  '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+') |',
+  '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+'; transport '+value(d.savedBalanceProbe?.transportCause)+') |',
   '| Demo lifecycle | '+value(d.lifecycle?.status)+'; failure '+value(d.lifecycle?.failureCode)+'; underlying '+value(d.lifecycle?.snapshotCause)+' |',
   '| Latest champion wake | '+value(d.championWake?.status)+'; '+value(d.championWake?.action)+'; runner '+value(d.championWake?.lifecycleStatus)+'; HTTP '+value(d.championWake?.httpStatus)+' |',
   '| Champion wake freshness | '+value(d.championWakeFresh)+' (age '+value(d.championWakeAgeSeconds)+'s; 5m limit; not a fill) |',
