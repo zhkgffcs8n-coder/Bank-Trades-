@@ -67,3 +67,30 @@ export function multiWindowMomentum(samples,now=Date.now()){
  return {asOf:last?.t??null,sampleCount:rows.length,windows,
   note:'Sampled quote momentum, not OHLC candles or independently verified market edge'};
 }
+
+/**
+ * Read-only paired forward-validation gate.
+ * Each row is an immutable pre-outcome prediction by BOTH models for the SAME
+ * contract/round. This function never changes the active trading strategy.
+ */
+export function comparePairedForwardPredictions(rows,{minimum=100,margin=0.005}={}){
+ const valid=[],seen=new Set();
+ for(const row of Array.isArray(rows)?rows:[]){
+  if(!row||typeof row.id!=='string'||!row.id.trim()||seen.has(row.id))continue;
+  const {baseline,candidate,outcome,predictedAt,settledAt}=row;
+  if(![baseline,candidate].every(p=>Number.isFinite(p)&&p>0&&p<1)||
+   ![0,1].includes(outcome)||!Number.isFinite(predictedAt)||!Number.isFinite(settledAt)||
+   predictedAt>=settledAt)continue;
+  seen.add(row.id);valid.push(row);
+ }
+ const n=valid.length;
+ const baselineBrier=n?valid.reduce((s,r)=>s+(r.baseline-r.outcome)**2,0)/n:null;
+ const candidateBrier=n?valid.reduce((s,r)=>s+(r.candidate-r.outcome)**2,0)/n:null;
+ const improvement=n?baselineBrier-candidateBrier:null;
+ return {eligible:n>=minimum&&improvement>margin,pairedOutcomes:n,minimum,
+  baselineBrier,candidateBrier,improvement,
+  reason:n<minimum?'Insufficient paired future finalized outcomes':
+   improvement<=margin?'Candidate has not beaten the baseline by the required margin':
+   'Candidate passed paired forward prediction test; independent trading P&L and safety validation still required',
+  caution:'Prediction accuracy alone does not prove profitable execution. No automatic strategy promotion.'};
+}
