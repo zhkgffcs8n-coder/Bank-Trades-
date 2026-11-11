@@ -6,6 +6,7 @@ export const PRODUCTION_ORIGIN='https://neon-gecko-046bff.netlify.app';
 const HEALTH_PATH='/.netlify/functions/omega-live-health';
 const PAPER_PATH='/.netlify/functions/omega-paper-summary';
 const DEMO_PATH='/.netlify/functions/kalshi-demo-status';
+const VERSION_PATH='/build-version.json';
 const count=x=>Number.isSafeInteger(x)&&x>=0?x:null;
 const money=x=>typeof x==='number'&&Number.isFinite(x)?x:null;
 const bool=x=>typeof x==='boolean'?x:null;
@@ -105,6 +106,10 @@ const safeCommit=x=>typeof x==='string'&&/^[0-9a-f]{7,40}$/i.test(x)?x:null;
 const SNAPSHOT_FAILURES=new Set(['DEMO_SNAPSHOT_BALANCE_READ_FAILED','DEMO_SNAPSHOT_ORDERS_READ_FAILED',
  'DEMO_SNAPSHOT_FILLS_READ_FAILED','DEMO_SNAPSHOT_POSITIONS_READ_FAILED','DEMO_SNAPSHOT_SETTLEMENTS_READ_FAILED']);
 const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
+// The deployed public asset records the Netlify build ref, not a live API authorization.
+export function summarizeVersion(body){
+ return {status:'READ_ONLY_VERSION',commit:safeCommit(body?.version)};
+}
 export function summarizeDemo(body){
  if(!body||typeof body!=='object'||Array.isArray(body))return {status:'INVALID_RESPONSE'};
  const p=body.savedBalanceProbe,l=body.lifecycleTest;
@@ -140,13 +145,27 @@ async function readEndpoint(path,summarize,{fetchImpl,origin}){
   return {status:'UNAVAILABLE',reason:'NETWORK_TIMEOUT_OR_INVALID_JSON'};
  }
 }
+// Observed status can describe an earlier test. Freshness is metadata, never fill proof.
+function evidenceAgeSeconds(timestamp,now){
+ const ms=typeof timestamp==='number'&&Number.isSafeInteger(timestamp)?timestamp:
+  typeof timestamp==='string'?Date.parse(timestamp):NaN;
+ const age=now.getTime()-ms;
+ return Number.isFinite(ms)&&ms>0&&Number.isFinite(age)&&age>=0?Math.floor(age/1000):null;
+}
 export async function probeProductionEvidence({fetchImpl=fetch,origin=PRODUCTION_ORIGIN,now=new Date()}={}){
- const [health,paper,demo]=await Promise.all([
+ const [health,paper,demo,version]=await Promise.all([
   readEndpoint(HEALTH_PATH,summarizeHealth,{fetchImpl,origin}),
   readEndpoint(PAPER_PATH,summarizePaper,{fetchImpl,origin}),
-  readEndpoint(DEMO_PATH,summarizeDemo,{fetchImpl,origin})
+  readEndpoint(DEMO_PATH,summarizeDemo,{fetchImpl,origin}),
+  readEndpoint(VERSION_PATH,summarizeVersion,{fetchImpl,origin})
  ]);
- return {checkedAt:now.toISOString(),mode:'READ_ONLY_EVIDENCE',health,paper,demo,
+ if(demo.status==='READ_ONLY_OBSERVATION'){
+  demo.savedBalanceProbeAgeSeconds=evidenceAgeSeconds(demo.savedBalanceProbe?.checkedAt,now);
+  demo.lifecycleAgeSeconds=evidenceAgeSeconds(demo.lifecycle?.checkedAt,now);
+  demo.savedBalanceProbeFresh=demo.savedBalanceProbeAgeSeconds!==null&&demo.savedBalanceProbeAgeSeconds<=900;
+  demo.lifecycleFresh=demo.lifecycleAgeSeconds!==null&&demo.lifecycleAgeSeconds<=300;
+ }
+ return {checkedAt:now.toISOString(),mode:'READ_ONLY_EVIDENCE',health,paper,demo,version,
   verifiedProfitableTrading:false,
   notice:'Endpoint diagnostics are not proof of exchange fills, official learning, or improved strategy performance.'};
 }
@@ -171,9 +190,12 @@ export function evidenceSummary(report){
   '| Provider diagnostics | '+(h.omegaProviderStatus?.length?h.omegaProviderStatus.map(x=>x.provider+':'+x.status+(x.httpStatus?' HTTP '+x.httpStatus:'')).join('; '):'none verified')+' |',
   '| Two external providers active | '+value(h.omegaExternalProvidersRunning)+' |',
   '| OMEGA paper monitoring: exits | '+value(h.omegaPaperMonitoring?.exits)+' |',
+  '| Netlify public deployed build commit | '+value(report.version?.commit)+' |',
   '| KaiBot Demo read-only endpoint | '+value(d.status)+' |',
   '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+') |',
   '| Demo lifecycle | '+value(d.lifecycle?.status)+'; failure '+value(d.lifecycle?.failureCode)+'; underlying '+value(d.lifecycle?.snapshotCause)+' |',
+  '| Saved Demo balance probe freshness | '+value(d.savedBalanceProbeFresh)+' (age '+value(d.savedBalanceProbeAgeSeconds)+'s; 15m limit) |',
+  '| Demo lifecycle freshness | '+value(d.lifecycleFresh)+' (age '+value(d.lifecycleAgeSeconds)+'s; 5m limit; prior completed tests are historical) |',
   '| New exchange-confirmed Demo fills | unverified (read-only metadata is not fill evidence) |',
   '| Paper archive | '+value(p.status)+' |',
   '| Officially settled paper positions | '+value(p.officiallySettledPositions)+' |',
