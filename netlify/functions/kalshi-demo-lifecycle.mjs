@@ -5,7 +5,7 @@ import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {recoverTerminalDemoState} from './lib/demo-lock-recovery.mjs';
 import {championExecutionSignals} from '../../src/champion-kaibot-intake.mjs';
-import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection} from './lib/demo-market-discovery.mjs';
+import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection,validExchangeIndex} from './lib/demo-market-discovery.mjs';
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 export async function runScheduledDemo(worker){
@@ -22,8 +22,8 @@ export async function runScheduledDemo(worker){
   const client=kalshiClient(credentials,{environment:'demo',allowWrites:true});
   const quoteFor=async ticker=>{
    const at=Date.now(),{market:m}=await client.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
-   if(m?.ticker!==ticker||m.status!=='active'||m.exchange_index!==0)return null;
-   return {ticker,at,expiresAt:Date.parse(m.close_time),upAsk:Math.round(Number(m.yes_ask_dollars)*100),upBid:Math.round(Number(m.yes_bid_dollars)*100),downAsk:Math.round(Number(m.no_ask_dollars)*100),downBid:Math.round(Number(m.no_bid_dollars)*100)};
+   if(m?.ticker!==ticker||m.status!=='active'||!validExchangeIndex(m.exchange_index))return null;
+   return {ticker,at,exchangeIndex:m.exchange_index,expiresAt:Date.parse(m.close_time),upAsk:Math.round(Number(m.yes_ask_dollars)*100),upBid:Math.round(Number(m.yes_bid_dollars)*100),downAsk:Math.round(Number(m.no_ask_dollars)*100),downBid:Math.round(Number(m.no_bid_dollars)*100)};
   };
   const history=getStore({name:'bank-trades-market-history',consistency:'strong'});
   const championSignals=async()=>championExecutionSignals(worker??await history.get('predator-v13/health',{type:'json'}));
@@ -32,8 +32,8 @@ export async function runScheduledDemo(worker){
    try{
     const {market}=await readOnly.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker));
     if(!market||market.ticker!==ticker){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
-    if(eligibleDemoLifecycleMarket(market,excluded))return market;
-    marketRejectionReason=demoLifecycleMarketRejection(market,excluded)||'DEMO_MARKET_NOT_VERIFIED';
+    if(eligibleDemoLifecycleMarket(market,excluded,Date.now(),true))return market;
+    marketRejectionReason=demoLifecycleMarketRejection(market,excluded,Date.now(),true)||'DEMO_MARKET_NOT_VERIFIED';
     return null;
    }catch(error){
     if(error.message==='KALSHI_HTTP_404'){marketRejectionReason='DEMO_MARKET_NOT_FOUND';return null;}
