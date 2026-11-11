@@ -12,6 +12,7 @@ function renderPaperTradeSignals(){
  const recent=paperPositions.filter(t=>t&&['up','down'].includes(t.side)&&['OPEN','CLOSED','SETTLED'].includes(t.status))
   .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at||0)-Number(a.exitAt||a.settledAt||a.at||0)).slice(0,15);
  const percent=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toFixed(1)+'%':'—';
+ const californiaTime=ms=>new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',second:'2-digit',hour12:true,timeZoneName:'short'}).format(new Date(ms));
  const runAge=Number(paperLastRun?.at)>0?Date.now()-Number(paperLastRun.at):Infinity;
  const fresh=runAge>=0&&runAge<180000;
  const reasons=Object.entries(paperLastRun?.markets||{}).filter(([,v])=>v?.status==='ERROR'||v?.status==='SKIPPED').slice(0,3).map(([coin,v])=>coin+': '+String(v.reason||v.status).slice(0,90));
@@ -42,8 +43,8 @@ function renderPaperTradeSignals(){
   exit.style.cssText='font-weight:700;color:'+(sold?'#67e8f9':'#e2e8f0');exit.textContent=sold?'PAPER SOLD '+side+' · Exit '+percent(trade.exitBid):trade.status==='OPEN'?'HOLD '+side+' · OPEN PAPER POSITION':trade.status+' · Exit not recorded';
   const time=document.createElement('small');time.style.opacity='.75';
   const entryAt=Number(trade.at),exitAt=Number(trade.exitAt||trade.settledAt);
-  time.textContent='Entry: '+(Number.isFinite(entryAt)&&entryAt>0?new Date(entryAt).toLocaleString():'unknown')+
-   (Number.isFinite(exitAt)&&exitAt>0?' · Exit: '+new Date(exitAt).toLocaleString():'');
+  time.textContent='Entry: '+(Number.isFinite(entryAt)&&entryAt>0?californiaTime(entryAt):'unknown')+
+   (Number.isFinite(exitAt)&&exitAt>0?' · Exit: '+californiaTime(exitAt):'');
   row.append(heading,exit,time);rows.append(row);
  }
 }
