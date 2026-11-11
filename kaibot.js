@@ -6,6 +6,18 @@ const previewStart=el('primalPaperStart'),previewStop=el('primalPaperStop');
 const signalStart=el('paperSignalStart'),signalStop=el('paperSignalStop');
 let busy=false;let ownerAllowed=false;
 const signalStatus=el('paperTradeSignalsStatus');
+document.querySelectorAll('[data-paper-entry-mode]').forEach(button=>button.addEventListener('click',async()=>{
+ if(!ownerAllowed){showSignalMessage('Owner sign-in required to change paper mode.','#fca5a5');return;}
+ const mode=button.dataset.paperEntryMode;
+ button.disabled=true;
+ try{
+  const result=await request('/.netlify/functions/kaibot-state',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mode',mode})});
+  if(result?.state?.mode!==mode)throw Error('Mode not confirmed by server');
+  showSignalMessage('PAPER MODE '+mode.toUpperCase()+' SAVED · '+(result.state.running?'Runner enabled':'Runner stopped')+' · safety gates remain active','#86efac');
+  window.dispatchEvent(new Event('paper-bot-state-changed'));
+ }catch(e){showSignalMessage('Paper mode change failed · '+e.message,'#fca5a5')}
+ finally{button.disabled=false}
+}));
 function showSignalMessage(message,color){if(signalStatus){signalStatus.textContent=message;signalStatus.style.color=color||'#fbbf24';}}
 function setSignalBusy(value){for(const button of [signalStart,signalStop])if(button){button.disabled=value||!ownerAllowed;button.style.opacity=value?'0.6':'1';}}
 start.disabled=true;stop.disabled=true;
