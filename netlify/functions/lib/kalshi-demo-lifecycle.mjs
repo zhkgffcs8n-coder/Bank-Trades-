@@ -6,7 +6,7 @@ const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERI
 const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
 const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
 export const DEMO_EXECUTION_TEST='DEMO_EXECUTION_TEST';
-export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,testSide,checkStopped=async()=>false,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,testSide,entryOnly=false,exitOnly=false,checkStopped=async()=>false,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false,legacyRecovery=false,balanceRecovery=false;
@@ -25,6 +25,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
    (!state.demoRetryUsed||legacyRecovery||balanceRecovery)&&retryableSnapshotFailure(state.demo.error);
   if(state.demo?.finished&&!retry)return state.demo;
+  if(exitOnly&&state.demo?.mode!==DEMO_EXECUTION_TEST)return {status:'DEMO_NO_TEST_POSITION'};
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
   if(!retry&&state.demo.attempts>=8){result('DEMO_ORDER_LIMIT_REACHED',{finished:true});await session.persist(state);return state.demo;}
@@ -57,6 +58,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   const stoppedForSubmission=quick?checkStopped:async()=>false;
   state.risk=risk;await session.persist(state);
   const open=risk.open[0];
+  if(open&&entryOnly)return {status:'DEMO_TEST_POSITION_ALREADY_OPEN'};
   if(open){
    const side=open.side.toUpperCase();
    const exit=championSignals?(await championSignals()).find(signal=>signal.ticker===open.ticker&&
@@ -96,6 +98,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    if(phase==='DOWN'){result('DEMO_BOTH_SIDES_ROUND_TRIP_VERIFIED',{finished:true});await session.persist(state);return state.demo;}
    state.demo.phase='DOWN';await session.persist(state);return state.demo;
   }
+  if(exitOnly)return {status:'DEMO_NO_TEST_POSITION'};
   stage='FIND_MARKET';
   const entry=championSignals?(await championSignals()).find(signal=>['BUY UP','BUY DOWN'].includes(signal.action)):null;
   if(championSignals&&!entry){result('DEMO_WAITING_FOR_CHAMPION_ENTRY');await session.persist(state);return state.demo;}

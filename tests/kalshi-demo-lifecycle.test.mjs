@@ -208,3 +208,19 @@ test('a stopped Demo execution test cannot submit after a restart',async()=>{
  });
  assert.equal(result.status,'DEMO_EXECUTION_TEST_STOPPED');
 });
+
+test('manual Demo SELL cannot discover a market or open a position',async()=>{
+ const state=initialState(),now=Date.now();
+ state.demo={mode:'DEMO_EXECUTION_TEST',attempts:0,phase:'UP'};
+ const result=await runDemoLifecycle({
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{
+   snapshot:async()=>({at:now,complete:true,balanceCents:500,orders:[],fills:[],positions:[],settlements:[]}),
+   create:async()=>assert.fail('SELL without a position must not submit')
+  },
+  exitOnly:true,executionTest:true,
+  findMarket:async()=>assert.fail('SELL must not select an entry market'),
+  clock:()=>now
+ });
+ assert.equal(result.status,'DEMO_NO_TEST_POSITION');
+});
