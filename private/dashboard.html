@@ -526,7 +526,24 @@ const historyList=document.createElement('div');
 historyList.className='bt-command-history';
 historyList.setAttribute('role','region');
 historyList.setAttribute('aria-label','Live call and flip history events');
-for(const event of feed.slice(0,12)){const line=document.createElement('div');line.textContent=new Date(event.at).toLocaleTimeString()+' · '+event.asset+' · '+event.type+' · '+event.detail;line.title=line.textContent;historyList.append(line)}
+for(const event of feed.slice(0,12)){
+ const line=document.createElement('div');
+ line.style.cssText='padding:8px 10px;margin:5px 0;border-radius:9px;background:#14243a;border:1px solid #334155;line-height:1.5';
+ const stamp=document.createElement('span');stamp.style.cssText='color:#aabbd0;font-size:12px;margin-right:7px';
+ stamp.textContent=new Date(event.at).toLocaleTimeString()+' · '+(event.asset||'Market')+' · ';
+ line.append(stamp);
+ const description=String(event.type||'')+' · '+String(event.detail||'');
+ const parts=description.split(/(DOWN|UP)/gi);
+ for(const part of parts){
+  if(/^(UP|DOWN)$/i.test(part)){
+   const badge=document.createElement('strong');const up=part.toUpperCase()==='UP';
+   badge.style.cssText='display:inline-block;padding:2px 7px;margin:1px 3px;border-radius:6px;font-weight:800;background:'+(up?'#14532d':'#7f1d1d')+';color:'+(up?'#86efac':'#fecaca')+';border:1px solid '+(up?'#22c55e':'#ef4444');
+   badge.textContent=part.toUpperCase();line.append(badge);
+  }else line.append(document.createTextNode(part));
+ }
+ line.title=new Date(event.at).toLocaleTimeString()+' · '+event.asset+' · '+description;
+ historyList.append(line);
+}
 feedPanel.append(historyList);
 }
 renderCommandHistory(readCommandHistory());
