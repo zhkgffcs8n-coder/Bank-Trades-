@@ -91,9 +91,9 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   if(retry)throw e;
   // A failed read is not an order attempt. Classify only the fixed GET phase;
   // never propagate raw exception text, URLs, account data, or credentials.
-  const safeError=/^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:
-   SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)?
-    'DEMO_SNAPSHOT_'+e.snapshotPhase+'_READ_FAILED':'DEMO_TRANSPORT_OR_STORAGE_ERROR';
+  const safeError=SNAPSHOT_STAGES.has(stage)&&SNAPSHOT_PHASES.has(e?.snapshotPhase)?
+    'DEMO_SNAPSHOT_'+e.snapshotPhase+'_READ_FAILED':
+   /^[A-Z][A-Z0-9_]{2,64}$/.test(e?.message)?e.message:'DEMO_TRANSPORT_OR_STORAGE_ERROR';
   state.enabled=false;state.stopped=true;
   state.demo={...state.demo,status:'DEMO_LIFECYCLE_FAILED',stage,error:safeError,finished:true,checkedAt:clock()};
   await session.persist(state);return state.demo;
