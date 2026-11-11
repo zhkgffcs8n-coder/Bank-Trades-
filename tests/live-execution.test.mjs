@@ -187,3 +187,16 @@ test('trial entry refuses spending above $5 with a legacy higher daily limit',as
  assert.equal(state.spent[day],450);
  assert.deepEqual(state.intents,[]);
 });
+
+test('deployment release evidence must be complete, fresh and build-specific',async()=>{
+ const {evaluateReleaseEvidence}=await import('../netlify/functions/lib/kalshi-release-gate.mjs');
+ const {REQUIRED_CHECKS}=await import('../src/live-execution.mjs');
+ const now=Date.now(),commit='verified-build';
+ const evidence={at:now,commit,checks:Object.fromEntries(REQUIRED_CHECKS.map(check=>[check,true]))};
+ const evaluate=(build=commit,at=now)=>evaluateReleaseEvidence(JSON.stringify(evidence),build,at);
+ assert.equal(evaluate().canTrade,true);
+ assert.equal(evaluate('other-build').canTrade,false);
+ assert.equal(evaluate(commit,now+3600001).canTrade,false);
+ delete evidence.checks.emergencyCancellation;
+ assert.equal(evaluate().canTrade,false);
+});
