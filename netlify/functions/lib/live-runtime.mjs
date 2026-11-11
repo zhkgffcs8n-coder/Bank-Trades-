@@ -3,7 +3,7 @@ import {admin} from '@netlify/identity';
 import {liveRepository} from './live-state.mjs';
 import {openKalshiCredentials} from './kalshi-credential-envelope.mjs';
 import {kalshiClient} from './kalshi-execution-client.mjs';
-import {releaseStatus} from './kalshi-release-gate.mjs';
+import {liveBuildCommit,releaseStatus} from './kalshi-release-gate.mjs';
 import {championExecutionSignals} from '../../../src/champion-kaibot-intake.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
 import {parseCollectorPrice,validCollectorQuote} from '../../../src/collector-quote.mjs';
@@ -41,6 +41,6 @@ export async function runtime(userId){
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
     return parseLiveQuote(m,ticker,at,Date.now());
    }});
-  await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:process.env.COMMIT_REF||null});return result;
+  await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:liveBuildCommit()});return result;
  }};
 }

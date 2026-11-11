@@ -1,3 +1,4 @@
+import build from './live-build-commit.json' with {type:'json'};
 import {releaseFailures} from '../../../src/live-execution.mjs';
 
 const blockersByCheck={
@@ -23,4 +24,5 @@ export function evaluateReleaseEvidence(raw,commit,now=Date.now()){
  return {release:'kalshi-execution-candidate-2',canTrade,liveOrdersEnabled:canTrade,failures};
 }
 
-export const releaseStatus=()=>evaluateReleaseEvidence(process.env.KALSHI_RELEASE_EVIDENCE,process.env.COMMIT_REF);
+export const liveBuildCommit=()=>build.commit||process.env.COMMIT_REF||null;
+export const releaseStatus=()=>evaluateReleaseEvidence(process.env.KALSHI_RELEASE_EVIDENCE,liveBuildCommit());
