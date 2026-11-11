@@ -57,7 +57,7 @@ export function createCredentialHandler({getOwner=owner,getDb=db,getLive=(userId
   if(!/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''))return json({connected:false,credentialsStored:true,storageReady:false,liveOrdersEnabled:false,reason:'Server encryption secret unavailable or invalid'});
   try{
    const {keyId,privateKeyPem}=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
-   const response=await verifyOwner(keyId,privateKeyPem,{revision:record.updatedAt,allowCached:true});
+   const response=await verifyOwner(keyId,privateKeyPem,{revision:record.envelope.iv,allowCached:true});
    return json({connected:response.ok,credentialsStored:true,storageReady:true,liveOrdersEnabled:false,checkedAt:response.checkedAt??Date.now(),cached:response.cached===true,reason:response.ok?'Authenticated read-only balance request succeeded':response.locallyThrottled?'Verification already running or cooling down. Wait before checking again.':response.status===429?'Kalshi verification rate limited (HTTP 429). Wait before checking again.':'Kalshi authentication returned HTTP '+response.status});
   }catch{return json({connected:false,credentialsStored:true,storageReady:true,liveOrdersEnabled:false,reason:'Authentication test failed or timed out'});}
  }
@@ -91,7 +91,7 @@ export function createCredentialHandler({getOwner=owner,getDb=db,getLive=(userId
  // Never persist a key pair that Kalshi rejects. This is a read-only verification.
  let verified;
  const updatedAt=Date.now();
- try{verified=await verifyOwner(body.keyId,body.privateKeyPem,{revision:updatedAt})}
+ try{verified=await verifyOwner(body.keyId,body.privateKeyPem,{revision:envelope.iv})}
  catch{fail(503,'Kalshi connection test failed or timed out; credentials were not saved')}
  if(verified.locallyThrottled)fail(429,'Verification already running or cooling down. Wait before trying again.');
  if(!verified.ok)fail(422,'Kalshi rejected the credentials (HTTP '+verified.status+'); credentials were not saved');
