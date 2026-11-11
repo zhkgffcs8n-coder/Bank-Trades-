@@ -40,6 +40,26 @@ export async function runScheduledDemo(worker){
     throw error;
    }
   };
+  const snapshot=client.snapshot;
+  client.snapshot=async()=>{
+   const startedAt=Date.now();
+   try{
+    return await snapshot();
+   }catch(error){
+    const phase=['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMENTS'].includes(error?.snapshotPhase)?
+     error.snapshotPhase:'UNKNOWN';
+    const cause=demoWakeFailureCode(error?.message);
+    const category={
+     TimeoutError:'TIMEOUT',AbortError:'ABORTED',SyntaxError:'INVALID_JSON',TypeError:'REQUEST_ERROR'
+    };
+    console.warn(JSON.stringify({
+     event:'DEMO_SNAPSHOT_READ_FAILED',phase,cause,
+     category:Object.hasOwn(category,error?.name)?category[error.name]:'UNKNOWN',
+     durationMs:Date.now()-startedAt,trigger:worker?'worker':'schedule'
+    }));
+    throw error;
+   }
+  };
   const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,commit:process.env.COMMIT_REF||null});
   await db.setJSON('lifecycle-status',outcome);
   const headers={'x-demo-lifecycle-status':demoWakeLifecycleStatus(outcome?.status)};
