@@ -166,3 +166,24 @@ test('live execution enforces the $5 exposure cap independently of Demo trial mo
  await assert.rejects(submitIntent(x),/EXPOSURE_LIMIT/);
  assert.equal(x.stats().calls,0);
 });
+
+test('trial entry refuses spending above $5 with a legacy higher daily limit',async()=>{
+ const state=initialState();
+ state.enabled=true;
+ state.stopped=false;
+ state.limits.dailyCents=1000;
+ const account=snapshot(),now=account.at,day=new Date(now).toISOString().slice(0,10);
+ state.spent[day]=450;
+ let writes=0,submissions=0;
+ await assert.rejects(submitIntent({
+  state,snapshot:account,trialCaps:true,now,clock:()=>now,
+  signal:{ticker:'BTC-ROUND',action:'BUY UP',at:now},
+  quote:{ticker:'BTC-ROUND',at:now,expiresAt:now+120000,upAsk:50,upBid:49},
+  checkStopped:async()=>false,persist:async()=>{writes++;},
+  client:{create:async()=>{submissions++;}}
+ }),/SPENDING_LIMIT/);
+ assert.equal(writes,0);
+ assert.equal(submissions,0);
+ assert.equal(state.spent[day],450);
+ assert.deepEqual(state.intents,[]);
+});
