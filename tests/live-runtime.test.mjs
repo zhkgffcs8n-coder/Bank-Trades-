@@ -135,3 +135,17 @@ test('champion Demo round trip requires a real matching entry and exit decision'
  assert.equal((await run()).status,'DEMO_CHAMPION_ROUND_TRIP_VERIFIED');
  assert.equal(client.count(),2);
 });
+
+test('live controls report capped legacy limits and reject an over-cap configuration',async()=>{
+ const state=initialState();
+ state.limits.lossCents=500;
+ const repo={read:async()=>({state}),stopped:async()=>true,acquire:async()=>({state,
+  persist:async()=>assert.fail('over-cap settings must not persist'),release:async()=>{}})};
+ const control=createLiveControl({getOwner:async()=>({id}),getRuntime:async()=>({repo,db:{get:async()=>null}})});
+ const url='https://site.test/control';
+ assert.equal((await (await control(new Request(url))).json()).limits.lossCents,300);
+ const response=await control(new Request(url,{method:'POST',headers:{origin:'https://site.test','content-type':'application/json'},
+  body:JSON.stringify({action:'configure',limits:state.limits})}));
+ assert.equal(response.status,400);
+ assert.equal(state.limits.lossCents,500);
+});

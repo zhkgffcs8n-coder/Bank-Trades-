@@ -3,9 +3,16 @@ import {runtime} from './lib/live-runtime.mjs';
 import {releaseStatus} from './lib/kalshi-release-gate.mjs';
 import {ENTRY_MODES,validateLimits,reconcile,emergencyStop} from '../../src/live-execution.mjs';
 import {accountRisk} from '../../src/live-accounting.mjs';
+const liveTrialCaps={orderCents:100,dailyCents:500,lossCents:300,maxPositions:1};
+function effectiveLiveLimits(limits){
+ return {...limits,...Object.fromEntries(Object.entries(liveTrialCaps).map(([key,cap])=>[key,Math.min(limits[key],cap)]))};
+}
+function exceedsLiveCaps(limits){
+ return Object.entries(liveTrialCaps).some(([key,cap])=>limits[key]>cap);
+}
 export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus}={}){return async req=>{try{
  const user=await getOwner(),live=await getRuntime(user.id);
- if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.enabled&&!await live.repo.stopped(),stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:state.limits,risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
+ if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.enabled&&!await live.repo.stopped(),stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
  if(req.method!=='POST')fail(405,'Method not allowed');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
@@ -21,6 +28,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   if(action==='configure'){
    if(state.enabled||!await live.repo.stopped())fail(409,'Stop before changing limits');
    try{validateLimits(body.limits);}catch(e){fail(400,e.message)}
+   if(exceedsLiveCaps(body.limits))fail(400,'Live limits exceed the approved trial caps');
    if(body.entryMode!==undefined&&!Object.hasOwn(ENTRY_MODES,body.entryMode))fail(400,'Invalid live entry mode');
    state.entryMode=body.entryMode??state.entryMode??'balanced';
    state.limits=body.limits;await session.persist(state);return json({ok:true,limits:state.limits,...getRelease()});
@@ -47,7 +55,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   if(action==='reconcile')return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
   if(state.risk.open.length||snapshot.orders.some(o=>o.status==='resting'))fail(409,'Start requires a reconciled flat account without resting orders');
   validateLimits(state.limits);
-  if(state.limits.orderCents>100||state.limits.dailyCents>500||state.limits.lossCents>300||state.limits.maxPositions!==1)fail(409,'LIVE_TRIAL_LIMITS_EXCEEDED');
+  state.limits=effectiveLiveLimits(state.limits);
   state.enabled=true;state.stopped=false;state.failure=null;await session.persist(state);await live.repo.startFence(fence);
   return json({enabled:true,stopped:false});
  }finally{await session.release();}
