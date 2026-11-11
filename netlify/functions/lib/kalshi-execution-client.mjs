@@ -46,6 +46,12 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
   }throw Error('PAGINATION_LIMIT');
  }
  return {request,pages,
+  async buyingPower(exchangeIndex){
+   if(!Number.isSafeInteger(exchangeIndex)||exchangeIndex<0)throw Error('INVALID_EXCHANGE_INDEX');
+   const result=await request('GET','/trade-api/v2/portfolio/balance?'+new URLSearchParams({exchange_index:exchangeIndex}));
+   if(!Number.isSafeInteger(result?.balance)||result.balance<0)throw Error('INVALID_EXCHANGE_BALANCE');
+   return result.balance;
+  },
   async snapshot(){
    const startedAt=Date.now();
    // Diagnostic-only phase marker. Preserve the original error and request order.
@@ -68,5 +74,5 @@ export function kalshiClient(credentials,{fetchImpl=fetch,environment='productio
    }
   },
   create:body=>request('POST','/trade-api/v2/portfolio/events/orders',body),
-  cancel:order=>request('DELETE','/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(order.order_id)+'?'+new URLSearchParams({market_ticker:order.ticker}))};
+  cancel:order=>request('DELETE','/trade-api/v2/portfolio/events/orders/'+encodeURIComponent(order.order_id)+'?'+new URLSearchParams({market_ticker:order.ticker,...(Number.isSafeInteger(order.exchange_index)&&order.exchange_index>=0?{exchange_index:order.exchange_index}:{})}))};
 }
