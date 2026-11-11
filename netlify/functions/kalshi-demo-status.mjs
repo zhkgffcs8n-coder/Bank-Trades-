@@ -7,6 +7,9 @@ export default async req=>{try{
  const store=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  if(req.method==='GET'){
   const uploaded=await store.get('uploaded-connection',{type:'json'});
+  const probe=await store.get('saved-balance-probe',{type:'json'}).catch(()=>null);
+  const savedBalanceProbe=probe?{status:probe.status,requestId:probe.requestId,commit:probe.commit,
+   operation:probe.operation,checkedAt:probe.checkedAt,durationMs:probe.durationMs}:null;
   const result=uploaded||await store.get('connection',{type:'json'});
   const latest=await store.get('order-test/v8',{type:'json'});
   const test=latest||await store.get('order-test/v7',{type:'json'})||await store.get('order-test/v6',{type:'json'})||await store.get('order-test/v5',{type:'json'})||await store.get('order-test/v4',{type:'json'})||await store.get('order-test/v3',{type:'json'})||await store.get('order-test/v2',{type:'json'})||await store.get('order-test/v1',{type:'json'});
@@ -23,7 +26,7 @@ export default async req=>{try{
     entryCost:t?.entryCost??null,markPnl:t?.markPnl??null,realizedPnl:t?.realizedPnl??null,exchangeCode:t?.exchangeCode??null};
   })):[];
   const lastScan=await store.get('extreme-demo/v1/last-scan',{type:'json'});
-  return json({championWake:await store.get('champion-wake-receipt',{type:'json'}).catch(()=>null),lifecycleTest:await store.get('lifecycle-status',{type:'json'}),extremeDemo:{rounds:demoRounds,lastScan},extremePaper:{running:lastRun?.running===true,checkedAt:lastRun?.at??null,lastRound:lastRun?.extremeCoverage??null,
+  return json({savedBalanceProbe,championWake:await store.get('champion-wake-receipt',{type:'json'}).catch(()=>null),lifecycleTest:await store.get('lifecycle-status',{type:'json'}),extremeDemo:{rounds:demoRounds,lastScan},extremePaper:{running:lastRun?.running===true,checkedAt:lastRun?.at??null,lastRound:lastRun?.extremeCoverage??null,
    entries:extreme.length,resolved:resolved.length,pnlBeforeFees:Math.round(resolved.reduce((sum,trade)=>sum+trade.pnl,0)*100)/100},strategyTest:strategy?{status:strategy.status,side:strategy.side,signalScore:strategy.signalScore,filled:strategy.filled??null,entryCost:strategy.entryCost??null,positionReconciled:strategy.positionReconciled??null,realizedPnl:strategy.realizedPnl??null}:{status:'WAITING_FOR_SETTLEMENT_OR_QUALIFIED_SIGNAL'},holdTest:hold?{status:hold.status,filled:hold.filled??null,entryCost:hold.entryCost??null,positionReconciled:hold.positionReconciled??null,markPnl:hold.markPnl??null,realizedPnl:hold.realizedPnl??null,checkedAt:hold.checkedAt??null,exchangeCode:hold.exchangeCode??null}:null,status:result?.status||'AWAITING_DEMO_CHECK',checkedAt:result?.checkedAt||null,orderTest:test?{status:test.status,attempt:latest?8:null,attemptedAt:test.checkedAt??null,filled:test.filled??null,exchangeCode:test.exchangeCode??null}:null});
  }
  if(req.method!=='POST')fail(405,'Method not allowed');
