@@ -5,6 +5,9 @@ if(!start||!stop||!status)return;
 const previewStart=el('primalPaperStart'),previewStop=el('primalPaperStop');
 const signalStart=el('paperSignalStart'),signalStop=el('paperSignalStop');
 let busy=false;let ownerAllowed=false;
+const signalStatus=el('paperTradeSignalsStatus');
+function showSignalMessage(message,color){if(signalStatus){signalStatus.textContent=message;signalStatus.style.color=color||'#fbbf24';}}
+function setSignalBusy(value){for(const button of [signalStart,signalStop])if(button){button.disabled=value||!ownerAllowed;button.style.opacity=value?'0.6':'1';}}
 start.disabled=true;stop.disabled=true;
 const hasNumber=v=>(typeof v==='number'||(typeof v==='string'&&v.trim()!==''))&&Number.isFinite(Number(v));
 const money=n=>(n>=0?'+':'-')+'$'+Math.abs(n).toFixed(2);
@@ -89,8 +92,10 @@ async function refresh(){
  }
 }
 async function action(name){
- if(busy||!ownerAllowed)return;
- busy=true;
+ if(busy)return;
+ if(!ownerAllowed){showSignalMessage('START BLOCKED · Owner login not verified. Sign in and reload.','#fca5a5');return;}
+ busy=true;setSignalBusy(true);
+ showSignalMessage(name==='start'?'STARTING PAPER BOT · Waiting for server confirmation…':'STOPPING PAPER BOT…','#fbbf24');
  try{
   const max=Math.min(1000,Math.max(1,Number(el('kaiMax')?.value)||50));
   const result=await request('/.netlify/functions/kaibot-state',{
@@ -101,10 +106,11 @@ async function action(name){
   const verified=await request('/.netlify/functions/kaibot-state');
   if(verified?.state?.running!==(name==='start'))throw Error('Persistent server state did not confirm '+name);
   render(verified);
+  showSignalMessage(name==='start'?'🟢 PAPER BOT ENABLED · Waiting for next qualified market signal.':'🔴 PAPER BOT STOPPED','#86efac');
   window.dispatchEvent(new Event('paper-bot-state-changed'));
   log(name==='start'?'Paper monitoring enabled and saved on server':'Paper monitoring stopped and saved on server');
- }catch(e){status.textContent=(name==='start'?'START':'STOP')+' FAILED · '+e.message}
- finally{busy=false}
+ }catch(e){const message=(name==='start'?'START':'STOP')+' FAILED · '+e.message;status.textContent=message;showSignalMessage(message,'#fca5a5')}
+ finally{busy=false;setSignalBusy(false)}
 }
 async function configureControls(){
  try{
@@ -116,13 +122,14 @@ async function configureControls(){
   if(previewStop)previewStop.disabled=!allowed;
   if(signalStart)signalStart.disabled=!allowed;
   if(signalStop)signalStop.disabled=!allowed;
-  if(!allowed)log('Start/stop controls are owner-only; members can view paper results.');
+  if(!allowed){log('Start/stop controls are owner-only; members can view paper results.');showSignalMessage('OWNER LOGIN REQUIRED · Paper bot controls unavailable','#fca5a5');}
  }catch{
   ownerAllowed=false;
   start.disabled=true;stop.disabled=true;
   if(signalStart)signalStart.disabled=true;
   if(signalStop)signalStop.disabled=true;
   log('Owner permissions unavailable; controls disabled.');
+  showSignalMessage('OWNER PERMISSION CHECK FAILED · Reload or sign in again','#fca5a5');
  }
 }
 for(const [button,name] of [[previewStart,'start'],[previewStop,'stop'],[signalStart,'start'],[signalStop,'stop']]){
