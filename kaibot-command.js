@@ -11,7 +11,7 @@
   <button type="button" data-back autofocus>← BACK TO DASHBOARD</button>
  </header>
  <div class="kai-command-modes"><strong data-live-mode>REAL MONEY · LOCKED</strong><span>DEMO · SIMULATED FUNDS</span><span>PAPER · VIRTUAL LEDGER</span></div>
- <div class="kai-command-actions"><button type="button" data-start disabled>START AUTO TRADE</button><button type="button" data-stop disabled>STOP AUTO TRADE</button></div>
+ <div class="kai-command-actions"><button type="button" data-start disabled>START AUTO TRADE</button><button type="button" data-stop disabled>STOP AUTO TRADE</button><button type="button" data-reconcile disabled>VERIFY ACCOUNT &amp; FILLS</button></div>
  <section class="kai-coins" aria-labelledby="kai-coins-title">
   <h2 id="kai-coins-title">COINS</h2>
   <div data-coins role="group" aria-label="Auto Trade coin selection"></div>
@@ -82,14 +82,17 @@
  let timer,pending,lastEvent;
  const liveStart=document.getElementById('primalLiveStart');
  const liveStop=document.getElementById('liveStop');
+ const liveReconcile=document.getElementById('liveReconcile');
  const syncActions=()=>{
   field('start').disabled=!liveStart||liveStart.disabled;
+  field('reconcile').disabled=!liveReconcile||liveReconcile.disabled;
   field('stop').disabled=!liveStop||liveStop.disabled;
   update('live-mode',field('start').disabled?'REAL MONEY · START UNAVAILABLE':'REAL MONEY · START AVAILABLE');
  };
  const actionObserver=new MutationObserver(syncActions);
- for(const button of [liveStart,liveStop])if(button)actionObserver.observe(button,{attributes:true,attributeFilter:['disabled']});
+ for(const button of [liveStart,liveStop,liveReconcile])if(button)actionObserver.observe(button,{attributes:true,attributeFilter:['disabled']});
  field('start').addEventListener('click',()=>liveStart?.click());
+ field('reconcile').addEventListener('click',()=>liveReconcile?.click());
  field('stop').addEventListener('click',()=>liveStop?.click());
  for(const id of ['liveStop','liveEmergency'])document.getElementById(id)?.addEventListener('click',()=>{
   arena.dataset.move='stop';
@@ -136,6 +139,7 @@
   event.stopImmediatePropagation();
   if(panel.open)return;
   field('controls').append(controls);
+  controls.classList.add('active');
   syncActions();
   panel.showModal();
   refresh();
@@ -146,6 +150,7 @@
   clearInterval(timer);
   pending?.abort();
   pending=null;
+  controls.classList.remove('active');
   home.after(controls);
   trigger.focus({preventScroll:true});
  });

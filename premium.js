@@ -394,7 +394,6 @@ function syncSignals(){
    cell.append(detail);
   }
   // Price-window watch uses current Kalshi quotes, never a fabricated fill or model signal.
-  const liveMarket=latestPositionQuotes.find(x=>x.asset===tr.dataset.asset)?.market;
   if(liveMarket?.ticker===ticker&&Date.now()-latestPositionQuoteAt<10000){
    const windows=[];
    for(const [side,askKey,bidKey] of [['UP','yes_ask','yes_bid'],['DOWN','no_ask','no_bid']]){
