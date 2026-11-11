@@ -6,6 +6,11 @@ import {generateKeyPairSync,verify,constants} from 'node:crypto';
 const pair=generateKeyPairSync('rsa',{modulusLength:2048});const credentials={keyId:'test-key',privateKeyPem:pair.privateKey.export({type:'pkcs8',format:'pem'})};
 const snapshot=()=>({complete:true,at:Date.now(),balanceCents:10000,orders:[],fills:[],positions:[]});
 test('RSA-PSS signs method and path without query string',()=>{const h=signedHeaders(credentials,'GET','/trade-api/v2/portfolio/orders?cursor=x',123);assert.ok(verify('sha256',Buffer.from('123GET/trade-api/v2/portfolio/orders'),{key:pair.publicKey,padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST},Buffer.from(h['KALSHI-ACCESS-SIGNATURE'],'base64')));});
+test('Ed25519 signs the same Kalshi pre-sign message directly',()=>{
+ const ed=generateKeyPairSync('ed25519'),pem=ed.privateKey.export({type:'pkcs8',format:'pem'});
+ const h=signedHeaders({keyId:'ed-test',privateKeyPem:pem},'GET','/trade-api/v2/portfolio/balance?limit=5',123);
+ assert.ok(verify(null,Buffer.from('123GET/trade-api/v2/portfolio/balance'),ed.publicKey,Buffer.from(h['KALSHI-ACCESS-SIGNATURE'],'base64')));
+});
 test('all four side/action combinations map to the single YES book',()=>{for(const [side,action,book,price] of [['up','buy','bid','0.6000'],['down','buy','ask','0.4000'],['up','sell','ask','0.6000'],['down','sell','bid','0.4000']]){const o=makeOrder({ticker:'BTC-ROUND',side,action,qty:1,priceCents:60});assert.equal(o.side,book);assert.equal(o.price,price);assert.equal(o.reduce_only,action==='sell');assert.equal(o.time_in_force,'immediate_or_cancel');}});
 test('release cannot be enabled by incomplete or absent evidence',()=>{assert.equal(releaseStatus().canTrade,false);assert.ok(releaseStatus().failures.length);assert.equal(releaseFailures({},'commit').length,8);});
 test('transport rejects writes by default',async()=>{const client=kalshiClient(credentials,{fetchImpl:()=>{throw Error('unexpected network')}});await assert.rejects(client.create({}),/WRITES_DISABLED/);});
@@ -58,6 +63,15 @@ test('demo credentials are used only for a read to the demo host',async()=>{
   return {ok:true,json:async()=>({balance:0})};
  }),'DEMO_AUTHENTICATED');
  assert.equal(await checkDemoConnection({},()=>assert.fail('Unexpected request')),'DEMO_CREDENTIALS_MISSING');
+});
+test('Demo account verification accepts an Ed25519 key and signs its balance read',async()=>{
+ const ed=generateKeyPairSync('ed25519'),privateKeyPem=ed.privateKey.export({type:'pkcs8',format:'pem'});
+ assert.equal(await checkDemoConnection({KALSHI_DEMO_KEY_ID:'ed-demo',KALSHI_DEMO_PRIVATE_KEY:privateKeyPem},async(url,options)=>{
+  assert.equal(url,'https://external-api.demo.kalshi.co/trade-api/v2/portfolio/balance');
+  const message=Buffer.from(options.headers['KALSHI-ACCESS-TIMESTAMP']+'GET/trade-api/v2/portfolio/balance');
+  assert.ok(verify(null,message,ed.publicKey,Buffer.from(options.headers['KALSHI-ACCESS-SIGNATURE'],'base64')));
+  return {ok:true,json:async()=>({balance:0})};
+ }),'DEMO_AUTHENTICATED');
 });
 test('emergency stop reconciles a partial fill from the post-cancel snapshot',async()=>{
  const state=initialState(),ticker='BTC-ROUND';
