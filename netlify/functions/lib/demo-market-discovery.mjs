@@ -7,7 +7,7 @@ export function eligibleDemoLifecycleMarket(m,excluded,now=Date.now()){
 }
 
 // Bound discovery per scheduled invocation. Stop early when an eligible market is found.
-export async function findDemoLifecycleMarket(client,excluded,clock=Date.now,onRejection=()=>{}){
+export async function findDemoLifecycleMarket(client,excluded,clock=Date.now,onRejection=()=>{},testSide){
  const seen=new Set(),reasons=new Map();
  const noMarket=()=>{
   const mostCommon=[...reasons].sort((a,b)=>b[1]-a[1])[0];
@@ -20,10 +20,11 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now,onR
   if(cursor)query.set('cursor',cursor);
   const result=await client.request('GET','/trade-api/v2/markets?'+query);
   if(!Array.isArray(result?.markets))throw Error('DEMO_MARKET_LIST_INVALID');
-  const market=result.markets.find(m=>eligibleDemoLifecycleMarket(m,excluded,clock()));
+  const market=result.markets.find(m=>testSide?
+   !demoLifecycleMarketRejection(m,excluded,clock(),testSide):eligibleDemoLifecycleMarket(m,excluded,clock()));
   if(market)return market;
   for(const candidate of result.markets){
-   const reason=demoLifecycleMarketRejection(candidate,excluded,clock());
+   const reason=demoLifecycleMarketRejection(candidate,excluded,clock(),testSide);
    if(reason)reasons.set(reason,(reasons.get(reason)||0)+1);
   }
   if(!result.cursor)return noMarket();
@@ -39,7 +40,7 @@ export async function findDemoLifecycleMarket(client,excluded,clock=Date.now,onR
  * Do not relax the executable-market predicate or substitute a different ticker.
  * Return only fixed, non-sensitive reason codes.
  */
-export function demoLifecycleMarketRejection(m,excluded,now=Date.now()){
+export function demoLifecycleMarketRejection(m,excluded,now=Date.now(),testSide){
  if(!m)return 'DEMO_MARKET_NOT_FOUND';
  if(m.exchange_index==null)return 'DEMO_MARKET_EXCHANGE_INDEX_MISSING';
  if(!Number.isSafeInteger(m.exchange_index)||m.exchange_index<0)return 'DEMO_MARKET_EXCHANGE_INDEX_INVALID';
@@ -48,9 +49,9 @@ export function demoLifecycleMarketRejection(m,excluded,now=Date.now()){
  if(m.market_type!=='binary')return 'DEMO_MARKET_NOT_BINARY';
  if(excluded.includes(m.ticker))return 'DEMO_MARKET_ALREADY_USED';
  if(!(Date.parse(m.close_time)>now+300000))return 'DEMO_MARKET_CLOSING_SOON';
- for(const side of ['yes','no']){
+ for(const side of testSide?[testSide==='DOWN'?'no':'yes']:['yes','no']){
   const ask=Number(m[side+'_ask_dollars']),bid=Number(m[side+'_bid_dollars']);
-  if(!(ask>=.1&&ask<=.8))return 'DEMO_MARKET_ASK_OUT_OF_RANGE';
+  if(!(ask>=(testSide ? .01:.1)&&ask<=(testSide ? .90:.8)))return 'DEMO_MARKET_ASK_OUT_OF_RANGE';
   if(!(bid>0))return 'DEMO_MARKET_BID_UNAVAILABLE';
   if(!(ask>=bid&&ask-bid<=.05))return 'DEMO_MARKET_SPREAD_UNSAFE';
  }
