@@ -1,6 +1,6 @@
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {runtime} from './lib/live-runtime.mjs';
-import {releaseStatus} from './lib/kalshi-release-gate.mjs';
+import {liveBuildCommit,releaseStatus} from './lib/kalshi-release-gate.mjs';
 import {ENTRY_MODES,validateLimits,reconcile,emergencyStop} from '../../src/live-execution.mjs';
 import {accountRisk} from '../../src/live-accounting.mjs';
 const liveTrialCaps={orderCents:100,dailyCents:500,lossCents:300,maxPositions:1};
@@ -10,7 +10,7 @@ function effectiveLiveLimits(limits){
 function exceedsLiveCaps(limits){
  return Object.entries(liveTrialCaps).some(([key,cap])=>limits[key]>cap);
 }
-export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus}={}){return async req=>{try{
+export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus,getCommit=liveBuildCommit}={}){return async req=>{try{
  const user=await getOwner(),live=await getRuntime(user.id);
  if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.enabled&&!await live.repo.stopped(),stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
  if(req.method!=='POST')fail(405,'Method not allowed');
@@ -42,6 +42,12 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   if(action==='start'&&process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
   const fence=await live.repo.fence(),client=await live.client();
   const snapshot=await client.snapshot();
+  const commit=getCommit();
+  if(action==='reconcile'&&commit&&snapshot.complete){
+   await live.db.setJSON('release-receipts/'+user.id+'/'+commit+'/authentication',{
+    commit,at:Date.now(),test:'production-authenticated-account-snapshot',verified:true
+   });
+  }
   try{reconcile(state,snapshot);}catch(e){
    const mismatch=/^POSITION_MISMATCH_(.+)$/.exec(e.message);
    if(action!=='reconcile'||!mismatch||state.intents.some(intent=>intent.ticker===mismatch[1]&&intent.status!=='ABORTED'))throw e;
