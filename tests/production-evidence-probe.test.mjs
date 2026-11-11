@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {probeProductionEvidence,summarizeHealth,summarizePaper,summarizeDemo,evidenceSummary} from '../scripts/probe-production-evidence.mjs';
+import {probeProductionEvidence,summarizeHealth,summarizePaper,summarizeDemo,summarizeVersion,evidenceSummary} from '../scripts/probe-production-evidence.mjs';
 
-test('only GETs the three public read-only endpoints and preserves verified counts',async()=>{
+test('only GETs the four public read-only endpoints and preserves verified counts',async()=>{
  const requested=[];
  const fetchImpl=async(url,options)=>{
   requested.push({url,options});
@@ -14,6 +14,7 @@ test('only GETs the three public read-only endpoints and preserves verified coun
    omegaPaperMonitoring:{open:1,exits:1,holds:2,settled:0,unpriced:0,backfilled:0},
    paperLastAction:'PAPER_EXIT',realOrdersAuthorized:false
   }),{status:200});
+  if(url.endsWith('build-version.json'))return new Response(JSON.stringify({version:'2bc1bfcaceef04c3b5fd27a3706ebe5b8bd19892'}),{status:200});
   if(url.endsWith('kalshi-demo-status'))return new Response(JSON.stringify({
    savedBalanceProbe:{status:'KALSHI_HTTP_401',checkedAt:'2026-11-11T12:00:00Z',commit:'3489e5b',operation:'GET_PORTFOLIO_BALANCE',durationMs:101},
    lifecycleTest:{status:'DEMO_LIFECYCLE_FAILED',stage:'ACCOUNT_SNAPSHOT',error:'DEMO_SNAPSHOT_BALANCE_READ_FAILED',snapshotCause:'KALSHI_HTTP_401'}
@@ -26,14 +27,15 @@ test('only GETs the three public read-only endpoints and preserves verified coun
   }),{status:200});
  };
  const result=await probeProductionEvidence({fetchImpl,origin:'https://example.test',now:new Date('2026-11-09T20:00:00Z')});
- assert.equal(requested.length,3);
+ assert.equal(requested.length,4);
  assert.ok(requested.every(x=>x.options.method==='GET'&&x.options.redirect==='error'));
  assert.deepEqual(requested.map(x=>new URL(x.url).pathname).sort(),
-  ['/.netlify/functions/kalshi-demo-status','/.netlify/functions/omega-live-health','/.netlify/functions/omega-paper-summary']);
+  ['/.netlify/functions/kalshi-demo-status','/.netlify/functions/omega-live-health','/.netlify/functions/omega-paper-summary','/build-version.json']);
  assert.equal(result.health.collectorLastRunCounts.trained,2);
  assert.equal(result.health.omegaExternalProvidersRunning,false);
  assert.equal(result.paper.realizedNetDollars,-0.17);
  assert.equal(result.paper.officiallySettledPositions,0);
+ assert.equal(result.version.commit,'2bc1bfcaceef04c3b5fd27a3706ebe5b8bd19892');
  assert.equal(result.demo.savedBalanceProbe.status,'KALSHI_HTTP_401');
  assert.equal(result.demo.lifecycle.failureCode,'DEMO_SNAPSHOT_BALANCE_READ_FAILED');
  assert.equal(result.demo.verifiedNewFills,null);
@@ -233,4 +235,12 @@ test('missing and future-dated Demo evidence is never considered fresh',async()=
  assert.equal(report.demo.lifecycleFresh,false);
  assert.equal(report.demo.lifecycleAgeSeconds,null);
  assert.equal(report.demo.verifiedNewFills,null);
+});
+
+test('public build-version evidence rejects local builds and secret-bearing values',()=>{
+ assert.equal(summarizeVersion({version:'local-build'}).commit,null);
+ assert.equal(summarizeVersion({version:'SECRET_TOKEN=never-print'}).commit,null);
+ assert.equal(summarizeVersion(null).commit,null);
+ assert.equal(summarizeVersion({version:'89b1f44'}).commit,'89b1f44');
+ assert.doesNotMatch(JSON.stringify(summarizeVersion({version:'SECRET_TOKEN=never-print'})),/SECRET_TOKEN/);
 });
