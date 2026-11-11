@@ -6,7 +6,7 @@ let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
 function renderPaperTradeSignals(){
  const panel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
  const flip=document.getElementById('btVerifiedAlertFeed');
- if(panel&&flip&&flip.nextElementSibling!==panel)flip.insertAdjacentElement('afterend',panel);
+ if(panel&&flip){const command=flip.closest('.bt-command-grid');if(command&&panel.nextElementSibling!==command)command.before(panel);}
  const status=document.getElementById('paperTradeSignalsStatus'),rows=document.getElementById('paperTradeSignalsRows');
  if(!status||!rows)return;
  const recent=paperPositions.filter(t=>t&&['up','down'].includes(t.side)&&['OPEN','CLOSED','SETTLED'].includes(t.status))
