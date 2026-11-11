@@ -4,23 +4,31 @@ const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','
 const history=new Map();let selected="BTC";let engineSignals=[];
 let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
 function renderPaperTradeSignals(){
+ const panel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
+ const flip=document.getElementById('btVerifiedAlertFeed');
+ if(panel&&flip&&flip.nextElementSibling!==panel)flip.insertAdjacentElement('afterend',panel);
  const status=document.getElementById('paperTradeSignalsStatus'),rows=document.getElementById('paperTradeSignalsRows');
  if(!status||!rows)return;
- const recent=paperPositions.filter(trade=>trade?.entryBasis==='QUALIFIED PAPER SIGNAL'&&
-  ['up','down'].includes(trade.side)&&['OPEN','CLOSED','SETTLED'].includes(trade.status))
-  .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at)-Number(a.exitAt||a.settledAt||a.at)).slice(0,12);
- const percent=value=>value!=null&&value!==''&&Number.isFinite(Number(value))?Number(value).toFixed(1)+'%':'—';
- status.textContent=paperStatusError||(recent.length?'Recorded paper entries and exits':'No qualified paper trades recorded');
- rows.replaceChildren(...recent.map(trade=>{
-  const row=document.createElement('div');
-  row.className='premium-foot';
-  const asset=trade.asset||trade.ticker||'Market',side=trade.side.toUpperCase();
-  const entry='BUY '+side+' '+percent(trade.ask);
-  const outcome=trade.status==='OPEN'?'HOLD '+side:trade.status==='SETTLED'?'SETTLED '+(trade.settlement||''):'SELL '+side+' '+percent(trade.exitBid);
-  const time=Number.isFinite(Number(trade.at))?new Date(Number(trade.at)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
-  row.textContent=[asset,entry,outcome,time].filter(Boolean).join(' · ');
-  return row;
- }));
+ const recent=paperPositions.filter(t=>t&&['up','down'].includes(t.side)&&['OPEN','CLOSED','SETTLED'].includes(t.status))
+  .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at||0)-Number(a.exitAt||a.settledAt||a.at||0)).slice(0,15);
+ const percent=v=>v!==null&&v!==undefined&&v!==''&&Number.isFinite(Number(v))?Number(v).toFixed(1)+'%':'—';
+ status.textContent=paperStatusError||('Paper bot: '+(paperBotRunning?'RUNNING (server reports active)':'STOPPED')+' · '+recent.length+' recorded positions');
+ rows.replaceChildren();
+ if(!recent.length){const empty=document.createElement('div');empty.textContent='No recorded paper entries yet. No trades are being claimed.';rows.append(empty);return;}
+ for(const trade of recent){
+  const row=document.createElement('div');row.style.cssText='padding:9px 4px;border-bottom:1px solid #334155;font-size:13px;line-height:1.6';
+  const side=String(trade.side).toUpperCase(),up=side==='UP',asset=trade.asset||trade.ticker||'Market';
+  const heading=document.createElement('strong');heading.style.color=up?'#4ade80':'#fb7185';
+  heading.textContent=asset+' · BUY '+side+' · Entry '+percent(trade.ask);
+  const exit=document.createElement('div');
+  const sold=trade.status!=='OPEN'&&trade.exitBid!==null&&trade.exitBid!==undefined;
+  exit.textContent=sold?'PAPER SOLD '+side+' · Exit '+percent(trade.exitBid):trade.status==='OPEN'?'HOLD '+side+' · OPEN PAPER POSITION':trade.status+' · Exit not recorded';
+  const time=document.createElement('small');time.style.opacity='.75';
+  const entryAt=Number(trade.at),exitAt=Number(trade.exitAt||trade.settledAt);
+  time.textContent='Entry: '+(Number.isFinite(entryAt)&&entryAt>0?new Date(entryAt).toLocaleString():'unknown')+
+   (Number.isFinite(exitAt)&&exitAt>0?' · Exit: '+new Date(exitAt).toLocaleString():'');
+  row.append(heading,exit,time);rows.append(row);
+ }
 }
 async function refreshPaperPositions(){
  try{
