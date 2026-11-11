@@ -3,6 +3,25 @@
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
 const history=new Map();let selected="BTC";let engineSignals=[];
 let paperPositions=[];let paperBotRunning=false;let paperStatusError='';
+function renderPaperTradeSignals(){
+ const status=document.getElementById('paperTradeSignalsStatus'),rows=document.getElementById('paperTradeSignalsRows');
+ if(!status||!rows)return;
+ const recent=paperPositions.filter(trade=>trade?.entryBasis==='QUALIFIED PAPER SIGNAL'&&
+  ['up','down'].includes(trade.side)&&['OPEN','CLOSED','SETTLED'].includes(trade.status))
+  .sort((a,b)=>Number(b.exitAt||b.settledAt||b.at)-Number(a.exitAt||a.settledAt||a.at)).slice(0,12);
+ const percent=value=>value!=null&&value!==''&&Number.isFinite(Number(value))?Number(value).toFixed(1)+'%':'—';
+ status.textContent=paperStatusError||(recent.length?'Recorded paper entries and exits':'No qualified paper trades recorded');
+ rows.replaceChildren(...recent.map(trade=>{
+  const row=document.createElement('div');
+  row.className='premium-foot';
+  const asset=trade.asset||trade.ticker||'Market',side=trade.side.toUpperCase();
+  const entry='BUY '+side+' '+percent(trade.ask);
+  const outcome=trade.status==='OPEN'?'HOLD '+side:trade.status==='SETTLED'?'SETTLED '+(trade.settlement||''):'SELL '+side+' '+percent(trade.exitBid);
+  const time=Number.isFinite(Number(trade.at))?new Date(Number(trade.at)).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):'';
+  row.textContent=[asset,entry,outcome,time].filter(Boolean).join(' · ');
+  return row;
+ }));
+}
 async function refreshPaperPositions(){
  try{
   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
@@ -12,6 +31,7 @@ async function refreshPaperPositions(){
   paperBotRunning=!!data?.state?.running;paperStatusError='';
   syncSignals();
  }catch(e){paperStatusError='Paper positions unavailable';syncSignals();}
+ finally{renderPaperTradeSignals();}
 }
 
 // Lightweight comic-style signal effects; respect reduced-motion settings.
