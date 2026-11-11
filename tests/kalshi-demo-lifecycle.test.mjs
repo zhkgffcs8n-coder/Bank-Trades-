@@ -100,3 +100,30 @@ test('snapshot phase overrides generic uppercase transport error without submitt
  assert.equal((await runDemoLifecycle(options)).status,'DEMO_RETRY_ARMED');
  assert.equal(orders,0);
 });
+
+test('Demo snapshot preserves sanitized HTTP root cause independently of failed read phase',async()=>{
+ for(const [phase,underlying] of [['BALANCE','KALSHI_HTTP_401'],['SETTLEMENTS','KALSHI_HTTP_503'],['FILLS','INVALID_FILLS']]){
+  const state=initialState();let orders=0;
+  const result=await runDemoLifecycle({
+   repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+   client:{snapshot:async()=>{const e=Error(underlying);e.snapshotPhase=phase;throw e;},
+    create:async()=>{orders++;throw Error('UNEXPECTED_ORDER');}},
+   clock:()=>1000
+  });
+  assert.equal(result.stage,'ACCOUNT_SNAPSHOT');
+  assert.equal(result.error,'DEMO_SNAPSHOT_'+phase+'_READ_FAILED');
+  assert.equal(result.snapshotCause,underlying);
+  assert.equal(result.finished,true);
+  assert.equal(orders,0);
+ }
+});
+test('Demo snapshot never persists untrusted exception text as a cause',async()=>{
+ const state=initialState();
+ const result=await runDemoLifecycle({
+  repo:{acquire:async()=>({state,persist:async()=>{},release:async()=>{}})},
+  client:{snapshot:async()=>{const e=Error('SECRET_PRIVATE_KEY_VALUE');e.snapshotPhase='ORDERS';throw e;}},
+  clock:()=>1000
+ });
+ assert.equal(result.error,'DEMO_SNAPSHOT_ORDERS_READ_FAILED');
+ assert.equal(result.snapshotCause,undefined);
+});
