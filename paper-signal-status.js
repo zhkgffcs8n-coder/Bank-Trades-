@@ -52,7 +52,9 @@ function paint(data){
   fragment.append(chip);
  }
  root.replaceChildren(fragment);
- const sorted=trades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
+ const sessionAt=Number(data?.state?.paperPnlSessionStartedAt)||0;
+ const sessionTrades=trades.filter(t=>Number(t.at)>=sessionAt);
+ const sorted=sessionTrades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
  rows.replaceChildren();
  if(!sorted.length){const p=document.createElement('p');p.textContent='No paper positions recorded yet. Watching for the next qualified signal; no trade is being claimed.';rows.append(p)}
  for(const t of sorted){
@@ -68,12 +70,12 @@ function paint(data){
   const when=document.createElement('small');when.textContent='Entry '+date(t.at)+(closed?' · Exit '+date(t.exitedAt||t.exitAt||t.settledAt):'')+' · Recorded, not an executable live quote';
   card.append(title,money,detail,when);rows.append(card);
  }
- const completed=trades.filter(t=>['CLOSED','SETTLED'].includes(t.status)&&t.pnl!=null&&Number.isFinite(Number(t.pnl)));
+ const completed=sessionTrades.filter(t=>['CLOSED','SETTLED'].includes(t.status)&&t.pnl!=null&&Number.isFinite(Number(t.pnl)));
  const realizedNet=completed.reduce((sum,t)=>sum+Number(t.pnl),0);
- const markedOpen=trades.filter(t=>t.status==='OPEN'&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0);
+ const markedOpen=sessionTrades.filter(t=>t.status==='OPEN'&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0);
  const openNet=markedOpen.reduce((sum,t)=>sum+Number(t.lastObservedUnrealizedPnl),0);
  let totals=document.getElementById('paperTradeLivePnl');if(!totals){totals=document.createElement('div');totals.id='paperTradeLivePnl';status.insertAdjacentElement('afterend',totals)}
- totals.textContent='PAPER P&L · REALIZED '+pnlLabel(realizedNet)+' ('+completed.length+' closed) · EST. OPEN '+(markedOpen.length?pnlLabel(openNet):'PENDING')+' ('+markedOpen.length+' marked)';
+ totals.textContent='PAPER SESSION '+(sessionAt?date(sessionAt):'(all history)')+' · REALIZED '+pnlLabel(realizedNet)+' ('+completed.length+' closed) · EST. OPEN '+(markedOpen.length?pnlLabel(openNet):'PENDING')+' ('+markedOpen.length+' marked)';
  totals.style.cssText='font-weight:900;font-size:14px;margin:7px 0;color:'+(realizedNet>=0?'#86efac':'#fca5a5');
  const next=new Map();
  for(const t of trades){
