@@ -850,9 +850,13 @@ function mountScalper(){
     const tools=document.createElement('div');
     tools.className='bt-command-tools';
     tools.append(picker,column('middle',box,contract),column('right',scalper,spot));
-    row.append(column('left',...([feed,document.getElementById('paperTradeSignalsTitle')?.closest('section'),terminal].filter(Boolean))),tools);
+    row.append(column('left',feed,terminal),tools);
+    const paper=document.getElementById('paperTradeSignalsTitle')?.closest('section');
+    if(paper)row.before(paper);
   }else{
-    row.append(feed,document.getElementById('paperTradeSignalsTitle')?.closest('section')||document.createElement('div'),picker,box,scalper);
+    const paper=document.getElementById('paperTradeSignalsTitle')?.closest('section');
+    if(paper)row.before(paper);
+    row.append(feed,picker,box,scalper);
   }
   paintCoin();
   return true;
