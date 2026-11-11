@@ -140,12 +140,25 @@ async function readEndpoint(path,summarize,{fetchImpl,origin}){
   return {status:'UNAVAILABLE',reason:'NETWORK_TIMEOUT_OR_INVALID_JSON'};
  }
 }
+// Observed status can describe an earlier test. Freshness is metadata, never fill proof.
+function evidenceAgeSeconds(timestamp,now){
+ const ms=typeof timestamp==='number'&&Number.isSafeInteger(timestamp)?timestamp:
+  typeof timestamp==='string'?Date.parse(timestamp):NaN;
+ const age=now.getTime()-ms;
+ return Number.isFinite(ms)&&ms>0&&Number.isFinite(age)&&age>=0?Math.floor(age/1000):null;
+}
 export async function probeProductionEvidence({fetchImpl=fetch,origin=PRODUCTION_ORIGIN,now=new Date()}={}){
  const [health,paper,demo]=await Promise.all([
   readEndpoint(HEALTH_PATH,summarizeHealth,{fetchImpl,origin}),
   readEndpoint(PAPER_PATH,summarizePaper,{fetchImpl,origin}),
   readEndpoint(DEMO_PATH,summarizeDemo,{fetchImpl,origin})
  ]);
+ if(demo.status==='READ_ONLY_OBSERVATION'){
+  demo.savedBalanceProbeAgeSeconds=evidenceAgeSeconds(demo.savedBalanceProbe?.checkedAt,now);
+  demo.lifecycleAgeSeconds=evidenceAgeSeconds(demo.lifecycle?.checkedAt,now);
+  demo.savedBalanceProbeFresh=demo.savedBalanceProbeAgeSeconds!==null&&demo.savedBalanceProbeAgeSeconds<=900;
+  demo.lifecycleFresh=demo.lifecycleAgeSeconds!==null&&demo.lifecycleAgeSeconds<=300;
+ }
  return {checkedAt:now.toISOString(),mode:'READ_ONLY_EVIDENCE',health,paper,demo,
   verifiedProfitableTrading:false,
   notice:'Endpoint diagnostics are not proof of exchange fills, official learning, or improved strategy performance.'};
@@ -174,6 +187,8 @@ export function evidenceSummary(report){
   '| KaiBot Demo read-only endpoint | '+value(d.status)+' |',
   '| Saved Demo balance probe | '+value(d.savedBalanceProbe?.status)+' at '+value(d.savedBalanceProbe?.checkedAt)+' (commit '+value(d.savedBalanceProbe?.commit)+') |',
   '| Demo lifecycle | '+value(d.lifecycle?.status)+'; failure '+value(d.lifecycle?.failureCode)+'; underlying '+value(d.lifecycle?.snapshotCause)+' |',
+  '| Saved Demo balance probe freshness | '+value(d.savedBalanceProbeFresh)+' (age '+value(d.savedBalanceProbeAgeSeconds)+'s; 15m limit) |',
+  '| Demo lifecycle freshness | '+value(d.lifecycleFresh)+' (age '+value(d.lifecycleAgeSeconds)+'s; 5m limit; prior completed tests are historical) |',
   '| New exchange-confirmed Demo fills | unverified (read-only metadata is not fill evidence) |',
   '| Paper archive | '+value(p.status)+' |',
   '| Officially settled paper positions | '+value(p.officiallySettledPositions)+' |',
