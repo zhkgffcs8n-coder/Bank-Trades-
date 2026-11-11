@@ -5,7 +5,7 @@ const SNAPSHOT_PHASES=new Set(['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMEN
 const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERIFY_EXIT']);
 const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
 const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
-export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,onTerminalReplay,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false,legacyRecovery=false;
@@ -19,7 +19,10 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    state.intents.every(intent=>['ABORTED','RECONCILED'].includes(intent.status));
   retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
    (!state.demoRetryUsed||legacyRecovery)&&retryableSnapshotFailure(state.demo.error);
-  if(state.demo?.finished&&!retry)return state.demo;
+  if(state.demo?.finished&&!retry){
+   onTerminalReplay?.(state.demoRetryUsed?'RETRY_ALREADY_USED':'TERMINAL_OUTCOME');
+   return state.demo;
+  }
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
   if(!retry&&state.demo.attempts>=8){result('DEMO_ORDER_LIMIT_REACHED',{finished:true});await session.persist(state);return state.demo;}
@@ -28,7 +31,10 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
   stage='ACCOUNT_RECONCILIATION';
   reconcile(state,snapshot);const risk=accountRisk(state,snapshot,clock());
   if(retry){
-   if(risk.open.length)return state.demo;
+   if(risk.open.length){
+    onTerminalReplay?.('OPEN_DEMO_POSITION');
+    return state.demo;
+   }
    state.demoHistory=[...(state.demoHistory||[]),state.demo];
    state.demoRetryUsed=true;
    if(legacyRecovery)state.demoLegacySnapshotRecoveryUsed=true;
