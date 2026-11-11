@@ -1,5 +1,6 @@
 import {randomUUID,createPrivateKey} from 'node:crypto';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
+import {shouldRefreshSavedDemoBalanceProbe} from './lib/demo-balance-probe-policy.mjs';
 import {getStore} from '@netlify/blobs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 
@@ -25,7 +26,7 @@ export default async()=>{
  const saved=await store.get('uploaded-connection',{type:'json'});
  if(saved?.status==='DEMO_AUTHENTICATED'){
   const previous=await store.get('saved-balance-probe',{type:'json'});
-  if(commit&&previous?.commit===commit&&previous.credentialCheckedAt===saved.checkedAt)return new Response(null,{status:204});
+  if(!shouldRefreshSavedDemoBalanceProbe(previous,{commit,credentialCheckedAt:saved.checkedAt??null}))return new Response(null,{status:204});
   const requestId=randomUUID(),startedAt=Date.now();
   const ownerId=process.env.KALSHI_LIVE_OWNER_ID;
   let status='DEMO_OWNER_MISSING';
