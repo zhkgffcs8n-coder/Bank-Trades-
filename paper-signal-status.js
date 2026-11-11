@@ -99,6 +99,14 @@ async function refresh(){
  }catch(e){status.textContent='PAPER DATA NOT VERIFIED · '+e.message;status.style.color='#fca5a5';root.replaceChildren(badge('STATUS','UNAVAILABLE','#991b1b'))}
  finally{clearTimeout(timer);busy=false}
 }
+const resetButton=document.getElementById('paperPnlReset');
+if(resetButton)resetButton.addEventListener('click',async()=>{
+ if(!window.confirm('Start a new paper P&L session at $0? Previous trade records will be preserved.'))return;
+ resetButton.disabled=true;
+ try{const res=await fetch('/.netlify/functions/kaibot-state',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reset-session'})});if(!res.ok)throw Error('Reset denied (HTTP '+res.status+'). Owner sign-in may be required.');await refresh();}
+ catch(e){status.textContent='PAPER SESSION RESET FAILED · '+e.message;status.style.color='#fca5a5';}
+ finally{resetButton.disabled=false;}
+});
 window.addEventListener('paper-bot-state-changed',refresh);
 window.addEventListener('pageshow',refresh);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
