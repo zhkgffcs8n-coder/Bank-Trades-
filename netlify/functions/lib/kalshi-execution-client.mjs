@@ -1,8 +1,13 @@
 import {createPrivateKey,sign,constants} from 'node:crypto';
 export function signedHeaders({keyId,privateKeyPem},method,path,now=Date.now()){
- const timestamp=String(now);
+ const timestamp=String(now),key=createPrivateKey(privateKeyPem);
+ const message=Buffer.from(timestamp+method+path.split('?')[0]);
+ let signature;
+ if(key.asymmetricKeyType==='ed25519')signature=sign(null,message,key);
+ else if(key.asymmetricKeyType==='rsa')signature=sign('sha256',message,{key,padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST});
+ else throw Error('UNSUPPORTED_KALSHI_KEY_TYPE');
  return {'KALSHI-ACCESS-KEY':keyId,'KALSHI-ACCESS-TIMESTAMP':timestamp,
- 'KALSHI-ACCESS-SIGNATURE':sign('sha256',Buffer.from(timestamp+method+path.split('?')[0]),{key:createPrivateKey(privateKeyPem),padding:constants.RSA_PKCS1_PSS_PADDING,saltLength:constants.RSA_PSS_SALTLEN_DIGEST}).toString('base64'),Accept:'application/json','Content-Type':'application/json'};
+ 'KALSHI-ACCESS-SIGNATURE':signature.toString('base64'),Accept:'application/json','Content-Type':'application/json'};
 }
 export function kalshiClient(credentials,{fetchImpl=fetch,environment='production',allowWrites=false,allowCancellation=false}={}){
  if(!['production','demo'].includes(environment))throw Error('INVALID_ENVIRONMENT');

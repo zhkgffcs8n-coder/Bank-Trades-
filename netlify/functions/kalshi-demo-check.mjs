@@ -7,7 +7,7 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch){
  const privateKeyPem=env.KALSHI_DEMO_PRIVATE_KEY?.replace(/\\n/g,'\n').trim();
  if(!keyId||!privateKeyPem)return 'DEMO_CREDENTIALS_MISSING';
  try{
-  if(createPrivateKey(privateKeyPem).asymmetricKeyType!=='rsa')return 'DEMO_PRIVATE_KEY_NOT_RSA';
+  if(!['rsa','ed25519'].includes(createPrivateKey(privateKeyPem).asymmetricKeyType))return 'DEMO_PRIVATE_KEY_UNSUPPORTED_TYPE';
  }catch{return 'DEMO_PRIVATE_KEY_INVALID_PEM';}
  try{
   const client=kalshiClient({keyId,privateKeyPem},{environment:'demo',fetchImpl});

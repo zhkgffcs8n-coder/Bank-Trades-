@@ -15,6 +15,8 @@ test('worker accepts a Railway PEM secret or the existing mounted key',async t=>
  const env={PREDATOR_KALSHI_KEY_ID:'example'};
  assert.equal((await predatorStreamCredentials({...env,PREDATOR_KALSHI_PRIVATE_KEY_PEM:pem})).privateKeyPem,pem.trim());
  assert.equal((await predatorStreamCredentials({...env,PREDATOR_KALSHI_PRIVATE_KEY_FILE:file})).privateKeyPem,pem);
+ const {privateKey:edPem}=generateKeyPairSync('ed25519',{privateKeyEncoding:{type:'pkcs8',format:'pem'},publicKeyEncoding:{type:'spki',format:'pem'}});
+ assert.equal((await predatorStreamCredentials({...env,PREDATOR_KALSHI_PRIVATE_KEY_PEM:edPem})).privateKeyPem,edPem.trim());
  await assert.rejects(predatorStreamCredentials({...env,PREDATOR_KALSHI_PRIVATE_KEY_FILE:file,PREDATOR_KALSHI_PRIVATE_KEY_PEM:pem}),/AMBIGUOUS/);
 });
 

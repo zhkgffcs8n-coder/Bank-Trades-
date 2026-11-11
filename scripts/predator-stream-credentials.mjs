@@ -9,7 +9,7 @@ export async function predatorStreamCredentials(env) {
  if(!keyId||Boolean(pem)===Boolean(file))throw Error('PREDATOR_KALSHI_CREDENTIALS_INCOMPLETE_OR_AMBIGUOUS');
  try{
   const privateKeyPem=pem||await readFile(file,'utf8');
-  if(createPrivateKey(privateKeyPem).asymmetricKeyType!=='rsa')throw Error();
+  if(!['rsa','ed25519'].includes(createPrivateKey(privateKeyPem).asymmetricKeyType))throw Error();
   return {keyId,privateKeyPem};
  }catch{
   throw Error('PREDATOR_KALSHI_PRIVATE_KEY_INVALID_OR_UNREADABLE');
