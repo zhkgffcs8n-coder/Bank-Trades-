@@ -14,3 +14,11 @@
 .venue-card table { width: 100%; text-align: left; font-variant-numeric: tabular-nums; margin: 12px 0; }
 .venue-card th, .venue-card td { padding: 8px; }
 .venue-card a { color: #67e8f9; }
+.venue-desk #poly-coins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.venue-desk #poly-coins button { width: auto; justify-content: center; margin: 0; }
+.venue-card label { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+.venue-card #poly-signal-toggle { appearance: auto; width: 20px; height: 20px; margin: 0; accent-color: #67e8f9; }
+.venue-card caption { text-align: left; color: #a5bbd4; padding: 8px; }
+.poly-calls td { font-weight: 700; }
+.poly-calls [data-side="UP"] { color: #50e6b4; }
+.poly-calls [data-side="DOWN"] { color: #ff8091; }

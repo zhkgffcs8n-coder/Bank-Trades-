@@ -9,6 +9,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const table = document.querySelector('#poly-quotes');
   const link = document.querySelector('#poly-link');
   const toggle = document.querySelector('#poly-signal-toggle');
+  const toggleLabel = document.querySelector('#poly-toggle-label');
   const signalPanel = document.querySelector('#poly-signals');
   const signalStatus = document.querySelector('#poly-signal-status');
   const calls = document.querySelector('#poly-signal-calls');
@@ -64,19 +65,28 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   }
 
   function renderSignals(market) {
+    toggleLabel.textContent = toggle.checked ? 'Signals ON' : 'Signals OFF';
     signalPanel.hidden = !toggle.checked;
     if (!toggle.checked) return;
     const sample = samples.get(selected);
     const assessment = market && sample?.quote.ticker === market.slug ? sample.assessment : null;
-    signalStatus.textContent = assessment?.radar ?? (market ? 'Collecting usable quotes for this round' : 'Waiting for fresh quotes');
-    const items = Object.entries(engines).map(([key, name]) => {
-      const item = document.createElement('li');
+    const late = market && snapshot.end - Date.now() < 120000;
+    signalStatus.textContent = !market ? 'Waiting for live Polymarket quotes'
+      : late ? 'Entry window closed · next round in under 2 minutes'
+      : assessment?.radar ?? 'Collecting usable quotes for this round';
+    const rows = Object.entries(engines).map(([key, name]) => {
+      const row = document.createElement('tr');
       const signal = assessment?.engines[key];
-      const action = !signal ? 'WAIT' : signal.decision === 'SKIP' ? 'SKIP' : `BUY ${signal.decision} · ${formatPrice(signal.ask)} ask`;
-      item.textContent = `${name} · ${action}`;
-      return item;
+      const entry = !late && signal?.decision && signal.decision !== 'SKIP';
+      const action = entry ? `BUY ${signal.decision}` : late || signal ? 'SKIP' : 'WAIT';
+      row.insertCell().textContent = name;
+      const actionCell = row.insertCell();
+      actionCell.textContent = action;
+      if (entry) actionCell.dataset.side = signal.decision;
+      row.insertCell().textContent = entry ? formatPrice(signal.ask) : '—';
+      return row;
     });
-    calls.replaceChildren(...items);
+    calls.replaceChildren(...rows);
   }
 
   function render() {
