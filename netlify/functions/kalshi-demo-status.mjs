@@ -1,3 +1,4 @@
+import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
@@ -55,7 +56,7 @@ export default async req=>{try{
    credentials=openKalshiCredentials({userId:'demo-'+user.id,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
   }catch{return json({status:'DEMO_CREDENTIAL_LOAD_FAILED'},503);}
   const result=await probeDemoSnapshot(credentials);
-  const receipt=demoSnapshotProbeReceipt(result,process.env.COMMIT_REF||null);
+  const receipt=demoSnapshotProbeReceipt(result,liveBuildCommit());
   await store.setJSON('saved-balance-probe',receipt);
   return json({...result,status:receipt.status,commit:receipt.commit},result.ok?200:503);
  }
