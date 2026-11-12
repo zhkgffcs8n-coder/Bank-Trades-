@@ -1,6 +1,7 @@
 import {randomUUID,createPrivateKey} from 'node:crypto';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {shouldRefreshSavedDemoBalanceProbe} from './lib/demo-balance-probe-policy.mjs';
+import {probeDemoSnapshot,demoSnapshotProbeReceipt,shouldRefreshFullDemoSnapshotProbe} from './kalshi-demo-snapshot-diagnostic.mjs';
 import {getStore} from '@netlify/blobs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
 
@@ -44,6 +45,28 @@ export default async()=>{
  const commit=process.env.COMMIT_REF||null;
  const saved=await store.get('uploaded-connection',{type:'json'});
  if(saved?.status==='DEMO_AUTHENTICATED'){
+  // Run an independent full read-only account snapshot every ten minutes,
+  // even if a previous execution lifecycle is terminal or its wake is stuck.
+  // Keep its evidence separate from the shorter balance-only probe.
+  const previousSnapshot=await store.get('saved-snapshot-probe',{type:'json'}).catch(()=>null);
+  if(shouldRefreshFullDemoSnapshotProbe(previousSnapshot,{commit,credentialCheckedAt:saved.checkedAt??null})){
+   const checkedAt=new Date().toISOString();
+   let receipt={status:'DEMO_CREDENTIAL_ENVELOPE_UNAVAILABLE',checkedAt,commit};
+   try{
+    const ownerId=process.env.KALSHI_LIVE_OWNER_ID;
+    if(ownerId){
+     const credentials=openKalshiCredentials({userId:'demo-'+ownerId,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
+     const result=await probeDemoSnapshot(credentials);
+     receipt=demoSnapshotProbeReceipt(result,commit);
+    }
+   }catch{
+    // Do not expose transport exceptions, credentials, URLs, or exchange bodies.
+    receipt={status:'DEMO_SNAPSHOT_READS_FAILED',transportCause:'REQUEST_FAILED',failedPhase:null,httpStatus:null,checkedAt,commit};
+   }
+   await store.setJSON('saved-snapshot-probe',{...receipt,credentialCheckedAt:saved.checkedAt??null});
+   console.info(JSON.stringify({event:'DEMO_SCHEDULED_FULL_SNAPSHOT_PROBE',status:receipt.status,checkedAt:receipt.checkedAt}));
+   return new Response(null,{status:204});
+  }
   const previous=await store.get('saved-balance-probe',{type:'json'});
   if(!shouldRefreshSavedDemoBalanceProbe(previous,{commit,credentialCheckedAt:saved.checkedAt??null}))return new Response(null,{status:204});
   const requestId=randomUUID(),startedAt=Date.now();

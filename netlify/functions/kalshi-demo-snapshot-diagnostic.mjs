@@ -62,6 +62,12 @@ export function demoSnapshotProbeReceipt(result,commit=null){
 }
 
 
+export function shouldRefreshFullDemoSnapshotProbe(previous,{commit=null,credentialCheckedAt=null,now=Date.now()}={}){
+ if(!previous||previous.commit!==commit||previous.credentialCheckedAt!==credentialCheckedAt)return true;
+ const last=Date.parse(previous.checkedAt||'');
+ return !Number.isFinite(last)||last>now||now-last>=10*60*1000;
+}
+
 export function shouldProbeTerminalDemo(lifecycle,previousReceipt,now=Date.now()){
  if(lifecycle?.finished!==true)return false;
  const last=Date.parse(previousReceipt?.checkedAt||'');
