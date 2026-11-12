@@ -76,3 +76,11 @@ test('Balanced and Lock do not promote unvalidated research into automatic paper
  assert.doesNotMatch(source,/validation:'PAPER EXPERIMENT',reason:'Directional confirmation for simulated entry'/);
  assert.match(source,/if\(!\['BUY UP','BUY DOWN'\]\.includes\(signal\.action\)\)/);
 });
+
+
+test('Extreme does not open unvalidated quote-only coverage positions',()=>{
+ const source=readFileSync(new URL('../netlify/functions/kaibot-runner.mjs',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/entryBasis='UNVALIDATED QUOTE-BASED PAPER TEST'/);
+ assert.doesNotMatch(source,/if\(mode==='extreme'&&!qualifiedEntry&&!coverageEntry\)/);
+ assert.match(source,/if\(!\['BUY UP','BUY DOWN'\]\.includes\(signal\.action\)\)/);
+});
