@@ -35,6 +35,8 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
     return {status:'DEMO_REARM_BLOCKED_UNRESOLVED_INTENTS'};
    try{
     const snapshot=await client.snapshot();
+    if(snapshot?.orders?.some(o=>!['executed','canceled'].includes(o.status)))
+     return {status:'DEMO_REARM_BLOCKED_ACCOUNT_EXPOSURE'};
     reconcile(state,snapshot,clock());
     const risk=accountRisk(state,snapshot,clock());
     if(risk.open.length||snapshot.positions.some(p=>Math.abs(Number(p.position_fp??p.position))>1e-7)||
