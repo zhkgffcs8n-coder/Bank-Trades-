@@ -22,12 +22,12 @@ export async function runScheduledDemo(worker,manual={}){
   // This never re-arms a trade or changes order state; failures are isolated.
   const [lastLifecycle,previousProbe]=await Promise.all([
    db.get('lifecycle-status',{type:'json'}).catch(()=>null),
-   db.get('saved-balance-probe',{type:'json'}).catch(()=>null)
+   db.get('saved-snapshot-probe',{type:'json'}).catch(()=>null)
   ]);
   if(shouldProbeTerminalDemo(lastLifecycle,previousProbe)){
    try{
     const probe=await probeDemoSnapshot(credentials);
-    await db.setJSON('saved-balance-probe',demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null));
+    await db.setJSON('saved-snapshot-probe',demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null));
    }catch{console.warn('DEMO_INDEPENDENT_PROBE_UNAVAILABLE');}
   }
   repo=liveRepository(db,'demo-lifecycle-v1',{
