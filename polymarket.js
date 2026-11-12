@@ -37,6 +37,20 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   let snapshot;
 
   const formatPrice = price => price === null ? '—' : `${Number((price * 100).toFixed(2))}%`;
+  function actionBadge(action) {
+    const badge = document.createElement('span');
+    const label = action.replace(/^FLIP · /, '');
+    const kind = label.startsWith('BUY UP') ? 'buy-up'
+      : label.startsWith('BUY DOWN') ? 'buy-down'
+      : label.startsWith('TAKE PROFIT') ? 'profit'
+      : label.startsWith('SELL FAST') ? 'stop'
+      : /^(SELL|EXIT|TIME EXIT)/.test(label) ? 'sell'
+      : /^(HOLD|UP TRACKED|DOWN TRACKED)/.test(label) ? 'hold' : 'watch';
+    badge.className = `poly-action poly-action-${kind}`;
+    badge.textContent = action;
+    return badge;
+  }
+
   const buttons = coins.map(coin => {
     const button = document.createElement('button');
     button.type = 'button';
@@ -162,7 +176,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
         if (Number.isFinite(ask)) signal.textContent += ` · Ask ${formatPrice(ask)}`;
         signal.className = 'poly-agreement-buy';
       }
-      card.append(label, signal);
+      card.append(label, actionBadge(signal.textContent));
       return card;
     });
     liveRows.replaceChildren(...cards);
@@ -185,9 +199,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const { position, side, action } = currentCall(selected, market, key, name);
       row.insertCell().textContent = name;
       const actionCell = row.insertCell();
-      actionCell.textContent = action;
-      if (action.startsWith('BUY') || action.startsWith('TAKE PROFIT')) actionCell.dataset.side = 'UP';
-      if (action.startsWith('SELL FAST')) actionCell.dataset.side = 'DOWN';
+      actionCell.append(actionBadge(action));
       row.insertCell().textContent = position ? formatPrice(position.entry / 100) : '—';
       const liveBid = position && market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
       const bid = position?.exitBid != null ? position.exitBid / 100 : liveBid;
@@ -195,8 +207,8 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       if (position) {
         const card = document.createElement('article');
         const instruction = document.createElement('strong');
-        instruction.textContent = !market && !position.exit ? `${name} · HOLD ${side} · BID UNAVAILABLE` : `${name} · ${action}`;
-        if (actionCell.dataset.side) instruction.dataset.side = actionCell.dataset.side;
+        instruction.append(`${name} `, actionBadge(action));
+        if (!market && !position.exit) instruction.append(' · BID UNAVAILABLE');
         const details = document.createElement('p');
         const move = (bid * 100 - position.entry).toFixed(1);
         const bidText = Number.isFinite(bid)
@@ -208,7 +220,13 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
         marketLink.target = '_blank';
         marketLink.rel = 'noopener noreferrer';
         marketLink.textContent = 'Open this round on Polymarket';
-        card.append(instruction, details, marketLink);
+        card.append(instruction, details);
+        if (!position.exit && position.entry > 92) {
+          const headroom = document.createElement('small');
+          headroom.textContent = `Max upside to 100%: ${Number((100 - position.entry).toFixed(2))} pts before fees`;
+          card.append(headroom);
+        }
+        card.append(marketLink);
         trackedCards.push(card);
       }
       return row;
@@ -222,7 +240,12 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     historyList.replaceChildren(...events.map(event => {
       const item = document.createElement('li');
       const exit = event.exitBid == null ? '' : ` · exit bid ${formatPrice(event.exitBid / 100)}`;
-      item.textContent = `${new Date(event.at).toLocaleTimeString()} · ${event.coin} · ${event.engine} · ${event.action} · entry ${formatPrice(event.entry / 100)}${exit}`;
+      const coin = document.createElement('b');
+      coin.className = 'poly-history-coin';
+      coin.textContent = event.coin;
+      const meta = document.createElement('div');
+      meta.append(`${new Date(event.at).toLocaleTimeString()} `, coin, ` · ${event.engine}`);
+      item.append(meta, actionBadge(event.action), ` · Entry ${formatPrice(event.entry / 100)}${exit}`);
       if (event.ticker) {
         const round = document.createElement('a');
         round.href = `https://polymarket.com/event/${event.ticker}`;
