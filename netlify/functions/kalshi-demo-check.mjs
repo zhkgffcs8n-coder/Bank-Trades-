@@ -23,10 +23,18 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch,diagno
  try{
   const client=kalshiClient({keyId,privateKeyPem},{environment:'demo',fetchImpl});
   const balance=await client.request('GET','/trade-api/v2/portfolio/balance');
-  return Number.isSafeInteger(balance?.balance)&&balance.balance>=0?'DEMO_AUTHENTICATED':'DEMO_INVALID_BALANCE_RESPONSE';
+  if(!Number.isSafeInteger(balance?.balance)||balance.balance<0){
+   if(diagnostics&&typeof diagnostics==='object')diagnostics.failedPhase='BALANCE';
+   return 'DEMO_INVALID_BALANCE_RESPONSE';
+  }
+  return 'DEMO_AUTHENTICATED';
  }catch(error){
-  if(!/^KALSHI_HTTP_\d{3}$/.test(error?.message)&&diagnostics&&typeof diagnostics==='object')
-   diagnostics.transportCause=classifyDemoBalanceTransport(error);
+  if(diagnostics&&typeof diagnostics==='object'){
+   diagnostics.failedPhase='BALANCE';
+   const match=/^KALSHI_HTTP_(\d{3})$/.exec(error?.message||'');
+   if(match)diagnostics.httpStatus=Number(match[1]);
+   else diagnostics.transportCause=classifyDemoBalanceTransport(error);
+  }
   return /^KALSHI_HTTP_\d{3}$/.test(error?.message)?error.message:'DEMO_TRANSPORT_ERROR';
  }
 }
@@ -51,7 +59,9 @@ export default async()=>{
     KALSHI_DEMO_KEY_ID:credentials.keyId,KALSHI_DEMO_PRIVATE_KEY:credentials.privateKeyPem
    },fetch,diagnostics);
   }
-  const receipt={status,transportCause:diagnostics.transportCause??null,requestId,commit,operation:'GET_PORTFOLIO_BALANCE',
+  const receipt={status,transportCause:diagnostics.transportCause??null,
+   failedPhase:diagnostics.failedPhase??null,httpStatus:diagnostics.httpStatus??null,
+   requestId,commit,operation:'GET_PORTFOLIO_BALANCE',
    checkedAt:new Date().toISOString(),durationMs:Date.now()-startedAt};
   await store.setJSON('saved-balance-probe',{...receipt,credentialCheckedAt:saved.checkedAt??null});
   console.info(JSON.stringify({event:'DEMO_SAVED_BALANCE_PROBE',...receipt}));
