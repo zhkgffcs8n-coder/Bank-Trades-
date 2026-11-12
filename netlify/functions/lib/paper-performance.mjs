@@ -1,3 +1,4 @@
+export const isPaperExperiment=t=>['UNVALIDATED QUOTE-BASED PAPER TEST','DIRECTIONAL PAPER EXPERIMENT'].includes(t?.entryBasis);
 import {SETTLEMENT_VERIFICATION} from '../../../src/official-settlement.mjs';
 
 // Pure, deterministic research diagnostics. Only verified settled paper trades count.
@@ -81,8 +82,8 @@ export function performance(trades=[]){
   if(conflictingIds.has(id)||seenIds.has(id))return false;
   seenIds.add(id);return true;
  });
- const eligible=unique.filter(t=>t?.entryBasis!=='UNVALIDATED QUOTE-BASED PAPER TEST');
- const explorationExcluded=source.filter(t=>t?.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST').length;
+ const eligible=unique.filter(t=>!isPaperExperiment(t));
+ const explorationExcluded=source.filter(isPaperExperiment).length;
  const valid=eligible.filter(reconciledPaperTrade);
  const summarize=rows=>{
   const n=rows.length,wins=rows.filter(t=>Number(t.pnl)>0).length,losses=rows.filter(t=>Number(t.pnl)<0).length,ties=n-wins-losses;
@@ -140,7 +141,7 @@ export function performance(trades=[]){
  // Keep Extreme coverage feedback separate from the qualified signal gate.
  const coverageGroups={};
  for(const t of unique){
-  if(t?.extremeCoverage!==true||typeof t.id!=='string'||!t.id.trim()||!reconciledPaperTrade(t))continue;
+  if((t?.extremeCoverage!==true&&!isPaperExperiment(t))||typeof t.id!=='string'||!t.id.trim()||!reconciledPaperTrade(t))continue;
   const key=t.asset+'_'+t.side;
   (coverageGroups[key]??=[]).push(t);
  }

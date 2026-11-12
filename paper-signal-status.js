@@ -71,7 +71,7 @@ function paint(data){
  for(const t of sorted){
   const side=String(t.side||'').toUpperCase(),up=side==='UP',closed=t.status!=='OPEN';
   const card=document.createElement('div');card.style.cssText='border-left:5px solid '+(closed?'#22d3ee':up?'#22c55e':'#ef4444')+';background:#101e30;padding:9px;margin:4px 0;border-radius:7px;color:#fff';
-  const title=document.createElement('strong');title.textContent=(t.asset||t.ticker||'Market')+(t.extremeCoverage===true?' · EXTREME PAPER BUY ':' · PAPER BUY ')+side+' · '+pct(t.ask);
+  const title=document.createElement('strong');title.textContent=(t.asset||t.ticker||'Market')+(t.extremeCoverage===true?' · EXTREME PAPER BUY ':t.entryBasis==='DIRECTIONAL PAPER EXPERIMENT'?' · '+String(t.entryMode).toUpperCase()+' PAPER TEST BUY ':' · PAPER BUY ')+side+' · '+pct(t.ask);
   title.style.color=up?'#86efac':'#fca5a5';
   const stake=Number(t.cost),pnl=Number(t.pnl),realized=closed&&t.pnl!=null&&Number.isFinite(pnl);
   const marked=!closed&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0;

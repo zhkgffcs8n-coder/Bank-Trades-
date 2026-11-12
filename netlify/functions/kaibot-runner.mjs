@@ -1,6 +1,7 @@
+import {engineBTrend} from '../../src/paired-shadow.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {modelValidated} from '../../src/research-model.mjs';
-import {performance,gatePaperEntry,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition,duplicatePaperTradeIds} from './lib/paper-performance.mjs';
+import {performance,gatePaperEntry,isPaperExperiment,hasRecordedNumber,reconciledPaperTrade,validOpenPaperPosition,duplicatePaperTradeIds} from './lib/paper-performance.mjs';
 import {verifiedFinalizedBinaryOutcome,trustedStoredFinalizedOutcome,SETTLEMENT_VERIFICATION} from '../../src/official-settlement.mjs';
 import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
 import {getStore} from '@netlify/blobs';
@@ -134,7 +135,7 @@ export default async()=>{
  const verifiedAccountingRecords=resolvedRecords.filter(reconciledPaperTrade);
  const unreconciledRecords=resolvedRecords.filter(t=>!reconciledPaperTrade(t));
  const pnlSum=rows=>Number(rows.filter(t=>hasRecordedNumber(t.pnl)).reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2));
- const excludedFromEligible=resolvedRecords.filter(t=>t.entryBasis==='UNVALIDATED QUOTE-BASED PAPER TEST');
+ const excludedFromEligible=resolvedRecords.filter(isPaperExperiment);
  await s.setJSON('risk-audit',{at:now,entryPaused,reason:entryPaused?'Recent verified paper cohort deteriorated; entries paused':'Paper entries subject to qualified signals, cohort loss gates, and risk checks',cash:Number(ledger.cash),expectedCash:Number(expectedCash.toFixed(2)),cashDifference,openPositions:ledger.trades.filter(t=>t.status==='OPEN').length,invalidOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&!validOpenPaperPosition(t)).length,duplicatePaperTradeIdCount:duplicateIds.size,duplicateOpenPaperPositionCount:ledger.trades.filter(t=>t.status==='OPEN'&&hasDuplicateId(t)).length,recordedPnl:Number(recordedPnl.toFixed(2)),openCost:Number(openCost.toFixed(2)),resolvedRecordCount:resolvedRecords.length,reconciledRecordCount:verifiedAccountingRecords.length,unreconciledRecordCount:unreconciledRecords.length,unverifiedSettledRecordCount:ledger.trades.filter(t=>t.status==='SETTLED'&&t.outcomeVerification!==SETTLEMENT_VERIFICATION).length,settlementConflictCount:ledger.trades.filter(t=>t.outcomeConflict===true).length,reconciledPnl:pnlSum(verifiedAccountingRecords),unreconciledRecordedPnl:pnlSum(unreconciledRecords),excludedResearchRecordCount:excludedFromEligible.length,excludedResearchRecordedPnl:pnlSum(excludedFromEligible),note:'Diagnostic assumes initial virtual cash of $1,000 and a complete ledger; investigate differences without rewriting history.'});
  // Keep quote-based signal observations flowing during the paper-entry safety pause.
  // No simulated positions may open while the circuit breaker is active.
@@ -172,7 +173,7 @@ export default async()=>{
    const validHistory=fresh&&records.length>=2&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t))&&Number(records.at(-1).t)-Number(records[0].t)>=45000;
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
    const assetResearch={model:modelValidated(assetModel)?assetModel:modelValidated(globalModel)?globalModel:assetModel||globalModel,status:training?.perAsset?.[asset]||training};
-   const signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (2 spanning at least 45s required)'};
+   let signal=validHistory?gatePaperEntry({...paperSignal(m,records,null,now,assetResearch),asset},stats):{action:'WAIT',score:0,reason:'Insufficient fresh market history: '+records.length+' samples (2 spanning at least 45s required)'};
    await hdb.setJSON('signals/'+asset,{...signal,asset,updatedAt:now});
    // Immutable first eligible observation per round, including WAIT decisions.
    // Store both hypothetical sides so avoided losses and missed wins can be measured.
@@ -194,7 +195,23 @@ export default async()=>{
     roundAudit.markets[asset]={status:'PAPER_ENTRIES_PAUSED',ticker:m.ticker,signal:signal.action,qualified:['BUY UP','BUY DOWN'].includes(signal.action),score:Number.isFinite(Number(signal.score))?Number(signal.score):null,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null,quote:{yesAsk,noAsk,yesBid,noBid},reason:'Safety circuit breaker: research continues; no new paper entries'};
     continue;
    }
-   // Lock adds confirmation; Extreme increases only per-contract frequency, not model or quote safety.
+   let experimentalEntry=false;
+   if(mode!=='extreme'&&signal.validation==='MODEL_NOT_VALIDATED'){
+    const evidence=signal.entryResearch;
+    const trend=mode==='lock'?engineBTrend(m,records,now):null;
+    const score=Math.min(90,Math.round(40+Math.abs(evidence.momentumCents)*3+evidence.agreement*20));
+    const cohort=stats.coverageByStrategy?.[asset+'_'+signal.side];
+    const repeatedLosses=cohort?.trades>=8&&cohort.roi<=0;
+    const confirmed=mode==='lock'
+     ? trend.side===signal.side&&evidence.agreement>=0.75&&score>=75
+     : evidence.agreement>=2/3;
+    if(confirmed&&!repeatedLosses&&previous.length===0){
+     experimentalEntry=true;
+     signal={...signal,action:signal.side==='up'?'BUY UP':'BUY DOWN',score,
+      validation:'PAPER EXPERIMENT',reason:'Directional confirmation for simulated entry'};
+    }
+   }
+   // Lock also requires a stronger signal score for validated entries.
    if(mode==='lock'&&['BUY UP','BUY DOWN'].includes(signal.action)&&Number(signal.score)<75){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'LOCK mode requires signal score at least 75',signal:signal.action};continue;}
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
@@ -220,10 +237,10 @@ export default async()=>{
     continue;
    }
    if(ask<=0||ask>=100){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Selected side not tradable'};continue;}
-   const entryBasis='QUALIFIED PAPER SIGNAL';
+   const entryBasis=experimentalEntry?'DIRECTIONAL PAPER EXPERIMENT':'QUALIFIED PAPER SIGNAL';
    const qty=Math.floor(Math.min(PAPER_STAKE_DOLLARS,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
    roundAudit.markets[asset]={status:'ENTERED',ticker:m.ticker,side,ask,entryBasis,entries:previous.length+1};
-   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
+   ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,entryMode:mode,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:!experimentalEntry,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
  }
  const tradesThisRound=ledger.trades.filter(t=>Math.floor(Number(t.at)/900000)===round);
