@@ -112,6 +112,7 @@ function sampleChampion(now){
  }
 }
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
+let marketDiscovery={status:'NOT_ATTEMPTED',at:null,openMarkets:0,eligibleMarkets:0,errorCode:null};
 const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,heartbeatFailures:0};
 async function persist(){
  dirty=false;
@@ -161,9 +162,12 @@ function connect(){
 }
 async function discover(now){
  const data=await get('/markets?series_ticker=KXBTC15M&status=open&limit=20');
- const selected=(data.markets||[]).filter(row=>row.ticker?.startsWith('KXBTC15M-')&&
+ const rows=Array.isArray(data.markets)?data.markets:[];
+ const eligible=rows.filter(row=>row.ticker?.startsWith('KXBTC15M-')&&
   Date.parse(row.close_time)>now&&Date.parse(row.close_time)-now<=900000)
-  .sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time))[0];
+  .sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time));
+ const selected=eligible[0];
+ marketDiscovery={status:selected?'MARKET_SELECTED':'NO_ELIGIBLE_MARKET',at:now,openMarkets:rows.length,eligibleMarkets:eligible.length,errorCode:null};
  if(selected?.ticker!==market?.ticker){ws?.terminate();ws=null;book=null;}
  market=selected;
  if(market&&!state.rounds[market.ticker]){
@@ -284,7 +288,12 @@ async function run(){
   tape.snapshot();
   if(now>=nextDiscovery||market&&Date.parse(market.close_time)<=now){
    nextDiscovery=now+5000;
-   try{await discover(now)}catch{reject('DISCOVERY_FAILED');}
+   try{await discover(now)}catch(error){
+    const code=/^KALSHI_HTTP_[0-9]{3}$/.test(error?.message||'')?error.message:
+     error?.name==='TimeoutError'?'DISCOVERY_TIMEOUT':'DISCOVERY_TRANSPORT_OR_PARSE';
+    marketDiscovery={...marketDiscovery,status:'ERROR',at:now,errorCode:code};
+    reject('DISCOVERY_FAILED');
+   }
   }
   if(ws?.readyState===WebSocket.OPEN&&Date.now()-lastDepthAt>10000){
    counters.depthTimeouts++;
@@ -314,7 +323,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,marketDiscovery,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
