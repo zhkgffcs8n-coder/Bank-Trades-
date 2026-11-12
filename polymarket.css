@@ -24,3 +24,9 @@
 .poly-calls [data-side="DOWN"] { color: #ff8091; }
 #poly-call-history { max-height: 10rem; overflow: auto; padding-inline-start: 1.5rem; }
 #poly-call-history li { padding-block: 4px; }
+.poly-tracker { margin-block: 16px; }
+.poly-tracker article { border: 1px solid #385475; border-radius: 10px; padding: 12px; margin-block: 8px; }
+.poly-tracker strong { display: block; font-size: 1.15rem; }
+.poly-tracker strong[data-side="UP"] { color: #50e6b4; }
+.poly-tracker strong[data-side="DOWN"] { color: #ff8091; }
+.poly-tracker article p { margin-block: 6px; }
