@@ -41,3 +41,12 @@ test('STOP prevents Demo rearm before reading or writing exchange state',async()
   checkStopped:async()=>true,clock:()=>now});
  assert.equal(result.status,'DEMO_EXECUTION_TEST_STOPPED');
 });
+
+test('same owner request cannot restart a completed Demo run',async()=>{
+ const state=initialState();state.demo={finished:true,status:'DEMO_EXECUTION_TEST_VERIFIED',testRunId:id};
+ const result=await runDemoLifecycle({repo:repo(state),client:{
+  snapshot:async()=>assert.fail('duplicate request must not read or trade'),
+  create:async()=>assert.fail('duplicate request must not trade')},
+  executionTest:true,testRunId:id,clock:()=>now});
+ assert.equal(result,state.demo);
+});
