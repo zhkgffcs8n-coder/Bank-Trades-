@@ -14,8 +14,8 @@ export function sanitizeDemoProbeReceipt(raw){
   transportCause:causes.has(raw.transportCause)?raw.transportCause:null,
   commit:typeof raw.commit==='string'&&/^[a-f0-9]{7,40}$/.test(raw.commit)?raw.commit:null};
 }
-export async function readSanitizedDemoProbe(store){
+export async function readSanitizedDemoProbe(store,key='saved-balance-probe'){
  if(!store)return {status:'PROBE_STORE_UNCONFIGURED'};
- try{return sanitizeDemoProbeReceipt(await store.get('saved-balance-probe',{type:'json'}));}
+ try{return sanitizeDemoProbeReceipt(await store.get(key,{type:'json'}));}
  catch{return {status:'PROBE_RECEIPT_READ_UNAVAILABLE'};}
 }
