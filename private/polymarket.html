@@ -33,8 +33,11 @@
   </section>
   <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
     <h2 id="poly-live-title">Live Market Signals</h2>
-    <p>Engine agreement across each 15-minute market.</p>
-    <div id="poly-live-rows"></div>
+    <p id="poly-feed-state" role="status">Loading quotes…</p>
+    <table class="poly-market-table">
+      <thead><tr><th scope="col">Market</th><th scope="col">UP ask</th><th scope="col">DOWN ask</th><th scope="col">Signal</th></tr></thead>
+      <tbody id="poly-live-rows"></tbody>
+    </table>
       <section class="poly-tracker" aria-labelledby="poly-tracker-title">
         <h3 id="poly-tracker-title">Live Position Tracker</h3>
         <p id="poly-tracker-empty">Waiting for a BUY call.</p>

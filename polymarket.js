@@ -19,6 +19,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const tracker = document.querySelector('#poly-tracker-positions');
   const trackerEmpty = document.querySelector('#poly-tracker-empty');
   const livePanel = document.querySelector('#poly-live-panel');
+  const feedState = document.querySelector('#poly-feed-state');
   const liveRows = document.querySelector('#poly-live-rows');
   const historyEmpty = document.querySelector('#poly-history-empty');
   const historyList = document.querySelector('#poly-call-history');
@@ -154,32 +155,36 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   }
 
   function renderLiveSignals() {
-    const cards = coins.map(coin => {
+    let liveCount = 0;
+    const rows = coins.map(coin => {
       const market = freshMarket(coin);
+      if (market) liveCount += 1;
       const calls = Object.entries(engines).map(([key, name]) => currentCall(coin, market, key, name));
       const active = calls.filter(call => call.position && !call.position.exit);
       const sides = new Set(active.map(call => call.side));
       const entries = active.filter(call => call.action.startsWith('BUY'));
-      let action = calls.some(call => call.action === 'WAIT') ? 'WAIT FOR SIGNAL' : 'NO NEW ENTRY';
-      if (!market) action = 'WAIT FOR LIVE QUOTES';
-      else if (sides.size > 1) action = 'ENGINES DISAGREE · NO SHARED CALL';
-      else if (entries.length >= 2) action = `BUY ${entries[0].side} · ${entries.length} ENGINES`;
-      else if (active.length) action = `${active[0].side} TRACKED · SEE ENGINE DETAILS`;
-      const card = document.createElement('article');
-      const label = document.createElement('strong');
-      label.textContent = coin;
-      const signal = document.createElement('p');
-      signal.textContent = action;
-      if (action.startsWith('BUY')) {
-        const side = entries[0].side.toLowerCase();
-        const ask = market.quotes.find(quote => quote.label.toLowerCase() === side)?.ask;
-        if (Number.isFinite(ask)) signal.textContent += ` · Ask ${formatPrice(ask)}`;
-        signal.className = 'poly-agreement-buy';
+      let action = calls.some(call => call.action === 'WAIT') ? 'WAIT' : 'NO ENTRY';
+      if (!market) action = 'NO QUOTE';
+      else if (sides.size > 1) action = 'DISAGREE';
+      else if (entries.length >= 2) action = `BUY ${entries[0].side}`;
+      else if (active.length >= 2) action = `HOLD ${active[0].side}`;
+      else if (active.length) action = `ONE ${active[0].side} CALL`;
+
+      const row = document.createElement('tr');
+      const marketLabel = document.createElement('th');
+      marketLabel.scope = 'row';
+      marketLabel.textContent = coin;
+      row.append(marketLabel);
+      for (const outcome of ['Up', 'Down']) {
+        const ask = market?.quotes.find(quote => quote.label === outcome)?.ask;
+        row.insertCell().textContent = Number.isFinite(ask) ? formatPrice(ask) : '—';
       }
-      card.append(label, actionBadge(signal.textContent));
-      return card;
+      row.insertCell().append(actionBadge(action));
+      return row;
     });
-    liveRows.replaceChildren(...cards);
+    const nextStatus = liveCount ? `Live quotes · ${liveCount}/${coins.length} markets` : 'Waiting for fresh Polymarket quotes';
+    if (feedState.textContent !== nextStatus) feedState.textContent = nextStatus;
+    liveRows.replaceChildren(...rows);
   }
 
   function renderSignals(market) {
