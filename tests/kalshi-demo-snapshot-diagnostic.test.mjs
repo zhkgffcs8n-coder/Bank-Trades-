@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync} from 'node:crypto';
-import {createDemoSnapshotDiagnostic,probeDemoSnapshot,demoSnapshotProbeReceipt} from '../netlify/functions/kalshi-demo-snapshot-diagnostic.mjs';
+import {createDemoSnapshotDiagnostic,probeDemoSnapshot,demoSnapshotProbeReceipt,shouldProbeTerminalDemo} from '../netlify/functions/kalshi-demo-snapshot-diagnostic.mjs';
 
 test('independent Demo probe reports all phases and redacts exchange responses',async()=>{
  const {privateKey}=generateKeyPairSync('ed25519');
@@ -48,4 +48,14 @@ test('independent snapshot receipt is sanitized and does not claim release certi
  });
  assert.doesNotMatch(JSON.stringify(receipt),/never-emit/);
  assert.equal(demoSnapshotProbeReceipt({...result,ok:true,operations:[]}).status,'DEMO_SNAPSHOT_READS_OK');
+});
+
+test('terminal Demo state triggers periodic read-only probe without resetting lifecycle',()=>{
+ const now=Date.parse('2026-11-12T05:30:00Z');
+ const finished={status:'DEMO_LIFECYCLE_FAILED',finished:true};
+ const active={status:'DEMO_ENTRY_RECONCILED',finished:false};
+ assert.equal(shouldProbeTerminalDemo(finished,null,now),true);
+ assert.equal(shouldProbeTerminalDemo(active,null,now),false);
+ assert.equal(shouldProbeTerminalDemo(finished,{checkedAt:new Date(now-9*60000).toISOString()},now),false);
+ assert.equal(shouldProbeTerminalDemo(finished,{checkedAt:new Date(now-10*60000).toISOString()},now),true);
 });
