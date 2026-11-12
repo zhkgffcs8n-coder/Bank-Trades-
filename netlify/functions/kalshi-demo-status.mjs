@@ -3,6 +3,8 @@ import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {sealKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {runScheduledDemo} from './kalshi-demo-lifecycle.mjs';
 import {checkDemoConnection} from './kalshi-demo-check.mjs';
+import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
+import {probeDemoSnapshot,demoSnapshotProbeReceipt} from './kalshi-demo-snapshot-diagnostic.mjs';
 
 export default async req=>{try{
  const store=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
@@ -36,6 +38,20 @@ export default async req=>{try{
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const {action,side,keyId,privateKeyPem}=await req.json();
+ if(action==='PROBE_DEMO_SNAPSHOT'){
+  // Independent, owner-authenticated read-only probe. Does not touch terminal
+  // Demo lifecycle state or enable exchange writes.
+  const saved=await store.get('uploaded-connection',{type:'json'});
+  if(saved?.status!=='DEMO_AUTHENTICATED')fail(409,'Authenticated Demo credentials required');
+  let credentials;
+  try{
+   credentials=openKalshiCredentials({userId:'demo-'+user.id,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
+  }catch{return json({status:'DEMO_CREDENTIAL_LOAD_FAILED'},503);}
+  const result=await probeDemoSnapshot(credentials);
+  const receipt=demoSnapshotProbeReceipt(result,process.env.COMMIT_REF||null);
+  await store.setJSON('saved-balance-probe',receipt);
+  return json({...result,status:receipt.status,commit:receipt.commit},result.ok?200:503);
+ }
  if(['DEMO_EXECUTION_TEST','STOP_DEMO_EXECUTION_TEST','SELL_DEMO_EXECUTION_TEST'].includes(action)){
   const key='execution-test/authorization';
   if(action==='STOP_DEMO_EXECUTION_TEST'){
