@@ -1,3 +1,4 @@
+import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
 import {getStore} from '@netlify/blobs';
 import {demoWakeLifecycleStatus,demoWakeStatusForOutcome,demoWakeMarketRejectionReason,demoWakeFailureStage,demoWakeFailureCode} from '../../src/demo-wake-outcome.mjs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
@@ -27,7 +28,7 @@ export async function runScheduledDemo(worker,manual={}){
   if(shouldProbeTerminalDemo(lastLifecycle,previousProbe)){
    try{
     const probe=await probeDemoSnapshot(credentials);
-    await db.setJSON('saved-snapshot-probe',{...demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null),credentialCheckedAt:saved.checkedAt??null});
+    await db.setJSON('saved-snapshot-probe',{...demoSnapshotProbeReceipt(probe,liveBuildCommit()),credentialCheckedAt:saved.checkedAt??null});
    }catch{console.warn('DEMO_INDEPENDENT_PROBE_UNAVAILABLE');}
   }
   repo=liveRepository(db,'demo-lifecycle-v1',{
@@ -74,7 +75,7 @@ export async function runScheduledDemo(worker,manual={}){
    }
   };
   const invokedAt=Date.now();
-  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,testSide:authorization?.side,entryOnly:manual.entryOnly,exitOnly:manual.exitOnly,checkStopped,commit:process.env.COMMIT_REF||null});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,testSide:authorization?.side,entryOnly:manual.entryOnly,exitOnly:manual.exitOnly,checkStopped,commit:liveBuildCommit()});
   await db.setJSON('lifecycle-status',outcome);
   const headers={'x-demo-lifecycle-status':demoWakeStatusForOutcome(outcome,invokedAt)};
   if(outcome?.status==='DEMO_CHAMPION_CONTRACT_INELIGIBLE')
