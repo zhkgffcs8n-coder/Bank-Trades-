@@ -1,4 +1,5 @@
 import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
+import {demoAuthorizationRevoked} from '../../src/demo-authorization-fence.mjs';
 import {getStore} from '@netlify/blobs';
 import {demoWakeLifecycleStatus,demoWakeStatusForOutcome,demoWakeMarketRejectionReason,demoWakeFailureStage,demoWakeFailureCode} from '../../src/demo-wake-outcome.mjs';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
@@ -48,7 +49,9 @@ export async function runScheduledDemo(worker,manual={}){
   const executionTest=authorization?.ownerId===id;
   if(manual.entryOnly&&(!executionTest||authorization.side!==manual.testSide))
    return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_SELECTION_CHANGED'}});
-  const checkStopped=async()=>(await db.get(testKey,{type:'json'}))?.ownerId!==id;
+  // A newer same-owner Demo authorization supersedes this request; a stale
+  // in-flight lifecycle must not submit against the replacement UUID.
+  const checkStopped=async()=>demoAuthorizationRevoked(await db.get(testKey,{type:'json'}),authorization,id);
   const findMarket=async(excluded,ticker)=>{
    if(!ticker&&executionTest)return findDemoLifecycleMarket(readOnly,excluded,Date.now,reason=>{marketRejectionReason=reason;},authorization.side??'UP');
    try{
