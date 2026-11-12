@@ -231,8 +231,12 @@ export default async()=>{
  let coverageEntry=tradesThisRound.some(t=>t.extremeCoverage===true);
  if(mode==='extreme'&&!qualifiedEntry&&!coverageEntry){
   const entryAt=Date.now();
-  // Prefer BTC, then the remaining configured assets in scan order.
-  const quote=coverageQuotes.find(q=>entryAt-now<=30000&&q.expiresAt-entryAt>=240000&&q.ask<=ledger.cash*100);
+  // Prefer the configured scan order unless reconciled paper results show repeated losses.
+  const lossPenalty=({asset,side})=>{
+   const cohort=stats.coverageByStrategy?.[asset+'_'+side];
+   return cohort?.trades>=8&&cohort.losses>=3&&cohort.roi<0?1:0;
+  };
+  const quote=coverageQuotes.sort((a,b)=>lossPenalty(a)-lossPenalty(b)).find(q=>entryAt-now<=30000&&q.expiresAt-entryAt>=240000&&q.ask<=ledger.cash*100);
   if(quote&&Math.floor(entryAt/900000)===round){
    const {asset,ticker,side,ask,expiresAt,entryQuote}=quote;
    const qty=Math.floor(Math.min(PAPER_STAKE_DOLLARS*100,Math.round(ledger.cash*100))/ask);
