@@ -50,6 +50,9 @@ export function demoSnapshotProbeReceipt(result,commit=null){
  return {
   status:result.ok?'DEMO_SNAPSHOT_READS_OK':'DEMO_SNAPSHOT_READS_FAILED',
   transportCause:firstFailure?.failureCategory||null,
+  // Persist only a fixed phase and numeric HTTP status; never persist exchange bodies.
+  failedPhase:reads.some(([phase])=>phase===firstFailure?.phase)?firstFailure.phase:null,
+  httpStatus:Number.isSafeInteger(firstFailure?.httpStatus)&&firstFailure.httpStatus>=100&&firstFailure.httpStatus<=599?firstFailure.httpStatus:null,
   requestId:result.correlationId,
   operation:'INDEPENDENT_READ_ONLY_SNAPSHOT',
   checkedAt:result.checkedAt,
