@@ -67,3 +67,8 @@
 .poly-action-watch { color: #b5c8e8; background: #1b2a43; }
 #poly-call-history li > div { margin-bottom: 4px; }
 .poly-tracker article small { display: block; color: #ffe18b; margin-bottom: 4px; }
+.venue-card .poly-market-table { font-size: .78rem; }
+.poly-market-table tbody tr { border-top: 1px solid #385475; }
+.venue-card .poly-market-table th, .venue-card .poly-market-table td { padding: 6px 3px; }
+.poly-market-table th[scope="row"] { color: #ffe18b; }
+.poly-market-table .poly-action { font-size: .72rem; }
