@@ -30,3 +30,14 @@
 .poly-tracker strong[data-side="UP"] { color: #50e6b4; }
 .poly-tracker strong[data-side="DOWN"] { color: #ff8091; }
 .poly-tracker article p { margin-block: 6px; }
+.venue-desk.poly-workspace { display: grid; width: min(100% - 32px, 1200px); gap: 12px 20px; align-items: start; }
+.poly-workspace > nav, .poly-workspace > h1 { grid-column: 1 / -1; }
+.poly-live-panel { grid-row: 4; }
+.poly-live-panel article { border-top: 1px solid #385475; padding-block: 10px; }
+.poly-live-panel article p { margin: 4px 0 0; }
+.poly-agreement-buy { color: #50e6b4; font-weight: 700; }
+#poly-signals summary { cursor: pointer; margin-block: 12px; }
+@media (min-width: 760px) {
+  .venue-desk.poly-workspace { grid-template-columns: minmax(0, 3fr) minmax(260px, 2fr); }
+  .poly-live-panel { grid-column: 2; position: sticky; top: 12px; }
+}

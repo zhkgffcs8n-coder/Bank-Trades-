@@ -18,6 +18,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const engines = { A: 'NOVA', B: 'VOLT', C: 'KITSUNE' };
   const tracker = document.querySelector('#poly-tracker-positions');
   const trackerEmpty = document.querySelector('#poly-tracker-empty');
+  const livePanel = document.querySelector('#poly-live-panel');
   const liveRows = document.querySelector('#poly-live-rows');
   const historyEmpty = document.querySelector('#poly-history-empty');
   const historyList = document.querySelector('#poly-call-history');
@@ -139,22 +140,32 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   }
 
   function renderLiveSignals() {
-    const rows = coins.flatMap(coin => {
+    const cards = coins.map(coin => {
       const market = freshMarket(coin);
-      return Object.entries(engines).map(([key, name]) => {
-        const { position, action } = currentCall(coin, market, key, name);
-        const row = document.createElement('tr');
-        row.insertCell().textContent = coin;
-        row.insertCell().textContent = name;
-        const signal = row.insertCell();
-        signal.textContent = !market && position && !position.exit ? `${action} · BID UNAVAILABLE` : action;
-        if (action.startsWith('BUY') || action.startsWith('TAKE PROFIT')) signal.dataset.side = 'UP';
-        if (action.startsWith('SELL FAST')) signal.dataset.side = 'DOWN';
-        row.insertCell().textContent = position ? formatPrice(position.entry / 100) : '—';
-        return row;
-      });
+      const calls = Object.entries(engines).map(([key, name]) => currentCall(coin, market, key, name));
+      const active = calls.filter(call => call.position && !call.position.exit);
+      const sides = new Set(active.map(call => call.side));
+      const entries = active.filter(call => call.action.startsWith('BUY'));
+      let action = calls.some(call => call.action === 'WAIT') ? 'WAIT FOR SIGNAL' : 'NO NEW ENTRY';
+      if (!market) action = 'WAIT FOR LIVE QUOTES';
+      else if (sides.size > 1) action = 'ENGINES DISAGREE · NO SHARED CALL';
+      else if (entries.length >= 2) action = `BUY ${entries[0].side} · ${entries.length} ENGINES`;
+      else if (active.length) action = `${active[0].side} TRACKED · SEE ENGINE DETAILS`;
+      const card = document.createElement('article');
+      const label = document.createElement('strong');
+      label.textContent = coin;
+      const signal = document.createElement('p');
+      signal.textContent = action;
+      if (action.startsWith('BUY')) {
+        const side = entries[0].side.toLowerCase();
+        const ask = market.quotes.find(quote => quote.label.toLowerCase() === side)?.ask;
+        if (Number.isFinite(ask)) signal.textContent += ` · Ask ${formatPrice(ask)}`;
+        signal.className = 'poly-agreement-buy';
+      }
+      card.append(label, signal);
+      return card;
     });
-    liveRows.replaceChildren(...rows);
+    liveRows.replaceChildren(...cards);
   }
 
   function renderSignals(market) {
@@ -234,6 +245,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const nextStatus = market ? '' : 'Waiting for live Polymarket quotes';
     if (status.textContent !== nextStatus) status.textContent = nextStatus;
     renderSignals(market);
+    livePanel.hidden = !toggle.checked;
     if (toggle.checked) renderLiveSignals();
     if (!market) return;
     link.href = `https://polymarket.com/event/${market.slug}`;

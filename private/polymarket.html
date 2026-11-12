@@ -10,7 +10,7 @@
 </head>
 <body>
 <header><a class="brand" href="/dashboard">BANK <span>TRADES</span> PRO</a></header>
-<main class="venue-desk">
+<main class="venue-desk poly-workspace">
   <nav aria-label="Market venue">
     <a href="/dashboard">Kalshi</a>
     <a href="/dashboard?venue=polymarket" aria-current="page">Polymarket</a>
@@ -25,17 +25,14 @@
     <section id="poly-signals" hidden aria-labelledby="poly-signal-title">
       <h3 id="poly-signal-title">Polymarket Pro Scalper</h3>
       <p id="poly-signal-status"></p>
+      <details><summary>Individual engine calls and positions</summary>
       <section class="poly-tracker" aria-labelledby="poly-tracker-title">
         <h3 id="poly-tracker-title">Live Position Tracker</h3>
         <p id="poly-tracker-empty">Waiting for a BUY call.</p>
         <div id="poly-tracker-positions"></div>
       </section>
       <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Entry</th><th scope="col">Bid</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
-      <h3>Live Market Signals</h3>
-      <table class="poly-calls">
-        <thead><tr><th scope="col">Coin</th><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Entry</th></tr></thead>
-        <tbody id="poly-live-rows"></tbody>
-      </table>
+      </details>
       <h3>Live Call &amp; Flip History</h3>
       <p id="poly-history-empty">No Polymarket calls recorded in this browser yet.</p>
       <ol id="poly-call-history"></ol>
@@ -48,6 +45,11 @@
     </table>
     <a id="poly-link" hidden>View market and resolution rules</a>
   </section>
+  <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
+    <h2 id="poly-live-title">Live Market Signals</h2>
+    <p>Engine agreement across each 15-minute market.</p>
+    <div id="poly-live-rows"></div>
+  </aside>
 </main>
 </body>
 </html>
