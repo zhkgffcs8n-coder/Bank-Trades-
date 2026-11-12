@@ -43,6 +43,7 @@ test('independent snapshot receipt is sanitized and does not claim release certi
  const receipt=demoSnapshotProbeReceipt(result,'test-build');
  assert.deepEqual(receipt,{
   status:'DEMO_SNAPSHOT_READS_FAILED',transportCause:'AUTHENTICATION_OR_PERMISSION',
+  failedPhase:'BALANCE',httpStatus:401,
   requestId:'safe-correlation-id',operation:'INDEPENDENT_READ_ONLY_SNAPSHOT',
   checkedAt:'2026-11-11T21:22:00.000Z',durationMs:18,commit:'test-build'
  });
@@ -58,4 +59,15 @@ test('terminal Demo state triggers periodic read-only probe without resetting li
  assert.equal(shouldProbeTerminalDemo(active,null,now),false);
  assert.equal(shouldProbeTerminalDemo(finished,{checkedAt:new Date(now-9*60000).toISOString()},now),false);
  assert.equal(shouldProbeTerminalDemo(finished,{checkedAt:new Date(now-10*60000).toISOString()},now),true);
+});
+
+
+test('Demo probe receipt excludes invalid HTTP statuses and unrecognized phase names',()=>{
+ const base={ok:false,correlationId:'safe-id',checkedAt:'2026-11-12T06:00:00Z',operations:[
+  {phase:'SECRET_INTERNAL_PHASE',httpStatus:999,failureCategory:'REQUEST_FAILED',durationMs:10}
+ ]};
+ const receipt=demoSnapshotProbeReceipt(base,'safe-sha');
+ assert.equal(receipt.failedPhase,null);
+ assert.equal(receipt.httpStatus,null);
+ assert.doesNotMatch(JSON.stringify(receipt),/SECRET_INTERNAL_PHASE|999/);
 });
