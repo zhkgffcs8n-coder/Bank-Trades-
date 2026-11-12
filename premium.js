@@ -421,7 +421,7 @@ function syncSignals(){
    const hue=flip.direction==='UP'?'#4ade80':'#fb7185';
    icon.style.cssText='display:inline-block;margin-left:6px;padding:4px 7px;border-radius:8px;border:2px solid '+hue+';color:'+hue+';font-size:13px;font-weight:900;white-space:nowrap;box-shadow:0 0 9px '+hue+'66';
    icon.textContent=(flip.recentFlip?'⚡ FLIP DETECTED ':'👀 FLIP WATCH ')+(flip.direction==='UP'?'▲ UP':'▼ DOWN');
-   if(flip.recentFlip){icon.style.animation='btFlipPulse .7s ease-in-out 3';icon.setAttribute('aria-live','polite');}
+   if(flip.recentFlip&&tr.dataset.animatedFlip!==ticker+':'+flip.direction){tr.dataset.animatedFlip=ticker+':'+flip.direction;icon.style.animation='btFlipPulse .7s ease-in-out 3';icon.setAttribute('aria-live','polite');}
    icon.title=(flip.recentFlip?'Observed momentum reversed this round. ':'Current directional watch; not necessarily a reversal. ')+(flip.observed?'Observed price momentum.':'Quote-implied direction only.')+' Not a verified entry.';
    badge.after(icon);
   }
@@ -548,7 +548,9 @@ async function update(){
  const unavailable=d.results.filter(x=>x.available===false);if(unavailable.length===d.results.length)throw Error('All Kalshi upstream requests failed: '+unavailable.slice(0,2).map(x=>x.error||'unknown').join('; '));
  latestPositionQuotes=d.results;latestPositionQuoteAt=Date.parse(d.fetched_at);
  try { monitorPaperExits(d.results,age); } catch (error) { console.warn('Paper monitoring error',error); }
- $('premiumRows').replaceChildren();$('premiumStrip').replaceChildren();
+ const table=$('premiumRows');
+ if(!table.querySelector('tr[data-asset]'))table.replaceChildren();
+ $('premiumStrip').replaceChildren();
  let open=0;
  for(const asset of assets){
   const row=d.results.find(x=>x.asset===asset),m=row?.market;
@@ -556,9 +558,15 @@ async function update(){
   const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
   const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
   if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});}}
-  const tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
+  let tr=table.querySelector('tr[data-asset="'+asset+'"]');
+  if(!tr){
+  tr=document.createElement('tr');tr.dataset.asset=asset;tr.classList.toggle('selected-market',asset===selected);tr.tabIndex=0;tr.setAttribute('aria-label','Show '+asset+' quote chart');const select=()=>{selected=asset;window.dispatchEvent(new CustomEvent('banktrades:select',{detail:asset}));document.querySelectorAll('#premiumRows tr').forEach(x=>x.classList.toggle('selected-market',x===tr));$('premiumChartTitle').textContent=asset+' contract mid-price · browser session';const sig=engineSignals.find(x=>x.asset===asset);$('premiumAI').textContent=sig?asset+' · '+(sig.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN')+' · '+(sig.reason||'No reason provided'):asset+' · Waiting for signal evaluation.';chart()};tr.addEventListener('click',select);tr.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select()}});cell(tr,asset);cell(tr,valid?ya.toFixed(1)+'¢':'—');cell(tr,valid?na.toFixed(1)+'¢':'—');
   const state=cell(tr,valid&&active?(ya<=na?'↑ UP WATCH':'↓ DOWN WATCH'):valid?'CHECK ROUND':'NO QUOTE');state.className='premium-action';state.title='Directional quote watch, not a filled order or guaranteed profit';
-  cell(tr,m?remaining:'—');$('premiumRows').append(tr);
+  cell(tr,m?remaining:'—');table.append(tr);
+  }
+  tr.children[1].textContent=valid?ya.toFixed(1)+'¢':'—';
+  tr.children[2].textContent=valid?na.toFixed(1)+'¢':'—';
+  tr.children[4].textContent=m?remaining:'—';
   if(valid&&active){open++;const series=history.get(asset)||[];if(series.length&&series[series.length-1].ticker!==m.ticker)series.length=0;series.push({v:(ya+yb)/2,ticker:m.ticker});if(series.length>100)series.shift();history.set(asset,series)}
   if(assets.includes(asset)){
    const tile=document.createElement('div');tile.className='premium-tile';
