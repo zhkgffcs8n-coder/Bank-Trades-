@@ -68,3 +68,11 @@ test('missing IDs are quarantined before both paper payout and early exit',()=>{
  const exitPayout=source.indexOf('ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;');
  assert.ok(payoutGuard>=0&&payout>payoutGuard&&exitGuard>payout&&exitPayout>exitGuard);
 });
+
+
+test('Balanced and Lock do not promote unvalidated research into automatic paper buys',()=>{
+ const source=readFileSync(new URL('../netlify/functions/kaibot-runner.mjs',import.meta.url),'utf8');
+ assert.match(source,/const experimentalEntry=false;/);
+ assert.doesNotMatch(source,/validation:'PAPER EXPERIMENT',reason:'Directional confirmation for simulated entry'/);
+ assert.match(source,/if\(!\['BUY UP','BUY DOWN'\]\.includes\(signal\.action\)\)/);
+});

@@ -195,22 +195,10 @@ export default async()=>{
     roundAudit.markets[asset]={status:'PAPER_ENTRIES_PAUSED',ticker:m.ticker,signal:signal.action,qualified:['BUY UP','BUY DOWN'].includes(signal.action),score:Number.isFinite(Number(signal.score))?Number(signal.score):null,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null,quote:{yesAsk,noAsk,yesBid,noBid},reason:'Safety circuit breaker: research continues; no new paper entries'};
     continue;
    }
-   let experimentalEntry=false;
-   if(mode!=='extreme'&&signal.validation==='MODEL_NOT_VALIDATED'){
-    const evidence=signal.entryResearch;
-    const trend=mode==='lock'?engineBTrend(m,records,now):null;
-    const score=Math.min(90,Math.round(40+Math.abs(evidence.momentumCents)*3+evidence.agreement*20));
-    const cohort=stats.coverageByStrategy?.[asset+'_'+signal.side];
-    const repeatedLosses=cohort?.trades>=8&&cohort.roi<=0;
-    const confirmed=mode==='lock'
-     ? trend.side===signal.side&&evidence.agreement>=0.75&&score>=75
-     : evidence.agreement>=2/3;
-    if(confirmed&&!repeatedLosses&&previous.length===0){
-     experimentalEntry=true;
-     signal={...signal,action:signal.side==='up'?'BUY UP':'BUY DOWN',score,
-      validation:'PAPER EXPERIMENT',reason:'Directional confirmation for simulated entry'};
-    }
-   }
+   // Balanced and Lock must not promote unvalidated directional research into
+   // automatic paper entries. Preserve research observations and the ledger;
+   // only the shared engine's qualified BUY actions can open positions.
+   const experimentalEntry=false;
    // Lock also requires a stronger signal score for validated entries.
    if(mode==='lock'&&['BUY UP','BUY DOWN'].includes(signal.action)&&Number(signal.score)<75){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'LOCK mode requires signal score at least 75',signal:signal.action};continue;}
    // Only qualified shared-engine signals can open automatic paper positions.
