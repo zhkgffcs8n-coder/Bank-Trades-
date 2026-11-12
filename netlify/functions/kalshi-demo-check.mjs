@@ -1,3 +1,4 @@
+import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
 import {randomUUID,createPrivateKey} from 'node:crypto';
 import {openKalshiCredentials} from './lib/kalshi-credential-envelope.mjs';
 import {shouldRefreshSavedDemoBalanceProbe} from './lib/demo-balance-probe-policy.mjs';
@@ -42,7 +43,7 @@ export async function checkDemoConnection(env=process.env,fetchImpl=fetch,diagno
 
 export default async()=>{
  const store=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
- const commit=process.env.COMMIT_REF||null;
+ const commit=liveBuildCommit();
  const saved=await store.get('uploaded-connection',{type:'json'});
  if(saved?.status==='DEMO_AUTHENTICATED'){
   // Run an independent full read-only account snapshot every ten minutes,
