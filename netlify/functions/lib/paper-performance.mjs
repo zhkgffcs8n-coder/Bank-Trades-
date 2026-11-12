@@ -137,6 +137,16 @@ export function performance(trades=[]){
  const gateRecent50=summarize(gateOrdered.slice(-50));
  const gatePrevious50=summarize(gateOrdered.slice(-100,-50));
  const gateByStrategy=Object.fromEntries(Object.entries(gateGroups).map(([key,rows])=>[key,summarize(rows)]));
+ // Keep Extreme coverage feedback separate from the qualified signal gate.
+ const coverageGroups={};
+ for(const t of unique){
+  if(t?.extremeCoverage!==true||typeof t.id!=='string'||!t.id.trim()||!reconciledPaperTrade(t))continue;
+  const key=t.asset+'_'+t.side;
+  (coverageGroups[key]??=[]).push(t);
+ }
+ const coverageByStrategy=Object.fromEntries(Object.entries(coverageGroups).map(([key,rows])=>[
+  key,summarize(rows.sort((a,b)=>Number(a.exitedAt||a.settledAt||a.at)-Number(b.exitedAt||b.settledAt||b.at)).slice(-30))
+ ]));
  const lossReview={
   at:new Date().toISOString(),totalLosses:losses.length,
   grossLoss:Number(losses.reduce((sum,t)=>sum+Number(t.pnl),0).toFixed(2)),
@@ -146,7 +156,7 @@ export function performance(trades=[]){
   insufficientEvidence:Object.entries(byAsset).filter(([,rows])=>rows.length<30).map(([asset])=>asset),
   cautions:['These are retrospective associations, not proven causes of losses.','Do not promote a rule based only on the same trades used to discover it.','Net returns may omit fees and slippage.']
  };
- return {overall:summarize(valid),lossReview,byStrategy,gateByStrategy,gateRecent50,gatePrevious50,
+ return {overall:summarize(valid),coverageByStrategy,lossReview,byStrategy,gateByStrategy,gateRecent50,gatePrevious50,
   gateEligibleTradeCount:gateEligible.length,idlessResolvedExcludedFromGateCount:valid.length-identified.length,paperExitExcludedFromGateCount:identified.length-gateEligible.length,byEntryBand:Object.fromEntries(Object.entries(entryBands).map(([k,v])=>[k,summarize(v)])),byExitReason:Object.fromEntries(Object.entries(exitReasons).map(([k,v])=>[k,summarize(v)])),excluded:source.length-valid.length,explorationExcluded,duplicateIdExcludedCount:source.filter(t=>typeof t?.id==='string'&&t.id.trim()).length-seenIds.size,conflictingDuplicateIdCount:conflictingIds.size,method:'Finalized server paper positions only. Profit/loss includes recorded payout and entry cost; trading fees and slippage are not modeled unless already in ledger.'};
 }
 export function gatePaperEntry(signal,stats){
