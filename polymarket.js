@@ -18,6 +18,8 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const engines = { A: 'NOVA', B: 'VOLT', C: 'KITSUNE' };
   const tracker = document.querySelector('#poly-tracker-positions');
   const trackerEmpty = document.querySelector('#poly-tracker-empty');
+  const liveRows = document.querySelector('#poly-live-rows');
+  const historyEmpty = document.querySelector('#poly-history-empty');
   const historyList = document.querySelector('#poly-call-history');
   const storageKey = 'banktrades:polymarket-calls:v1';
   let tracking = {};
@@ -107,6 +109,39 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     try { sessionStorage.setItem(storageKey, JSON.stringify(tracking)); } catch {}
   }
 
+  function currentCall(coin, market, key, name) {
+    const signal = market && samples.get(coin)?.assessment?.engines[key];
+    const state = tracking[coin];
+    const position = state && (!market || state.ticker === market.slug)
+      && Date.now() < state.end ? state.positions[key] : null;
+    const side = position?.side.toUpperCase();
+    const justEntered = position && state.events.some(event => event.engine === name
+      && event.action === `BUY ${side}` && Date.now() - event.at < 8000);
+    const action = position?.exit ? `${position.exit.split(' · ')[0]} ${side}`
+      : position ? `${justEntered ? 'BUY' : 'HOLD'} ${side}`
+      : (market && snapshot.end - Date.now() < 120000) || signal ? 'SKIP' : 'WAIT';
+    return { position, side, action };
+  }
+
+  function renderLiveSignals(fresh) {
+    const rows = coins.flatMap(coin => {
+      const market = fresh && snapshot.markets.find(row => row.coin === coin)?.market;
+      return Object.entries(engines).map(([key, name]) => {
+        const { position, action } = currentCall(coin, market, key, name);
+        const row = document.createElement('tr');
+        row.insertCell().textContent = coin;
+        row.insertCell().textContent = name;
+        const signal = row.insertCell();
+        signal.textContent = !market && position && !position.exit ? `${action} · BID UNAVAILABLE` : action;
+        if (action.startsWith('BUY') || action.startsWith('TAKE PROFIT')) signal.dataset.side = 'UP';
+        if (action.startsWith('SELL FAST')) signal.dataset.side = 'DOWN';
+        row.insertCell().textContent = position ? formatPrice(position.entry / 100) : '—';
+        return row;
+      });
+    });
+    liveRows.replaceChildren(...rows);
+  }
+
   function renderSignals(market) {
     toggleLabel.textContent = toggle.checked ? 'Signals ON' : 'Signals OFF';
     signalPanel.hidden = !toggle.checked;
@@ -120,16 +155,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const trackedCards = [];
     const rows = Object.entries(engines).map(([key, name]) => {
       const row = document.createElement('tr');
-      const signal = assessment?.engines[key];
-      const state = tracking[selected];
-      const position = state && (!market || state.ticker === market.slug)
-        && Date.now() < state.end ? state.positions[key] : null;
-      const side = position?.side.toUpperCase();
-      const justEntered = position && state.events.some(event => event.engine === name
-        && event.action === `BUY ${side}` && Date.now() - event.at < 8000);
-      const action = position?.exit ? `${position.exit.split(' · ')[0]} ${side}`
-        : position ? `${justEntered ? 'BUY' : 'HOLD'} ${side}`
-        : late || signal ? 'SKIP' : 'WAIT';
+      const { position, side, action } = currentCall(selected, market, key, name);
       row.insertCell().textContent = name;
       const actionCell = row.insertCell();
       actionCell.textContent = action;
@@ -163,11 +189,13 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     calls.replaceChildren(...rows);
     trackerEmpty.hidden = trackedCards.length > 0;
     tracker.replaceChildren(...trackedCards);
-    const events = tracking[selected]?.events ?? [];
+    const events = coins.flatMap(coin => (tracking[coin]?.events ?? []).map(event => ({ ...event, coin })))
+      .sort((a, b) => b.at - a.at).slice(0, 30);
+    historyEmpty.hidden = events.length > 0;
     historyList.replaceChildren(...events.map(event => {
       const item = document.createElement('li');
       const exit = event.exitBid == null ? '' : ` · exit bid ${formatPrice(event.exitBid / 100)}`;
-      item.textContent = `${new Date(event.at).toLocaleTimeString()} · ${event.engine} · ${event.action} · entry ${formatPrice(event.entry / 100)}${exit}`;
+      item.textContent = `${new Date(event.at).toLocaleTimeString()} · ${event.coin} · ${event.engine} · ${event.action} · entry ${formatPrice(event.entry / 100)}${exit}`;
       return item;
     }));
   }
@@ -184,6 +212,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const nextStatus = market ? '' : 'Waiting for live Polymarket quotes';
     if (status.textContent !== nextStatus) status.textContent = nextStatus;
     renderSignals(market);
+    if (toggle.checked) renderLiveSignals(fresh);
     if (!market) return;
     link.href = `https://polymarket.com/event/${market.slug}`;
     const rows = market.quotes.map(({ label, bid, ask }) => {
