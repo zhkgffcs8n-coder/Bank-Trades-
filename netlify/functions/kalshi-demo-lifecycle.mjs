@@ -9,6 +9,7 @@ import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection,findDemoLifecyc
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 import {sanitizedDemoSnapshotFailure} from '../../src/demo-snapshot-telemetry.mjs';
+import {probeDemoSnapshot,demoSnapshotProbeReceipt,shouldProbeTerminalDemo} from './kalshi-demo-snapshot-diagnostic.mjs';
 export async function runScheduledDemo(worker,manual={}){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
@@ -17,6 +18,18 @@ export async function runScheduledDemo(worker,manual={}){
  try{
   credentials=openKalshiCredentials({userId:'demo-'+id,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
   const readOnly=kalshiClient(credentials,{environment:'demo'});
+  // A terminal lifecycle must not suppress fresh read-only exchange diagnostics.
+  // This never re-arms a trade or changes order state; failures are isolated.
+  const [lastLifecycle,previousProbe]=await Promise.all([
+   db.get('lifecycle-status',{type:'json'}).catch(()=>null),
+   db.get('saved-balance-probe',{type:'json'}).catch(()=>null)
+  ]);
+  if(shouldProbeTerminalDemo(lastLifecycle,previousProbe)){
+   try{
+    const probe=await probeDemoSnapshot(credentials);
+    await db.setJSON('saved-balance-probe',demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null));
+   }catch{console.warn('DEMO_INDEPENDENT_PROBE_UNAVAILABLE');}
+  }
   repo=liveRepository(db,'demo-lifecycle-v1',{
    recoverDemoLock:record=>recoverTerminalDemoState(record,readOnly)
   });
