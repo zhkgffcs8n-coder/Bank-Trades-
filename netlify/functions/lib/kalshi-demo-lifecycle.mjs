@@ -6,7 +6,7 @@ const SNAPSHOT_STAGES=new Set(['ACCOUNT_SNAPSHOT','ENTRY_ACCOUNT_SNAPSHOT','VERI
 const SNAPSHOT_READ_FAILURES=new Set([...SNAPSHOT_PHASES].map(phase=>'DEMO_SNAPSHOT_'+phase+'_READ_FAILED'));
 const retryableSnapshotFailure=code=>code==='DEMO_TRANSPORT_OR_STORAGE_ERROR'||SNAPSHOT_READ_FAILURES.has(code);
 export const DEMO_EXECUTION_TEST='DEMO_EXECUTION_TEST';
-export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,testSide,entryOnly=false,exitOnly=false,checkStopped=async()=>false,clock=Date.now}){
+export async function runDemoLifecycle({repo,client,findMarket,marketRejection,quoteFor,commit,championSignals,executionTest=false,testSide,testRunId,entryOnly=false,exitOnly=false,checkStopped=async()=>false,clock=Date.now}){
  const session=await repo.acquire(),state=session.state;
  let stage='INITIALIZE';
  let retry=false,legacyRecovery=false,balanceRecovery=false;
@@ -24,7 +24,33 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    state.intents.every(intent=>['ABORTED','RECONCILED'].includes(intent.status));
   retry=state.demo?.status==='DEMO_LIFECYCLE_FAILED'&&state.demo.finished&&
    (!state.demoRetryUsed||legacyRecovery||balanceRecovery)&&retryableSnapshotFailure(state.demo.error);
-  if(state.demo?.finished&&!retry)return state.demo;
+  if(state.demo?.finished&&!retry){
+   // A completed run cannot restart itself. Only a fresh owner-issued UUID may
+   // arm one new bounded Demo test, after exchange-backed flat-account checks.
+   if(!(executionTest&&typeof testRunId==='string'&&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(testRunId)&&
+    state.demo.testRunId!==testRunId))return state.demo;
+   if(exitOnly||await checkStopped())return {status:'DEMO_EXECUTION_TEST_STOPPED'};
+   if(!state.intents.every(intent=>['ABORTED','RECONCILED'].includes(intent.status)))
+    return {status:'DEMO_REARM_BLOCKED_UNRESOLVED_INTENTS'};
+   try{
+    const snapshot=await client.snapshot();
+    if(snapshot?.orders?.some(o=>!['executed','canceled'].includes(o.status)))
+     return {status:'DEMO_REARM_BLOCKED_ACCOUNT_EXPOSURE'};
+    reconcile(state,snapshot,clock());
+    const risk=accountRisk(state,snapshot,clock());
+    if(risk.open.length||snapshot.positions.some(p=>Math.abs(Number(p.position_fp??p.position))>1e-7)||
+      snapshot.orders.some(o=>!['executed','canceled'].includes(o.status)))
+     return {status:'DEMO_REARM_BLOCKED_ACCOUNT_EXPOSURE'};
+   }catch{return {status:'DEMO_REARM_ACCOUNT_CHECK_FAILED'};}
+   if(await checkStopped())return {status:'DEMO_EXECUTION_TEST_STOPPED'};
+   state.demoHistory=[...(state.demoHistory||[]),state.demo];
+   state.demo={startedAt:clock(),commit,phase:testSide==='DOWN'?'DOWN':'UP',
+    attempts:0,intentOffset:state.intents.length,mode:DEMO_EXECUTION_TEST,testRunId};
+   state.enabled=true;state.stopped=false;
+   await session.persist(state);
+   return {status:'DEMO_NEW_TEST_ARMED'};
+  }
   if(exitOnly&&state.demo?.mode!==DEMO_EXECUTION_TEST)return {status:'DEMO_NO_TEST_POSITION'};
   if(!state.demo){Object.assign(state,initialState());state.enabled=true;state.stopped=false;state.demo={startedAt:clock(),commit,phase:'UP',attempts:0};}
   const result=(status,extra={})=>Object.assign(state.demo,{status,checkedAt:clock(),...extra});
