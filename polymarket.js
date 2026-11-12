@@ -1,4 +1,4 @@
-import { replayChampionScalper } from './src/champion-scalper-replay.mjs';
+import { advancePolymarketCall } from './src/polymarket-call.mjs';
 import { evaluateScalperV8 } from './src/scalper-v8.mjs';
 
 (() => {
@@ -22,8 +22,16 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const historyEmpty = document.querySelector('#poly-history-empty');
   const historyList = document.querySelector('#poly-call-history');
   const storageKey = 'banktrades:polymarket-calls:v1';
-  let tracking = {};
-  try { tracking = JSON.parse(sessionStorage.getItem(storageKey)) || {}; } catch {}
+  const durableKey = `${storageKey}:${window.__BANK_TRADES_USER_ID__}`;
+  function readTracking(storage, key) {
+    try { return JSON.parse(storage.getItem(key)) ?? {}; } catch { return {}; }
+  }
+  let tracking = { ...readTracking(sessionStorage, storageKey), ...readTracking(localStorage, durableKey) };
+  window.addEventListener('storage', event => {
+    if (event.key !== durableKey) return;
+    tracking = readTracking(localStorage, durableKey);
+    render();
+  });
   let selected = 'BTC';
   let snapshot;
 
@@ -50,7 +58,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       }
       const [up, down] = market.quotes;
       const quote = {
-        ticker: market.slug, observedAt: data.observedAt, expiresAt: data.end,
+        ticker: market.slug, observedAt: market.quoteAt, expiresAt: data.end,
         yesBid: up.bid, yesAsk: up.ask, noBid: down.bid, noAsk: down.ask,
       };
       if (![up.bid, up.ask, down.bid, down.ask].every(Number.isFinite)
@@ -60,11 +68,13 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       }
       const previous = samples.get(coin);
       const history = previous?.quote.ticker === market.slug ? previous.history : [];
-      const assessment = evaluateScalperV8(quote, history);
+      const assessment = Number.isFinite(market.feeRate)
+        ? evaluateScalperV8(quote, history, null, price => market.feeRate * price * (1 - price))
+        : null;
       const t = Math.floor(data.observedAt / 60000) * 60000;
       if (history.at(-1)?.t !== t) {
         history.push({
-          ticker: market.slug, t, observedAt: data.observedAt,
+          ticker: market.slug, t, observedAt: market.quoteAt,
           yesMid: (up.bid + up.ask) / 2,
         });
         if (history.length > 5) history.shift();
@@ -86,27 +96,26 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       up: { bid: up.bid * 100, ask: up.ask * 100 },
       down: { bid: down.bid * 100, ask: down.ask * 100 },
     };
-    const secondsLeft = (data.end - data.observedAt) / 1000;
     for (const [key, engine] of Object.entries(engines)) {
-      const signal = assessment?.engines[key];
-      const qualified = signal?.decision === 'UP' || signal?.decision === 'DOWN';
       const position = state.positions[key];
-      if (position?.exit || (!position && (!qualified || secondsLeft < 120))) continue;
-      const side = qualified ? signal.decision.toLowerCase() : 'mixed';
-      const next = position
-        ? replayChampionScalper({ ticker: market.slug, secondsLeft, side, strong: qualified, quotes }, position)
-        : { action: `BUY ${signal.decision}`, position: { ticker: market.slug, side, entry: signal.ask * 100, exit: null } };
-      state.positions[key] = next.position;
-      if (!position || next.position.exit) {
-        const flip = next.position.exit === 'EXIT · MOMENTUM REVERSED';
-        state.events.unshift({
-          engine, action: flip ? `FLIP WATCH ${side.toUpperCase()} · ${next.action}` : next.action,
-          entry: next.position.entry, exitBid: next.position.exitBid, at: data.observedAt,
-        });
-        state.events = state.events.slice(0, 30);
-      }
+      const next = advancePolymarketCall(position, {
+        ticker: market.slug, end: data.end, at: market.quoteAt, now: Date.now(),
+        quotes, decision: assessment?.engines[key]?.decision,
+      });
+      if (!next || next === position) continue;
+      state.positions[key] = next;
+      const side = next.side.toUpperCase();
+      const action = next.exit ? `${next.exit.split(' · ')[0]} ${side}`
+        : position ? `FLIP · BUY ${side}` : `BUY ${side}`;
+      state.events.unshift({
+        ticker: market.slug, engine, action, entry: next.entry, exitBid: next.exitBid, at: data.observedAt,
+      });
+      state.events = state.events.slice(0, 30);
     }
-    try { sessionStorage.setItem(storageKey, JSON.stringify(tracking)); } catch {}
+    try {
+      const serialized = JSON.stringify(tracking);
+      if (localStorage.getItem(durableKey) !== serialized) localStorage.setItem(durableKey, serialized);
+    } catch {}
   }
 
   function currentCall(coin, market, key, name) {
@@ -116,16 +125,21 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       && Date.now() < state.end ? state.positions[key] : null;
     const side = position?.side.toUpperCase();
     const justEntered = position && state.events.some(event => event.engine === name
-      && event.action === `BUY ${side}` && Date.now() - event.at < 8000);
+      && event.action.endsWith(`BUY ${side}`) && Date.now() - event.at < 8000);
     const action = position?.exit ? `${position.exit.split(' · ')[0]} ${side}`
       : position ? `${justEntered ? 'BUY' : 'HOLD'} ${side}`
       : (market && snapshot.end - Date.now() < 120000) || signal ? 'SKIP' : 'WAIT';
     return { position, side, action };
   }
 
-  function renderLiveSignals(fresh) {
+  function freshMarket(coin) {
+    const market = snapshot?.markets.find(row => row.coin === coin)?.market;
+    return market && Date.now() < snapshot.end && Date.now() - market.quoteAt < 15000 ? market : null;
+  }
+
+  function renderLiveSignals() {
     const rows = coins.flatMap(coin => {
-      const market = fresh && snapshot.markets.find(row => row.coin === coin)?.market;
+      const market = freshMarket(coin);
       return Object.entries(engines).map(([key, name]) => {
         const { position, action } = currentCall(coin, market, key, name);
         const row = document.createElement('tr');
@@ -151,6 +165,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const late = market && snapshot.end - Date.now() < 120000;
     signalStatus.textContent = !market ? 'Waiting for live Polymarket quotes'
       : late ? 'Entry window closed · next round in under 2 minutes'
+      : market.feeRate === null ? 'Waiting for verified Polymarket fees'
       : assessment?.radar ?? 'Collecting usable quotes for this round';
     const trackedCards = [];
     const rows = Object.entries(engines).map(([key, name]) => {
@@ -196,6 +211,12 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const item = document.createElement('li');
       const exit = event.exitBid == null ? '' : ` · exit bid ${formatPrice(event.exitBid / 100)}`;
       item.textContent = `${new Date(event.at).toLocaleTimeString()} · ${event.coin} · ${event.engine} · ${event.action} · entry ${formatPrice(event.entry / 100)}${exit}`;
+      if (event.ticker) {
+        const round = document.createElement('a');
+        round.href = `https://polymarket.com/event/${event.ticker}`;
+        round.textContent = ' · Market';
+        item.append(round);
+      }
       return item;
     }));
   }
@@ -203,7 +224,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   function render() {
     const remaining = Math.ceil((snapshot?.end - Date.now()) / 1000);
     const fresh = remaining > 0 && Date.now() - snapshot.observedAt < 15000;
-    const market = fresh && snapshot.markets.find(row => row.coin === selected)?.market;
+    const market = freshMarket(selected);
     buttons.forEach(button => button.setAttribute('aria-pressed', String(button.textContent === selected)));
     title.textContent = `${selected} Up or Down`;
     clock.textContent = fresh ? `Round ends in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '';
@@ -212,7 +233,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const nextStatus = market ? '' : 'Waiting for live Polymarket quotes';
     if (status.textContent !== nextStatus) status.textContent = nextStatus;
     renderSignals(market);
-    if (toggle.checked) renderLiveSignals(fresh);
+    if (toggle.checked) renderLiveSignals();
     if (!market) return;
     link.href = `https://polymarket.com/event/${market.slug}`;
     const rows = market.quotes.map(({ label, bid, ask }) => {

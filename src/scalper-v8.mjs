@@ -5,7 +5,7 @@ const clip=(value,limit)=>Math.max(-limit,Math.min(limit,value));
 export const scalpEngines=['A','B','C','Market'];
 export const modeledCost=price=>Math.ceil(7*price*(1-price))/100+.01;
 
-export function evaluateScalperV8(quote,history,depth=null){
+export function evaluateScalperV8(quote,history,depth=null,costFor=modeledCost){
  const {ticker,observedAt,expiresAt,yesBid,yesAsk,noBid,noAsk}=quote;
  if(!ticker||!validCollectorQuote(quote)||!Number.isFinite(observedAt)||!(expiresAt>observedAt&&expiresAt-observedAt<=900000))return null;
  const imbalance=Number.isFinite(depth?.at)&&depth.at>=observedAt&&depth.at-observedAt<=5000&&
@@ -33,11 +33,11 @@ export function evaluateScalperV8(quote,history,depth=null){
  };
  const engines=Object.fromEntries(scalpEngines.map(name=>{
   const probability=Math.max(.01,Math.min(.99,baseline+clip(adjustments[name],.15)));
-  const up=probability-yesAsk-modeledCost(yesAsk),down=1-probability-noAsk-modeledCost(noAsk);
+  const up=probability-yesAsk-costFor(yesAsk),down=1-probability-noAsk-costFor(noAsk);
   const edge=Math.max(up,down), side=up>=down?'UP':'DOWN';
   const decision=expiresAt-at>=120000&&spread<=.05&&edge>=.02?side:'SKIP';
   const ask=decision==='SKIP'?null:side==='UP'?yesAsk:noAsk;
-  return [name,{probability,edge,decision,ask,cost:ask===null?null:modeledCost(ask)}];
+  return [name,{probability,edge,decision,ask,cost:ask===null?null:costFor(ask)}];
  }));
  const reversal=Math.abs(velocity)>=.015&&Math.abs(previousVelocity)>=.015&&velocity*previousVelocity<0;
  const alignedDepth=imbalance===null||imbalance*velocity>=0;
