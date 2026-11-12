@@ -11,6 +11,7 @@ const reconcileStatuses=new Set(['RECONCILED_READ_ONLY','UNRESOLVED_ORDER','POSI
  'UNRECONCILED_RISK','FILL_ID_MISSING','INVALID_FILL_TIME_OR_QUANTITY','FILL_TICKER_MISMATCH',
  'INVALID_FILL_PRICE','MISSING_FILL_QUANTITY','MISSING_FILL_FEES','INVALID_FILL_QUANTITY','INVALID_FILL_FEES',
  'UNEXPECTED_SIDE_CHANGE','INVALID_FILL_TIME_OR_QUANTITY','DUPLICATE_SETTLEMENT','SETTLEMENT_MISMATCH','SETTLEMENT_REVENUE_MISMATCH']);
+const revenuePatterns=new Set(['DOLLARS_INSTEAD_OF_CENTS','OPPOSITE_SIDE_PAYOUT','BOTH_SIDES_PAYOUT','ZERO_PAYOUT','LOWER_THAN_EXPECTED','HIGHER_THAN_EXPECTED','UNCLASSIFIED']);
 const count=value=>Number.isSafeInteger(value)&&value>=0&&value<=100000?value:null;
 export function sanitizeDemoLockEvidence(raw){
  if(!raw||typeof raw!=='object')return null;
@@ -21,7 +22,8 @@ export function sanitizeDemoLockEvidence(raw){
   unresolvedIntents:count(raw.unresolvedIntents),
   reconciliation:raw.reconciliation&&typeof raw.reconciliation==='object'?{
    status:reconcileStatuses.has(raw.reconciliation.status)?raw.reconciliation.status:'UNRECOGNIZED_RECONCILIATION',
-   openPositions:count(raw.reconciliation.openPositions)
+   openPositions:count(raw.reconciliation.openPositions),
+   ...(raw.reconciliation.status==='SETTLEMENT_REVENUE_MISMATCH'?{revenuePattern:revenuePatterns.has(raw.reconciliation.revenuePattern)?raw.reconciliation.revenuePattern:'UNCLASSIFIED'}:{})
   }:null};
 }
 export function sanitizeDemoLifecycleReceipt(raw){
