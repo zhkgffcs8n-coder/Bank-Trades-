@@ -11,7 +11,9 @@ export default async req=>{try{
  if(req.method==='GET'){
   const uploaded=await store.get('uploaded-connection',{type:'json'});
   const probe=await store.get('saved-balance-probe',{type:'json'}).catch(()=>null);
-  const savedBalanceProbe=probe?{status:probe.status,transportCause:probe.transportCause,requestId:probe.requestId,commit:probe.commit,
+  const savedBalanceProbe=probe?{status:probe.status,transportCause:probe.transportCause,
+   failedPhase:probe.failedPhase??null,httpStatus:probe.httpStatus??null,
+   requestId:probe.requestId,commit:probe.commit,
    operation:probe.operation,checkedAt:probe.checkedAt,durationMs:probe.durationMs}:null;
   const result=uploaded||await store.get('connection',{type:'json'});
   const latest=await store.get('order-test/v8',{type:'json'});
