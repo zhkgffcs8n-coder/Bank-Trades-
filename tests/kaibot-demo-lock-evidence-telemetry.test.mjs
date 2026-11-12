@@ -26,3 +26,10 @@ test('untrusted lock evidence is not echoed into health telemetry',()=>{
  assert.doesNotMatch(JSON.stringify(result),/sensitive|<secret>/);
  assert.equal(sanitizeDemoLockEvidence(null),null);
 });
+
+test('known reconciliation failure remains identifiable without order details',()=>{
+ const safe=sanitizeDemoLockEvidence({status:'LOCK_REQUIRES_REVIEW',reconciliation:{status:'ORDER_NOT_TERMINAL',openPositions:1,order_id:'secret'}});
+ assert.equal(safe.reconciliation.status,'ORDER_NOT_TERMINAL');
+ assert.equal(safe.reconciliation.openPositions,1);
+ assert.doesNotMatch(JSON.stringify(safe),/secret/);
+});
