@@ -68,3 +68,11 @@ test('missing IDs are quarantined before both paper payout and early exit',()=>{
  const exitPayout=source.indexOf('ledger.cash=Math.round((ledger.cash+proceeds)*100)/100;');
  assert.ok(payoutGuard>=0&&payout>payoutGuard&&exitGuard>payout&&exitPayout>exitGuard);
 });
+
+
+test('Extreme never opens unvalidated quote-only coverage paper positions',()=>{
+ const source=readFileSync(new URL('../netlify/functions/kaibot-runner.mjs',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/entryBasis='UNVALIDATED QUOTE-BASED PAPER TEST'/);
+ assert.doesNotMatch(source,/if\(mode==='extreme'&&!qualifiedEntry&&!coverageEntry\)/);
+ assert.match(source,/if\(!\['BUY UP','BUY DOWN'\]\.includes\(signal\.action\)\)/);
+});

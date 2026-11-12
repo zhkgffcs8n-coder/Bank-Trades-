@@ -246,29 +246,9 @@ export default async()=>{
  const tradesThisRound=ledger.trades.filter(t=>Math.floor(Number(t.at)/900000)===round);
  const qualifiedEntry=tradesThisRound.some(t=>t.entryBasis==='QUALIFIED PAPER SIGNAL');
  let coverageEntry=tradesThisRound.some(t=>t.extremeCoverage===true);
- if(mode==='extreme'&&!qualifiedEntry&&!coverageEntry){
-  const entryAt=Date.now();
-  // Prefer the configured scan order unless reconciled paper results show repeated losses.
-  const lossPenalty=({asset,side})=>{
-   const cohort=stats.coverageByStrategy?.[asset+'_'+side];
-   return cohort?.trades>=8&&cohort.losses>=3&&cohort.roi<0?1:0;
-  };
-  const quote=coverageQuotes.sort((a,b)=>lossPenalty(a)-lossPenalty(b)).find(q=>entryAt-now<=30000&&q.expiresAt-entryAt>=240000&&q.ask<=ledger.cash*100);
-  if(quote&&Math.floor(entryAt/900000)===round){
-   const {asset,ticker,side,ask,expiresAt,entryQuote}=quote;
-   const qty=Math.floor(Math.min(PAPER_STAKE_DOLLARS*100,Math.round(ledger.cash*100))/ask);
-   const cost=Math.round(qty*ask)/100;
-   if(qty>=1&&cost>0&&cost<=ledger.cash){
-    const entryBasis='UNVALIDATED QUOTE-BASED PAPER TEST';
-    ledger.cash=Math.round((ledger.cash-cost)*100)/100;
-    ledger.trades.push({id:'srv_'+entryAt+'_'+asset,asset,ticker,side,qty,ask,cost,at:entryAt,
-     status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,extremeCoverage:true,
-     secondsToExpiryAtEntry:(expiresAt-entryAt)/1000,entryQuote});
-    roundAudit.markets[asset]={status:'ENTERED',ticker,side,ask,entryBasis,entries:1};
-    coverageEntry=true;
-   }
-  }
- }
+ // Extreme may scan aggressively but must not open a quote-only,
+ // unvalidated coverage trade. Keep rejected candidates in round audit;
+ // qualified BUY signals above remain eligible for real paper entries.
  roundAudit.extremeCoverage={round,mode,status:qualifiedEntry?'QUALIFIED_ENTRY':coverageEntry?'COVERAGE_ENTRY':
   mode==='extreme'?'NO_USABLE_COVERAGE_QUOTE':entryPaused?'PAUSED':'NO_QUALIFIED_ENTRY'};
  ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',roundAudit);
