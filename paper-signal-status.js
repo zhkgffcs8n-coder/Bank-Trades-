@@ -63,18 +63,22 @@ function paint(data){
   title.style.color=up?'#86efac':'#fca5a5';
   const stake=Number(t.cost),pnl=Number(t.pnl),realized=closed&&t.pnl!=null&&Number.isFinite(pnl);
   const marked=!closed&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0;
-  const money=document.createElement('div');money.textContent='PAPER BET '+(Number.isFinite(stake)?dollars(stake):'—')+' · '+(realized?'REALIZED '+pnlLabel(pnl):marked?'EST. OPEN '+pnlLabel(t.lastObservedUnrealizedPnl)+' · BID '+pct(t.lastObservedExitBid)+' ('+ago(t.lastObservedExitAt)+')':'OPEN P&L PENDING BID');
+  const money=document.createElement('div');money.textContent='PAPER BET '+(t.cost!=null&&Number.isFinite(stake)?dollars(stake):'—')+' · '+(realized?'REALIZED '+pnlLabel(pnl):marked?'EST. OPEN '+pnlLabel(t.lastObservedUnrealizedPnl)+' · BID '+pct(t.lastObservedExitBid)+' ('+ago(t.lastObservedExitAt)+')':'OPEN P&L PENDING BID');
   money.style.cssText='font-weight:900;font-size:14px;margin:4px 0;color:'+(realized?(pnl>=0?'#86efac':'#fca5a5'):marked?(Number(t.lastObservedUnrealizedPnl)>=0?'#86efac':'#fca5a5'):'#facc15');
   const detail=document.createElement('div');detail.textContent=closed?'PAPER '+(t.status==='SETTLED'?'SETTLED':'EXIT')+' · '+(t.exitBid!=null?'Exit '+pct(t.exitBid):'No executable exit price recorded'):'HOLD '+side+' · OPEN PAPER POSITION';
   const when=document.createElement('small');when.textContent='Entry '+date(t.at)+(closed?' · Exit '+date(t.exitedAt||t.exitAt||t.settledAt):'')+' · Recorded, not an executable live quote';
   card.append(title,money,detail,when);rows.append(card);
  }
  const completed=sessionTrades.filter(t=>['CLOSED','SETTLED'].includes(t.status)&&t.pnl!=null&&Number.isFinite(Number(t.pnl)));
- const realizedNet=completed.reduce((sum,t)=>sum+Number(t.pnl),0);
+ const profits=completed.filter(t=>Number(t.pnl)>0);
+ const losses=completed.filter(t=>Number(t.pnl)<0);
+ const grossProfit=profits.reduce((sum,t)=>sum+Number(t.pnl),0);
+ const grossLoss=losses.reduce((sum,t)=>sum+Number(t.pnl),0);
+ const realizedNet=grossProfit+grossLoss;
  const markedOpen=sessionTrades.filter(t=>t.status==='OPEN'&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0);
  const openNet=markedOpen.reduce((sum,t)=>sum+Number(t.lastObservedUnrealizedPnl),0);
  let totals=document.getElementById('paperTradeLivePnl');if(!totals){totals=document.createElement('div');totals.id='paperTradeLivePnl';status.insertAdjacentElement('afterend',totals)}
- totals.textContent='PAPER SESSION '+(sessionAt?date(sessionAt):'(all history)')+' · REALIZED '+pnlLabel(realizedNet)+' ('+completed.length+' closed) · EST. OPEN '+(markedOpen.length?pnlLabel(openNet):'PENDING')+' ('+markedOpen.length+' marked)';
+ totals.textContent='PAPER SESSION '+(sessionAt?date(sessionAt):'(all history)')+' · PROFIT '+pnlLabel(grossProfit)+' ('+profits.length+' wins) · LOSSES '+pnlLabel(grossLoss)+' ('+losses.length+' losses) · NET REALIZED '+pnlLabel(realizedNet)+' ('+completed.length+' closed) · EST. OPEN '+(markedOpen.length?pnlLabel(openNet):'PENDING')+' ('+markedOpen.length+' marked)';
  totals.style.cssText='font-weight:900;font-size:14px;margin:7px 0;color:'+(realizedNet>=0?'#86efac':'#fca5a5');
  const next=new Map();
  for(const t of trades){
