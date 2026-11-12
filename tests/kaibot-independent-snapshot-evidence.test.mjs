@@ -22,8 +22,10 @@ test('scheduled full snapshot writes a separate durable receipt and exposes it i
  const check=readFileSync(new URL('../netlify/functions/kalshi-demo-check.mjs',import.meta.url),'utf8');
  const worker=readFileSync(new URL('../scripts/predator-worker.mjs',import.meta.url),'utf8');
  const status=readFileSync(new URL('../netlify/functions/kalshi-demo-status.mjs',import.meta.url),'utf8');
- assert.match(lifecycle,/db\.get\('saved-snapshot-probe'/);
- assert.match(lifecycle,/db\.setJSON\('saved-snapshot-probe',\{\.\.\.demoSnapshotProbeReceipt/);
+ // The dedicated scheduled check owns the full snapshot. The lifecycle
+ // scheduler must not issue another five-request burst every minute.
+ assert.doesNotMatch(lifecycle,/probeDemoSnapshot|saved-snapshot-probe/);
+ assert.match(lifecycle,/shouldRefreshDemoLockInspection/);
  assert.match(check,/store\.setJSON\('saved-balance-probe'/);
  assert.match(check,/store\.setJSON\('saved-snapshot-probe'/);
  assert.match(worker,/readSanitizedDemoProbe\(demoProbeStore,'saved-snapshot-probe'\)/);
