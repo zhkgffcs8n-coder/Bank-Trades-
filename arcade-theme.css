@@ -121,3 +121,66 @@ button:focus-visible,a:focus-visible{outline:3px solid var(--arc-gold)!important
 .bt-engine-action[data-tone=profit]{--action:#66f6ff;background:#082e38}
 .bt-v9-engine[data-engine=B] .bt-engine-action{font-size:16px;border-width:2px}
 .bt-v9-engine[data-engine=B] .bt-engine-action:not([data-tone=skip]){box-shadow:0 0 11px var(--action)}
+
+/* Command center polish. Color and paint effects leave dashboard geometry intact. */
+.bt-command-v9 {
+ background:radial-gradient(ellipse at 82% 0%,#17295d,transparent 46%),
+ radial-gradient(ellipse at 0 32%,#28133e,transparent 43%),#050713!important;
+}
+.bt-command-v9 :is(.card,.premium-panel,.premium-hero) {
+ background:linear-gradient(148deg,#18213c,#090d1d 72%)!important;
+ border-color:#486390!important;
+ box-shadow:inset 0 1px #a8ddff25,0 12px 30px #0007,0 0 14px #479bff14!important;
+}
+.bt-command-v9 :is(.coin.active,button[aria-pressed="true"],.terminal-nav a[aria-current="page"]) {
+ outline:1px solid #91e9ff;
+ outline-offset:-2px;
+ text-shadow:0 0 8px #6bdfff66;
+}
+.bt-command-v9 :is(#count,#signal,#btcProScalper [data-detail]) {
+ color:#edf5ff;
+ text-shadow:0 1px 3px #02050c;
+}
+.bt-command-v9 .bt-engine-action {
+ opacity:1!important;
+ text-shadow:0 1px 3px #02050c;
+}
+.bt-command-v9 .bt-v9-identity::before {
+ background:linear-gradient(90deg,var(--pilot) 0 40%,transparent 40% 60%,var(--pilot) 60%) center/13px 3px no-repeat,#101634;
+ box-shadow:inset 0 0 6px #040817,0 0 8px var(--pilot);
+}
+#btBattleArena {
+ background:radial-gradient(ellipse at 45% 105%,#303d83,transparent 68%),#0a1028;
+ border-color:#6581d8;
+ box-shadow:inset 0 0 28px #566dff38,0 9px 24px #0008;
+}
+.bt-arena-field {
+ background:repeating-linear-gradient(90deg,transparent 0 31px,#78acff14 31px 32px),
+ linear-gradient(180deg,transparent 45%,#63aaff24 46%,transparent 48%);
+}
+#btBattleArena .bt-bot {
+ background:linear-gradient(160deg,#243662,#0b142c 75%);
+}
+@media (prefers-reduced-motion:no-preference) {
+ .bt-command-v9:not(.bt-arcade-muted) .bt-engine-action:is(
+  [data-tone="up"],[data-tone="down"],[data-tone="sell"],[data-tone="hold"],[data-tone="profit"]
+ ) {
+  animation:bt-signal-glow 420ms cubic-bezier(.2,.7,.25,1);
+ }
+ .bt-command-v9:not(.bt-arcade-muted) .bt-v9-engine[data-direction] .bt-v9-identity::before {
+  animation:bt-pilot-visor 480ms ease-out;
+ }
+ .bt-bot[data-mode=entry] svg,.bt-bot[data-mode=danger] svg,.bt-bot[data-mode=flip] svg {
+  animation:bt-bot-bounce 760ms cubic-bezier(.2,.7,.25,1);
+ }
+}
+@keyframes bt-signal-glow {
+ 0% {box-shadow:inset 0 0 0 0 var(--action)}
+ 34% {box-shadow:inset 0 0 10px -4px var(--action)}
+}
+@keyframes bt-pilot-visor {
+ 45% {opacity:.72}
+}
+.bt-command-v9 #paperTradeLivePnl {
+ text-shadow:0 1px 3px #02050c;
+}
