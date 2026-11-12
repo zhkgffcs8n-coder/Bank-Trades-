@@ -8,6 +8,18 @@ const date=v=>Number(v)>0?new Intl.DateTimeFormat('en-US',{timeZone:'America/Los
 const dollars=v=>Number.isFinite(Number(v))?'$'+Math.abs(Number(v)).toFixed(2):'—';
 const pnlLabel=v=>(Number(v)>=0?'+':'−')+dollars(v);
 const ago=ms=>{const d=Date.now()-Number(ms);if(!Number.isFinite(d)||d<0)return 'unknown age';const m=Math.floor(d/60000);return m<1?'under 1 min ago':m<60?m+' min ago':Math.floor(m/60)+'h '+m%60+'m ago'};
+function paperEnd(t){
+ if(t.status==='SETTLED'){
+  if(t.outcomeConflict===true)return 'SETTLEMENT DISPUTED';
+  const result=String(t.marketResult||'').toLowerCase();
+  const side=String(t.side||'').toLowerCase();
+  if(!['yes','no'].includes(result)||!['up','down'].includes(side))return 'SETTLEMENT PAYOUT UNAVAILABLE';
+  const payout=(side==='up')===(result==='yes')?100:0;
+  return 'SETTLEMENT PAYOUT '+pct(payout);
+ }
+ const bid=pct(t.exitBid);
+ return 'EXIT '+(bid==='—'?'BID UNAVAILABLE':bid)+(t.exitReason?' · '+t.exitReason:'');
+}
 function badge(coin,label,color){const x=document.createElement('span');x.style.cssText='padding:5px 8px;border-radius:7px;color:#fff;background:'+color+';font-size:11px;font-weight:800';x.textContent=coin+' · '+label;return x}
 function announce(t,kind){
  const el=document.createElement('div');el.setAttribute('role','alert');
@@ -53,7 +65,7 @@ function paint(data){
  root.replaceChildren(fragment);
  const sessionAt=Number(data?.state?.paperPnlSessionStartedAt)||0;
  const sessionTrades=trades.filter(t=>Number(t.at)>=sessionAt);
- const sorted=trades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.at||0)).slice(0,20);
+ const sorted=trades.filter(t=>t&&['OPEN','CLOSED','SETTLED'].includes(t.status)).sort((a,b)=>Number(b.exitAt||b.exitedAt||b.settledAt||b.closedAt||b.at||0)-Number(a.exitAt||a.exitedAt||a.settledAt||a.closedAt||a.at||0)).slice(0,20);
  rows.replaceChildren();
  if(!sorted.length){const p=document.createElement('p');p.textContent='No paper positions recorded yet. Watching for the next qualified signal; no trade is being claimed.';rows.append(p)}
  for(const t of sorted){
@@ -63,10 +75,10 @@ function paint(data){
   title.style.color=up?'#86efac':'#fca5a5';
   const stake=Number(t.cost),pnl=Number(t.pnl),realized=closed&&t.pnl!=null&&Number.isFinite(pnl);
   const marked=!closed&&t.lastObservedUnrealizedPnl!=null&&Number.isFinite(Number(t.lastObservedUnrealizedPnl))&&Number(t.lastObservedExitAt)>0;
-  const money=document.createElement('div');money.textContent='PAPER BET '+(t.cost!=null&&Number.isFinite(stake)?dollars(stake):'—')+' · '+(realized?'REALIZED '+pnlLabel(pnl):marked?'EST. OPEN '+pnlLabel(t.lastObservedUnrealizedPnl)+' · BID '+pct(t.lastObservedExitBid)+' ('+ago(t.lastObservedExitAt)+')':'OPEN P&L PENDING BID');
+  const money=document.createElement('div');money.textContent='PAPER BET '+(t.cost!=null&&Number.isFinite(stake)?dollars(stake):'—')+' · '+(realized?(pnl>0?'WIN ':pnl<0?'LOSS ':'BREAK EVEN ')+pnlLabel(pnl):marked?'EST. OPEN '+pnlLabel(t.lastObservedUnrealizedPnl)+' · BID '+pct(t.lastObservedExitBid)+' ('+ago(t.lastObservedExitAt)+')':'OPEN P&L PENDING BID');
   money.style.cssText='font-weight:900;font-size:14px;margin:4px 0;color:'+(realized?(pnl>=0?'#86efac':'#fca5a5'):marked?(Number(t.lastObservedUnrealizedPnl)>=0?'#86efac':'#fca5a5'):'#facc15');
-  const detail=document.createElement('div');detail.textContent=closed?'PAPER '+(t.status==='SETTLED'?'SETTLED':'EXIT')+' · '+(t.exitBid!=null?'Exit '+pct(t.exitBid):'No executable exit price recorded'):'HOLD '+side+' · OPEN PAPER POSITION';
-  const when=document.createElement('small');when.textContent='Entry '+date(t.at)+(closed?' · Exit '+date(t.exitedAt||t.exitAt||t.settledAt):'')+' · Recorded, not an executable live quote';
+  const detail=document.createElement('div');detail.textContent=closed?paperEnd(t):'HOLD '+side+' · OPEN PAPER POSITION';
+  const when=document.createElement('small');when.textContent='Entry '+date(t.at)+(closed?' · Exit '+date(t.exitedAt||t.exitAt||t.settledAt||t.closedAt):'')+' · Recorded, not an executable live quote';
   card.append(title,money,detail,when);rows.append(card);
  }
  const completed=sessionTrades.filter(t=>['CLOSED','SETTLED'].includes(t.status)&&t.pnl!=null&&Number.isFinite(Number(t.pnl)));
