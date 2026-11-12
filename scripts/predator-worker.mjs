@@ -120,7 +120,7 @@ function sampleChampion(now){
 }
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
 let marketDiscovery={status:'NOT_ATTEMPTED',at:null,openMarkets:0,eligibleMarkets:0,errorCode:null};
-const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,heartbeatFailures:0};
+const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,invalidBookFrames:0,heartbeatFailures:0};
 async function persist(){
  dirty=false;
  await writeFile(path+'.tmp',JSON.stringify(state),{mode:0o600});
@@ -154,7 +154,12 @@ function connect(){
    if(frame.type==='error'){socket.terminate();return;}
    const update=depth.apply(frame,Date.now());
    if(update.status==='GAP'){gaps++;book=null;socket.terminate();return;}
-   if(update.status==='INVALID_BOOK'){lastDepthAt=Date.now();book=null;return;}
+   if(update.status==='INVALID_BOOK'){
+    // Invalid frames must not extend the healthy-book watchdog indefinitely.
+    counters.invalidBookFrames++;
+    book=null;
+    return;
+   }
    if(update.status==='READY'){
     lastDepthAt=update.receivedAt;
     book=update;bookSource='KALSHI_WS';counters.events++;
