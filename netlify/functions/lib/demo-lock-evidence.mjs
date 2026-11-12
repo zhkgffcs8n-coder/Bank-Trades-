@@ -18,10 +18,10 @@ export function classifySettlementRevenueMismatch(snapshot,intents){
   const expected=winning*100;
   const matches=n=>Math.abs(revenue-n)<=1e-7;
   if(matches(expected))continue;
+  if(revenue===0&&expected>0)return 'ZERO_PAYOUT';
   if(matches(winning))return 'DOLLARS_INSTEAD_OF_CENTS';
   if(matches(losing*100))return 'OPPOSITE_SIDE_PAYOUT';
   if(matches((yes+no)*100))return 'BOTH_SIDES_PAYOUT';
-  if(revenue===0&&expected>0)return 'ZERO_PAYOUT';
   return revenue<expected?'LOWER_THAN_EXPECTED':'HIGHER_THAN_EXPECTED';
  }
  return 'UNCLASSIFIED';
