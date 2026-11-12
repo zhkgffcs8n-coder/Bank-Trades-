@@ -10,7 +10,7 @@
   node_bundler = "esbuild"
 
 [functions.dashboard]
-  included_files = ["private/dashboard.html"]
+  included_files = ["private/dashboard.html", "private/polymarket.html"]
 
 [[redirects]]
   from = "/dashboard"
