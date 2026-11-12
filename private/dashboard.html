@@ -562,6 +562,42 @@ for(const event of feed.slice(0,12)){
 }
 feedPanel.append(historyList);
 }
+const previousKey='banktrades:previous-round-calls-v1';
+let previous={};
+try{previous=JSON.parse(sessionStorage.getItem(previousKey)||'{}')||{}}catch{}
+window.addEventListener('banktrades:shared-signals',event=>{
+ if(document.hidden||!Array.isArray(event.detail))return;
+ const now=Date.now(),feed=readCommandHistory();
+ let changed=false;
+ for(const sig of event.detail){
+  const assessment=sig?.roundAssessment,ticker=sig?.ticker,round=sig?.roundCall;
+  if(!ticker||!assessment||assessment.ticker!==ticker||assessment.asset!==sig.asset||
+   !['BUY UP','BUY DOWN','WAIT'].includes(sig.action)||
+   !Number.isFinite(assessment.evaluatedAt)||assessment.evaluatedAt<now-45000||
+   assessment.evaluatedAt>now+15000||!(assessment.expiresAt>now))continue;
+  const old=previous[sig.asset],sameRound=old?.ticker===ticker;
+  if(old?.evaluatedAt>=assessment.evaluatedAt)continue;
+  const direction=round?.ticker===ticker&&['UP','DOWN'].includes(round.direction)&&
+   Number.isFinite(round.asOf)&&round.asOf>=now-90000&&round.asOf<=now+15000?round.direction:null;
+  const record=(type,detail)=>{feed.unshift({at:now,asset:sig.asset,type,detail});changed=true};
+  if(direction){
+   if(!sameRound||!old.direction)record('ROUND CALL',direction+' · forecast');
+   else if(old.direction!==direction)record('FLIP WATCH',old.direction+' → '+direction+' · forecast changed; not a confirmed trade');
+  }
+  if(sig.action.startsWith('BUY')&&(!sameRound||old.action!==sig.action)){
+   record(sig.action,'Qualified entry · '+String(sig.reason||ticker).slice(0,70));
+  }else if(sameRound&&old.action?.startsWith('BUY')&&sig.action==='WAIT'){
+   record('ENTRY PAUSED','Previous entry no longer qualified · review position independently');
+  }
+  previous[sig.asset]={ticker,direction:direction||(sameRound?old.direction:null),action:sig.action,evaluatedAt:assessment.evaluatedAt};
+ }
+ try{sessionStorage.setItem(previousKey,JSON.stringify(previous))}catch{}
+ if(changed){
+  const recent=feed.slice(0,60);
+  try{localStorage.setItem(feedKey,JSON.stringify(recent))}catch{}
+  renderCommandHistory(recent);
+ }
+});
 renderCommandHistory(readCommandHistory());
 let busy=false,previousFallback=false;
 const cents=(m,side)=>{const dollars=m?.[side+'_dollars'];if(dollars!=null&&Number.isFinite(Number(dollars)))return Number(dollars)*100;const raw=m?.[side];return raw!=null&&Number.isFinite(Number(raw))?Number(raw):null};
@@ -580,12 +616,6 @@ if(quoteResponse.status!=='fulfilled')throw quoteResponse.reason;
 const res=quoteResponse.value,d=await res.json();if(!res.ok)throw Error('Kalshi HTTP '+res.status+' '+(d.error||''));if(!Array.isArray(d.results))throw Error('Invalid market payload');
 let signals=[],signalError='signal service unavailable',trainingInfo=null;
 if(signalResponse.status==='fulfilled'){const sr=signalResponse.value;if(sr.ok){const payload=await sr.json();trainingInfo=payload;const age=Date.now()-Date.parse(payload.fetched_at);if(Array.isArray(payload.results)&&Number.isFinite(age)&&age>=-15000&&age<45000)signals=payload.results;else signalError='stale signal service'}else signalError='signal HTTP '+sr.status}else signalError=String(signalResponse.reason?.message||signalResponse.reason);
-// Track observed changes, not retroactively invented BUY calls.
-const feedKey='banktrades:verified-alert-feed-v1';
-let feed=[];try{feed=JSON.parse(localStorage.getItem(feedKey)||'[]');if(!Array.isArray(feed))feed=[]}catch{feed=[]}
-let previous={};try{previous=JSON.parse(sessionStorage.getItem('banktrades:previous-round-calls-v1')||'{}')}catch{}
-const nextPrevious={};
-const addFeed=(asset,type,detail)=>{feed.unshift({at:Date.now(),asset,type,detail});feed=feed.slice(0,60)};
 tbody.replaceChildren();let open=0;
 for(const item of d.results){
 const m=item.market,up=cents(m,'yes_ask'),down=cents(m,'no_ask'),sig=signals.find(s=>s.asset===item.asset),ticker=m?.ticker;
@@ -594,15 +624,6 @@ const round=sig?.roundCall,hasRound=verified&&round?.direction&&round?.ticker===
 const prediction=hasRound?(round.direction==='UP'?'▲ UP FORECAST':'▼ DOWN FORECAST'):'NO ROUND CALL';
 const qualified=verified&&['BUY UP','BUY DOWN'].includes(sig.action);
 const reason=verified?String(sig.reason||'No qualified entry').slice(0,105):String(sig?.reason||signalError).slice(0,90);
-if(verified&&ticker){
- const old=previous[item.asset],current={ticker,direction:hasRound?round.direction:null,action:sig.action};
- nextPrevious[item.asset]=current;
- if(old?.ticker===ticker){
-  if(hasRound&&old.direction&&old.direction!==round.direction)addFeed(item.asset,'FLIP WATCH',old.direction+' → '+round.direction+' · forecast changed; not a confirmed trade');
-  if(qualified&&old.action!==sig.action)addFeed(item.asset,sig.action,'Qualified entry · '+(sig.reason||'').slice(0,70));
-  if(old.action?.startsWith('BUY')&&sig.action==='WAIT')addFeed(item.asset,'ENTRY PAUSED','Previous entry no longer qualified · review position independently');
- }else if(qualified)addFeed(item.asset,sig.action,'Qualified entry observed for '+ticker);
-}
 const expiryCandidates=['expires_at','close_time','expected_expiration_time','expiration_time'].map(k=>Date.parse(m?.[k]||'')).filter(t=>Number.isFinite(t)&&t>Date.now());
 const expiryTime=expiryCandidates.length?Math.min(...expiryCandidates):NaN;
 const remaining=Number.isFinite(expiryTime)?Math.max(0,Math.floor((expiryTime-Date.now())/60000))+'m '+String(Math.floor(Math.max(0,expiryTime-Date.now())/1000)%60).padStart(2,'0')+'s':'Time unavailable';
@@ -632,8 +653,6 @@ const timeCell=document.createElement('td');timeCell.textContent=remaining;timeC
 tbody.append(tr);if(m)open++;
 }
 previousFallback=true;
-try{sessionStorage.setItem('banktrades:previous-round-calls-v1',JSON.stringify(nextPrevious));localStorage.setItem(feedKey,JSON.stringify(feed))}catch{}
-renderCommandHistory(feed);
 strip.textContent=open+' Kalshi contracts received · '+(signals.length?'Primal response received':'Primal '+signalError);
 badge.textContent=signals.length?'● FALLBACK LIVE DATA':'● QUOTES ONLY · PRIMAL UNAVAILABLE';
 let trainingLine=document.getElementById('btTrainingHealth');
