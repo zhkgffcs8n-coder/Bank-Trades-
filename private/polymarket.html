@@ -17,7 +17,7 @@
   </nav>
   <h1>15-minute crypto markets</h1>
   <nav id="poly-coins" aria-label="Market"></nav>
-  <section class="venue-card" aria-labelledby="poly-title">
+  <section class="venue-card poly-scalper-panel" aria-labelledby="poly-title">
     <h2 id="poly-title">BTC Up or Down</h2>
     <p id="poly-clock"></p>
     <p id="poly-status" role="status">Loading live quotes…</p>
@@ -25,19 +25,27 @@
     <section id="poly-signals" hidden aria-labelledby="poly-signal-title">
       <h3 id="poly-signal-title">Polymarket Pro Scalper</h3>
       <p id="poly-signal-status"></p>
-      <details><summary>Individual engine calls and positions</summary>
+      <details open><summary>Individual engine calls</summary>
+      <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Entry</th><th scope="col">Bid</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
+      </details>
+      <p>Uses the V8 scalper rules with Polymarket quotes. Entry and exit bids are research references. History is stored in this browser.</p>
+    </section>
+  </section>
+  <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
+    <h2 id="poly-live-title">Live Market Signals</h2>
+    <p>Engine agreement across each 15-minute market.</p>
+    <div id="poly-live-rows"></div>
       <section class="poly-tracker" aria-labelledby="poly-tracker-title">
         <h3 id="poly-tracker-title">Live Position Tracker</h3>
         <p id="poly-tracker-empty">Waiting for a BUY call.</p>
         <div id="poly-tracker-positions"></div>
       </section>
-      <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Entry</th><th scope="col">Bid</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
-      </details>
-      <h3>Live Call &amp; Flip History</h3>
+  </aside>
+  <section class="venue-card poly-history-panel" aria-labelledby="poly-history-title">
+      <h2 id="poly-history-title">Live Call &amp; Flip History</h2>
       <p id="poly-history-empty">No Polymarket calls recorded in this browser yet.</p>
       <ol id="poly-call-history"></ol>
-      <p>Uses the V8 scalper rules with Polymarket quotes. Entry and exit bids are research references. History is stored in this browser.</p>
-    </section>
+    <h2>Contract Price</h2>
     <table id="poly-quotes" hidden>
       <caption>Live order book · Ask to buy, bid to sell</caption>
       <thead><tr><th scope="col">Outcome</th><th scope="col">Bid</th><th scope="col">Ask</th></tr></thead>
@@ -45,11 +53,6 @@
     </table>
     <a id="poly-link" hidden>View market and resolution rules</a>
   </section>
-  <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
-    <h2 id="poly-live-title">Live Market Signals</h2>
-    <p>Engine agreement across each 15-minute market.</p>
-    <div id="poly-live-rows"></div>
-  </aside>
 </main>
 </body>
 </html>
