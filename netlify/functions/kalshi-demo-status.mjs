@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
@@ -73,7 +74,7 @@ export default async req=>{try{
    return json({status:result.headers.get('x-demo-lifecycle-status')},result.ok?200:503);
   }
   if(side!==undefined&&!['UP','DOWN'].includes(side))fail(400,'Choose UP or DOWN');
-  await store.setJSON(key,{ownerId:user.id,side:side??'UP'});
+  await store.setJSON(key,{ownerId:user.id,side:side??'UP',requestId:randomUUID(),requestedAt:Date.now()});
   const result=await runScheduledDemo(undefined,{entryOnly:true,testSide:side??'UP'});
   return json({status:result.headers.get('x-demo-lifecycle-status')},result.ok?200:503);
  }
