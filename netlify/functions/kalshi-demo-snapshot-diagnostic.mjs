@@ -44,6 +44,20 @@ export async function probeDemoSnapshot(credentials,fetchImpl=fetch){
  return {correlationId,checkedAt:new Date().toISOString(),ok:operations.every(read=>!read.failureCategory),operations};
 }
 
+
+export function demoSnapshotProbeReceipt(result,commit=null){
+ const firstFailure=result.operations.find(operation=>operation.failureCategory);
+ return {
+  status:result.ok?'DEMO_SNAPSHOT_READS_OK':'DEMO_SNAPSHOT_READS_FAILED',
+  transportCause:firstFailure?.failureCategory||null,
+  requestId:result.correlationId,
+  operation:'INDEPENDENT_READ_ONLY_SNAPSHOT',
+  checkedAt:result.checkedAt,
+  durationMs:result.operations.reduce((sum,operation)=>sum+operation.durationMs,0),
+  commit
+ };
+}
+
 export function createDemoSnapshotDiagnostic({
  getOwner=owner,ownerId=()=>process.env.KALSHI_LIVE_OWNER_ID,
  getStoreForDemo=()=>getStore({name:'bank-trades-kalshi-demo',consistency:'strong'}),
