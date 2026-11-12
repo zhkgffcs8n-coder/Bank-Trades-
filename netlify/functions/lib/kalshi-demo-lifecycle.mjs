@@ -44,7 +44,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
      return {status:'DEMO_REARM_BLOCKED_ACCOUNT_EXPOSURE'};
    }catch{return {status:'DEMO_REARM_ACCOUNT_CHECK_FAILED'};}
    if(await checkStopped())return {status:'DEMO_EXECUTION_TEST_STOPPED'};
-   state.demoHistory=[...(state.demoHistory||[]),state.demo].slice(-20);
+   state.demoHistory=[...(state.demoHistory||[]),state.demo];
    state.demo={startedAt:clock(),commit,phase:testSide==='DOWN'?'DOWN':'UP',
     attempts:0,intentOffset:state.intents.length,mode:DEMO_EXECUTION_TEST,testRunId};
    state.enabled=true;state.stopped=false;
