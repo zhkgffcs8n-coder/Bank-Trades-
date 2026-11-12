@@ -104,6 +104,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       });
       if (!next || next === position) continue;
       state.positions[key] = next;
+      if (position?.exit && next.exit) continue;
       const side = next.side.toUpperCase();
       const action = next.exit ? `${next.exit.split(' · ')[0]} ${side}`
         : position ? `FLIP · BUY ${side}` : `BUY ${side}`;
