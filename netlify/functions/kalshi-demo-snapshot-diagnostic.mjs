@@ -58,6 +58,13 @@ export function demoSnapshotProbeReceipt(result,commit=null){
  };
 }
 
+
+export function shouldProbeTerminalDemo(lifecycle,previousReceipt,now=Date.now()){
+ if(lifecycle?.finished!==true)return false;
+ const last=Date.parse(previousReceipt?.checkedAt||'');
+ return !Number.isFinite(last)||now-last>=10*60*1000;
+}
+
 export function createDemoSnapshotDiagnostic({
  getOwner=owner,ownerId=()=>process.env.KALSHI_LIVE_OWNER_ID,
  getStoreForDemo=()=>getStore({name:'bank-trades-kalshi-demo',consistency:'strong'}),
