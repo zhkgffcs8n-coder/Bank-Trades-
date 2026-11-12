@@ -23,7 +23,10 @@ function category(error,status){
 }
 export async function probeDemoSnapshot(credentials,fetchImpl=fetch){
  const correlationId=randomUUID(),deadline=AbortSignal.timeout(8000);
- const operations=await Promise.all(reads.map(async ([phase,path,field])=>{
+ // Serial reads avoid a five-request burst against the shared Demo rate limit.
+ // Preserve independent phase results even when one read fails.
+ const operations=[];
+ for(const [phase,path,field] of reads){
   let httpStatus=null;
   const start=performance.now();
   const client=kalshiClient(credentials,{environment:'demo',fetchImpl:async (url,options)=>{
@@ -40,8 +43,8 @@ export async function probeDemoSnapshot(credentials,fetchImpl=fetch){
     if(!Number.isSafeInteger(response?.balance)||response.balance<0)throw Error('INVALID_BALANCE');
    }
   }catch(error){failureCategory=category(error,httpStatus);}
-  return {phase,httpStatus,durationMs:Math.round(performance.now()-start),failureCategory};
- }));
+  operations.push({phase,httpStatus,durationMs:Math.round(performance.now()-start),failureCategory});
+ }
  return {correlationId,checkedAt:new Date().toISOString(),ok:operations.every(read=>!read.failureCategory),operations};
 }
 
