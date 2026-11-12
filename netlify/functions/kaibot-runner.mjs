@@ -142,6 +142,7 @@ export default async()=>{
  const research={model:globalModel,status:training};
  const round=Math.floor(now/900000);
  const mode=['lock','balanced','extreme'].includes(state.mode)?state.mode:'balanced';
+ const coverageQuotes=[];
  const roundAudit={at:now,running:true,mode,entriesPaused:entryPaused,markets:{}};
  // Fetch the eight market lists concurrently to reduce scan latency without changing signal qualification.
  const marketLists=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
@@ -158,10 +159,14 @@ export default async()=>{
    const d=marketResponse?.data||{};
    const ms=(d.markets||[]).map(m=>({...m,_e:Date.parse(m.expected_expiration_time||m.expiration_time||m.close_time||'')})).filter(m=>Number.isFinite(m._e)&&m._e-now>=240000&&m._e-now<=930000).sort((a,b)=>a._e-b._e);const m=ms[0];if(!m){roundAudit.markets[asset]={status:'SKIPPED',reason:'No contract with at least 4 minutes remaining (late-entry protection)'};continue;}roundAudit.markets[asset]={status:'CHECKING',ticker:m.ticker};const previous=ledger.trades.filter(t=>t.ticker===m.ticker);if(previous.some(t=>t.status==='OPEN')||previous.length>=(mode==='extreme'?5:3)||previous.some(t=>now-Number(t.at)<(mode==='extreme'?60000:120000))){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Position open, mode entry limit, or mode cooldown',entries:previous.length};continue;}
    const recent=await hdb.get('recent/'+asset,{type:'json'}).catch(()=>[]),records=(Array.isArray(recent)?recent:[]).filter(x=>x?.ticker===m.ticker).sort((a,b)=>a.t-b.t).slice(-8);
-   // Paper-only coverage mode: make one bounded hypothetical entry per verified contract.
-   // A quote-implied direction is not a validated edge and is never a real-money order.
    const yesAsk=q(m,'yes_ask'),noAsk=q(m,'no_ask'),yesBid=q(m,'yes_bid'),noBid=q(m,'no_bid');
    if(![yesAsk,noAsk,yesBid,noBid].every(Number.isFinite)||yesAsk<=0||noAsk<=0||yesAsk>=100||noAsk>=100||yesBid<0||noBid<0||yesBid>yesAsk||noBid>noAsk){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Invalid or untradeable quote',secondsLeft:Math.round((m._e-now)/1000),quote:{yesAsk,noAsk,yesBid,noBid}};continue;}
+   if(mode==='extreme'&&previous.length===0){
+    const side=yesBid+yesAsk>=noBid+noAsk?'up':'down';
+    const ask=side==='up'?yesAsk:noAsk,bid=side==='up'?yesBid:noBid;
+    if(bid>0&&ask-bid<=5)coverageQuotes.push({asset,ticker:m.ticker,side,ask,
+     expiresAt:m._e,entryQuote:{yesAsk,yesBid,noAsk,noBid}});
+   }
    const fresh=records.length>0&&now-Number(records.at(-1)?.t)<120000;
    const validHistory=fresh&&records.length>=2&&records.every(x=>Number.isFinite(x.yesMid)&&Number.isFinite(x.t))&&Number(records.at(-1).t)-Number(records[0].t)>=45000;
    const assetModel=await hdb.get('training/model/'+asset,{type:'json'}).catch(()=>null);
@@ -221,10 +226,30 @@ export default async()=>{
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
  }
- // EXTREME must never fabricate an entry from an unqualified quote.
- // Record coverage honestly; only the shared qualified BUY path above opens positions.
- const enteredRound=ledger.trades.some(t=>Math.floor(Number(t.at)/900000)===round&&t.entryBasis==='QUALIFIED PAPER SIGNAL');
- roundAudit.extremeCoverage={round,mode,status:entryPaused?'PAUSED':enteredRound?'QUALIFIED_ENTRY':'NO_QUALIFIED_ENTRY',note:'No forced quote-only entries; every position requires the same shared validated paper BUY signal.'};
+ const tradesThisRound=ledger.trades.filter(t=>Math.floor(Number(t.at)/900000)===round);
+ const qualifiedEntry=tradesThisRound.some(t=>t.entryBasis==='QUALIFIED PAPER SIGNAL');
+ let coverageEntry=tradesThisRound.some(t=>t.extremeCoverage===true);
+ if(mode==='extreme'&&!qualifiedEntry&&!coverageEntry){
+  const entryAt=Date.now();
+  // Prefer BTC, then the remaining configured assets in scan order.
+  const quote=coverageQuotes.find(q=>entryAt-now<=30000&&q.expiresAt-entryAt>=240000&&q.ask<=ledger.cash*100);
+  if(quote&&Math.floor(entryAt/900000)===round){
+   const {asset,ticker,side,ask,expiresAt,entryQuote}=quote;
+   const qty=Math.floor(Math.min(100,Math.round(ledger.cash*100))/ask);
+   const cost=Math.round(qty*ask)/100;
+   if(qty>=1&&cost>0&&cost<=ledger.cash){
+    const entryBasis='UNVALIDATED QUOTE-BASED PAPER TEST';
+    ledger.cash=Math.round((ledger.cash-cost)*100)/100;
+    ledger.trades.push({id:'srv_'+entryAt+'_'+asset,asset,ticker,side,qty,ask,cost,at:entryAt,
+     status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,extremeCoverage:true,
+     secondsToExpiryAtEntry:(expiresAt-entryAt)/1000,entryQuote});
+    roundAudit.markets[asset]={status:'ENTERED',ticker,side,ask,entryBasis,entries:1};
+    coverageEntry=true;
+   }
+  }
+ }
+ roundAudit.extremeCoverage={round,mode,status:qualifiedEntry?'QUALIFIED_ENTRY':coverageEntry?'COVERAGE_ENTRY':
+  mode==='extreme'?'NO_USABLE_COVERAGE_QUOTE':entryPaused?'PAUSED':'NO_QUALIFIED_ENTRY'};
  ledger.updatedAt=now;await s.setJSON('ledger',ledger);await s.setJSON('last-run',roundAudit);
  return new Response(null,{status:204});
 };
