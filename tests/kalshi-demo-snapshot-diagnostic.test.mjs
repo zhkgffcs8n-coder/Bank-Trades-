@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync} from 'node:crypto';
-import {createDemoSnapshotDiagnostic,probeDemoSnapshot} from '../netlify/functions/kalshi-demo-snapshot-diagnostic.mjs';
+import {createDemoSnapshotDiagnostic,probeDemoSnapshot,demoSnapshotProbeReceipt} from '../netlify/functions/kalshi-demo-snapshot-diagnostic.mjs';
 
 test('independent Demo probe reports all phases and redacts exchange responses',async()=>{
  const {privateKey}=generateKeyPairSync('ed25519');
@@ -32,4 +32,20 @@ test('Demo diagnostic denies other owners and cross-origin requests before readi
  assert.equal((await make('owner-id')(new Request(url,{method:'POST',headers:{origin:'https://other.test'}}))).status,403);
  assert.equal((await make('owner-id')(new Request(url))).status,200);
  assert.equal(reads,0);
+});
+
+test('independent snapshot receipt is sanitized and does not claim release certification',()=>{
+ const result={ok:false,correlationId:'safe-correlation-id',checkedAt:'2026-11-11T21:22:00.000Z',
+  operations:[
+   {phase:'BALANCE',httpStatus:401,durationMs:18,failureCategory:'AUTHENTICATION_OR_PERMISSION'},
+   {phase:'ORDERS',httpStatus:200,durationMs:12,failureCategory:null}
+  ],secret:'never-emit'};
+ const receipt=demoSnapshotProbeReceipt(result,'test-build');
+ assert.deepEqual(receipt,{
+  status:'DEMO_SNAPSHOT_READS_FAILED',transportCause:'AUTHENTICATION_OR_PERMISSION',
+  requestId:'safe-correlation-id',operation:'INDEPENDENT_READ_ONLY_SNAPSHOT',
+  checkedAt:'2026-11-11T21:22:00.000Z',durationMs:18,commit:'test-build'
+ });
+ assert.doesNotMatch(JSON.stringify(receipt),/never-emit/);
+ assert.equal(demoSnapshotProbeReceipt({...result,ok:true,operations:[]}).status,'DEMO_SNAPSHOT_READS_OK');
 });
