@@ -25,7 +25,7 @@ test('scheduled full snapshot writes a separate durable receipt and exposes it i
  assert.match(lifecycle,/db\.get\('saved-snapshot-probe'/);
  assert.match(lifecycle,/db\.setJSON\('saved-snapshot-probe',\{\.\.\.demoSnapshotProbeReceipt/);
  assert.match(check,/store\.setJSON\('saved-balance-probe'/);
- assert.doesNotMatch(check,/store\.setJSON\('saved-snapshot-probe'/);
+ assert.match(check,/store\.setJSON\('saved-snapshot-probe'/);
  assert.match(worker,/readSanitizedDemoProbe\(demoProbeStore,'saved-snapshot-probe'\)/);
  assert.match(worker,/demoProbeReceipt,demoSnapshotReceipt/);
  assert.match(status,/savedBalanceProbe,savedSnapshotProbe,championWake/);
