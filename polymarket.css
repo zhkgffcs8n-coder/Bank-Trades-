@@ -22,3 +22,5 @@
 .poly-calls td { font-weight: 700; }
 .poly-calls [data-side="UP"] { color: #50e6b4; }
 .poly-calls [data-side="DOWN"] { color: #ff8091; }
+#poly-call-history { max-height: 10rem; overflow: auto; padding-inline-start: 1.5rem; }
+#poly-call-history li { padding-block: 4px; }
