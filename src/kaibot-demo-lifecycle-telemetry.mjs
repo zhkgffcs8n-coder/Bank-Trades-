@@ -34,7 +34,11 @@ export function sanitizeDemoLifecycleReceipt(raw){
   checkedAt,finished:raw.finished===true,stage:stageNames.has(raw.stage)?raw.stage:null,
   attempts:Number.isSafeInteger(raw.attempts)&&raw.attempts>=0&&raw.attempts<=8?raw.attempts:null,
   error:errorCode(raw.error),snapshotCause:errorCode(raw.snapshotCause),
-  ...(raw.lockEvidence&&typeof raw.lockEvidence==='object'?{lockEvidence:sanitizeDemoLockEvidence(raw.lockEvidence)}:{}),
+  ...(raw.lockEvidence&&typeof raw.lockEvidence==='object'?{
+   lockEvidence:sanitizeDemoLockEvidence(raw.lockEvidence),
+   lockEvidenceCheckedAt:Number.isFinite(raw.lockEvidenceCheckedAt)&&raw.lockEvidenceCheckedAt>=0?
+    raw.lockEvidenceCheckedAt:null
+  }:{}),
   upRoundTripVerified:raw.upRoundTripVerified===true,
   downRoundTripVerified:raw.downRoundTripVerified===true,
   executionTest:raw.mode==='DEMO_EXECUTION_TEST',
