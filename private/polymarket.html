@@ -21,14 +21,15 @@
     <h2 id="poly-title">BTC Up or Down</h2>
     <p id="poly-clock"></p>
     <p id="poly-status" role="status">Loading live quotes…</p>
-    <label><input id="poly-signal-toggle" type="checkbox"> Polymarket signals</label>
+    <label><input id="poly-signal-toggle" type="checkbox" checked> <span id="poly-toggle-label">Signals ON</span></label>
     <section id="poly-signals" hidden aria-labelledby="poly-signal-title">
-      <h3 id="poly-signal-title">Pro Scalper research</h3>
+      <h3 id="poly-signal-title">Polymarket Pro Scalper</h3>
       <p id="poly-signal-status"></p>
-      <ul id="poly-signal-calls"></ul>
+      <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Entry</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
       <p>Uses the V8 scalper rules with Polymarket quotes. These research calls use the Kalshi cost model and have no verified Polymarket track record.</p>
     </section>
     <table id="poly-quotes" hidden>
+      <caption>Live order book · Ask to buy, bid to sell</caption>
       <thead><tr><th scope="col">Outcome</th><th scope="col">Bid</th><th scope="col">Ask</th></tr></thead>
       <tbody></tbody>
     </table>
