@@ -6,6 +6,7 @@ import {assessPaperExitQuote} from '../../src/paper-exit-quote.mjs';
 import {getStore} from '@netlify/blobs';
 const SERIES={BTC:'KXBTC15M',ETH:'KXETH15M',SOL:'KXSOL15M',XRP:'KXXRP15M',DOGE:'KXDOGE15M',BNB:'KXBNB15M',HYPE:'KXHYPE15M',ZEC:'KXZEC15M'};
 const base='https://api.elections.kalshi.com/trade-api/v2',db=()=>getStore({name:'bank-trades-server-kaibot',consistency:'strong'}),hist=()=>getStore({name:'bank-trades-market-history',consistency:'strong'});
+const PAPER_STAKE_DOLLARS=100;
 const q=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
 async function get(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),7000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'}});if(!r.ok)throw Error('HTTP '+r.status);return r.json()}finally{clearTimeout(t)}}
 export default async()=>{
@@ -220,8 +221,7 @@ export default async()=>{
    }
    if(ask<=0||ask>=100){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Selected side not tradable'};continue;}
    const entryBasis='QUALIFIED PAPER SIGNAL';
-   const max=100; // Fixed $100 virtual stake ceiling per qualified paper entry; never affects live orders.
-   const qty=Math.floor(Math.min(max,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
+   const qty=Math.floor(Math.min(PAPER_STAKE_DOLLARS,ledger.cash)/(ask/100)),cost=Math.round(qty*ask)/100;if(qty<1||cost<=0||cost>ledger.cash){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'Insufficient virtual cash'};continue;}
    roundAudit.markets[asset]={status:'ENTERED',ticker:m.ticker,side,ask,entryBasis,entries:previous.length+1};
    ledger.cash=Math.round((ledger.cash-cost)*100)/100;ledger.trades.push({id:'srv_'+now+'_'+asset,asset,ticker:m.ticker,side,qty,ask,cost,at:now,status:'OPEN',source:'SERVER KAIBOT PAPER',entryBasis,secondsToExpiryAtEntry:(m._e-now)/1000,entryQuote:{yesAsk,yesBid,noAsk,noBid},signalQuality:{sharedEngine:true,score:signal.score,reason:signal.reason,validation:signal.validation,secondsLeft:(m._e-now)/1000}});
   }catch(e){roundAudit.markets[asset]={status:'ERROR',reason:String(e).slice(0,240)};console.error('KaiBot paper round failed',asset,String(e));await s.setJSON('round-error/'+asset,{asset,at:now,error:String(e).slice(0,240)}).catch(()=>{});}
@@ -235,7 +235,7 @@ export default async()=>{
   const quote=coverageQuotes.find(q=>entryAt-now<=30000&&q.expiresAt-entryAt>=240000&&q.ask<=ledger.cash*100);
   if(quote&&Math.floor(entryAt/900000)===round){
    const {asset,ticker,side,ask,expiresAt,entryQuote}=quote;
-   const qty=Math.floor(Math.min(100,Math.round(ledger.cash*100))/ask);
+   const qty=Math.floor(Math.min(PAPER_STAKE_DOLLARS*100,Math.round(ledger.cash*100))/ask);
    const cost=Math.round(qty*ask)/100;
    if(qty>=1&&cost>0&&cost<=ledger.cash){
     const entryBasis='UNVALIDATED QUOTE-BASED PAPER TEST';
