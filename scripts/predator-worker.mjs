@@ -10,6 +10,7 @@ import {predatorStreamCredentials} from './predator-stream-credentials.mjs';
 import {getStore} from '@netlify/blobs';
 import {checkKalshiProductionReads} from './kalshi-production-readiness.mjs';
 import {readSanitizedDemoProbe} from '../src/kaibot-demo-probe-telemetry.mjs';
+import {readSanitizedDemoLifecycle} from '../src/kaibot-demo-lifecycle-telemetry.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {openPredatorTape} from '../src/predator-stream.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
@@ -31,6 +32,12 @@ const credentials=await predatorStreamCredentials(env);
 const productionReadClient=credentials?kalshiClient(credentials):null;
 let productionReads=null,nextProductionRead=0;
 let demoProbeReceipt=null,demoSnapshotReceipt=null,nextDemoProbeRead=0;
+let demoLifecycleReceipt=null,nextDemoLifecycleRead=0;
+function sampleDemoLifecycleReceipt(now){
+ if(!demoProbeStore||now<nextDemoLifecycleRead)return;
+ nextDemoLifecycleRead=now+60000;
+ void readSanitizedDemoLifecycle(demoProbeStore).then(receipt=>{demoLifecycleReceipt=receipt;});
+}
 function sampleProductionReads(now){
  if(!productionReadClient||now<nextProductionRead)return;
  nextProductionRead=now+300000;
@@ -113,7 +120,7 @@ function sampleChampion(now){
 }
 let latest=null,lastPublish=0,publishError=false,nextDiscovery=0,nextRest=0,nextSettlement=0;
 let marketDiscovery={status:'NOT_ATTEMPTED',at:null,openMarkets:0,eligibleMarkets:0,errorCode:null};
-const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,heartbeatFailures:0};
+const counters={events:0,evaluations:0,websocketAttempts:0,restSamples:0,settlementErrors:0,depthTimeouts:0,invalidBookFrames:0,heartbeatFailures:0};
 async function persist(){
  dirty=false;
  await writeFile(path+'.tmp',JSON.stringify(state),{mode:0o600});
@@ -147,7 +154,12 @@ function connect(){
    if(frame.type==='error'){socket.terminate();return;}
    const update=depth.apply(frame,Date.now());
    if(update.status==='GAP'){gaps++;book=null;socket.terminate();return;}
-   if(update.status==='INVALID_BOOK'){lastDepthAt=Date.now();book=null;return;}
+   if(update.status==='INVALID_BOOK'){
+    // Invalid frames must not extend the healthy-book watchdog indefinitely.
+    counters.invalidBookFrames++;
+    book=null;
+    return;
+   }
    if(update.status==='READY'){
     lastDepthAt=update.receivedAt;
     book=update;bookSource='KALSHI_WS';counters.events++;
@@ -315,6 +327,7 @@ async function run(){
   dispatchDemoWake();
   sampleProductionReads(now);
   sampleDemoProbeReceipt(now);
+  sampleDemoLifecycleReceipt(now);
   if(now>=nextSettlement){nextSettlement=now+15000;await settle(now);}
   if(dirty&&(lastPublish===0||now-lastPersist>=3000))await persist();
   if(now-lastPublish>=(latest?.position&&!latest.position.closedAt?2000:15000)){
@@ -323,7 +336,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,marketDiscovery,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,demoSnapshotReceipt,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,marketDiscovery,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,demoSnapshotReceipt,demoLifecycleReceipt,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);

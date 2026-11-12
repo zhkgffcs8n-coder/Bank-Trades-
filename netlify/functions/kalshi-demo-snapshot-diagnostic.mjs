@@ -1,3 +1,4 @@
+import {liveBuildCommit} from './lib/kalshi-release-gate.mjs';
 import {randomUUID} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
@@ -95,7 +96,7 @@ export function createDemoSnapshotDiagnostic({
   try{credentials=openKalshiCredentials({userId:'demo-'+configuredOwner,envelope:saved.envelope,secret:secret()});}
   catch{return json({ok:false,correlationId:randomUUID(),phase:'CREDENTIAL_LOADING',failureCategory:'CREDENTIAL_LOAD_FAILED'},503);}
   const result=await probeDemoSnapshot(credentials,fetchImpl);
-  return json({...result,commit:process.env.COMMIT_REF||null});
+  return json({...result,commit:liveBuildCommit()});
  }catch(error){return errorResponse(error);}};
 }
 export default createDemoSnapshotDiagnostic();
