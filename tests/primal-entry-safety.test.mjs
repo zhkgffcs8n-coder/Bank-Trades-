@@ -21,3 +21,12 @@ test('open paper position uses executable bid for stop',()=>{
  const r=paperSignal(market,[],{side:'down',ask:70},now,null);
  assert.equal(r.action,'SELL FAST');assert.equal(r.exitBidCents,53);
 });
+
+
+test('paper BUY must clear both probability margin and conservative execution-cost stress',()=>{
+ const model={weights:[0,0,0,0],count:120,brier:12,baselineBrier:20};
+ const r=paperSignal({...market,yes_ask:44,yes_bid:42,no_bid:54,no_ask:56},samples,null,now,{model});
+ assert.equal(r.action,'WAIT');
+ assert.equal(r.validation,'MODEL_EDGE_TOO_SMALL');
+ assert.equal(r.requiredProbability,.51);
+});

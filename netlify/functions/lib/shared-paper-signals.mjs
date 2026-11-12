@@ -50,21 +50,27 @@ export function paperSignal(m,records=[],position=null,now=Date.now(),research=n
   validation:'MODEL_NOT_VALIDATED',researchValidated:false,
   reason:'Momentum-only entry paused: no validated asset model; collecting verified settlement outcomes'};
  const sideProbability=side==='up'?researchForecast:1-researchForecast;
- const requiredProbability=ask/100+.05;
+ // Stress-test two additional cents per contract for possible fees and slippage.
+ // This is a conservative research buffer, not a verified Kalshi fee quote.
+ const executionCostStressCents=2;
+ const requiredProbability=(ask+executionCostStressCents)/100+.05;
  if(sideProbability<requiredProbability)return {...base,side,ask,entryResearch,researchForecast,
   researchValidated:true,modelSideProbability:sideProbability,requiredProbability,
   validation:'MODEL_EDGE_TOO_SMALL',
-  reason:'Validated model probability does not exceed executable ask by 5 percentage points (before fees)'};
+  reason:'Validated model probability does not exceed executable ask by 5 percentage points (including a 2¢/contract execution-cost stress)'};
  // A learned model can veto an experimental PAPER entry, never invent one.
  // This is not live-order authorization. Require a margin above executable ask
  // for the proposed side, and do not apply unvalidated models.
  if(researchForecast!==null){
   const sideProbability=side==='up'?researchForecast:1-researchForecast;
-  const requiredProbability=ask/100+.05;
+  // Stress-test two additional cents per contract for possible fees and slippage.
+ // This is a conservative research buffer, not a verified Kalshi fee quote.
+ const executionCostStressCents=2;
+ const requiredProbability=(ask+executionCostStressCents)/100+.05;
   if(sideProbability<requiredProbability)return {...base,side,ask,researchForecast,
    researchValidated:true,validation:'LEARNED MODEL PAPER VETO',
    reason:'Validated research forecast does not exceed executable entry cost by 5 percentage points',
    modelSideProbability:sideProbability,requiredProbability,entryResearch};
  }
- return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),modelSideProbability:sideProbability,requiredProbability,reason:'Validated research model passes preliminary quote-cost screen; fees, slippage and forward profitability unverified',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:researchForecast===null?'unvalidated model; no decision influence':'validated model vetoes insufficient-edge paper entries only'};
+ return {...base,action:side==='up'?'BUY UP':'BUY DOWN',side,ask,score:Math.round(Math.min(90,40+Math.abs(momentum)*3+agreement*20)),modelSideProbability:sideProbability,requiredProbability,reason:'Validated research model passes 2¢/contract execution-cost stress; actual fees, fills and forward profitability unverified',entryResearch,sampleCount:a.length,researchForecast,researchValidated:modelValidated(research?.model),researchMode:researchForecast===null?'unvalidated model; no decision influence':'validated model vetoes insufficient-edge paper entries only'};
 }
