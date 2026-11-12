@@ -11,7 +11,7 @@ import {eligibleDemoLifecycleMarket,demoLifecycleMarketRejection,findDemoLifecyc
 import {inspectDemoLock} from './lib/demo-lock-evidence.mjs';
 import {runDemoLifecycle} from './lib/kalshi-demo-lifecycle.mjs';
 import {sanitizedDemoSnapshotFailure} from '../../src/demo-snapshot-telemetry.mjs';
-import {probeDemoSnapshot,demoSnapshotProbeReceipt,shouldProbeTerminalDemo} from './kalshi-demo-snapshot-diagnostic.mjs';
+import {shouldRefreshDemoLockInspection} from './lib/demo-lock-inspection-policy.mjs';
 export async function runScheduledDemo(worker,manual={}){
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'}),id=process.env.KALSHI_LIVE_OWNER_ID;
@@ -20,18 +20,8 @@ export async function runScheduledDemo(worker,manual={}){
  try{
   credentials=openKalshiCredentials({userId:'demo-'+id,envelope:saved.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
   const readOnly=kalshiClient(credentials,{environment:'demo'});
-  // A terminal lifecycle must not suppress fresh read-only exchange diagnostics.
-  // This never re-arms a trade or changes order state; failures are isolated.
-  const [lastLifecycle,previousProbe]=await Promise.all([
-   db.get('lifecycle-status',{type:'json'}).catch(()=>null),
-   db.get('saved-snapshot-probe',{type:'json'}).catch(()=>null)
-  ]);
-  if(shouldProbeTerminalDemo(lastLifecycle,previousProbe)){
-   try{
-    const probe=await probeDemoSnapshot(credentials);
-    await db.setJSON('saved-snapshot-probe',{...demoSnapshotProbeReceipt(probe,liveBuildCommit()),credentialCheckedAt:saved.checkedAt??null});
-   }catch{console.warn('DEMO_INDEPENDENT_PROBE_UNAVAILABLE');}
-  }
+  // Independent five-phase Demo probes run in kalshi-demo-check. Do not
+  // duplicate those exchange reads in this per-minute execution scheduler.
   repo=liveRepository(db,'demo-lifecycle-v1',{
    recoverDemoLock:record=>recoverTerminalDemoState(record,readOnly)
   });
@@ -94,9 +84,22 @@ export async function runScheduledDemo(worker,manual={}){
    await db.setJSON('lifecycle-status',{status:e.message,checkedAt:Date.now()});
    return new Response(null,{status:204,headers:{'x-demo-lifecycle-status':'DEMO_LOCK_RECOVERED'}});
   }
-  const lockEvidence=e.message==='EXECUTION_BUSY'&&credentials?
-   await inspectDemoLock(repo,kalshiClient(credentials,{environment:'demo'})):null;
-  await db.setJSON('lifecycle-status',{lockEvidence,status:'DEMO_LIFECYCLE_UNAVAILABLE',error:/^[A-Z0-9_:.-]+$/.test(e.message)?e.message:'DEMO_CONFIGURATION_OR_TRANSPORT_ERROR',checkedAt:Date.now()});return new Response(null,{status:503,headers:{'x-demo-lifecycle-status':'DEMO_LIFECYCLE_UNAVAILABLE'}});}
+  let lockEvidence=null,lockEvidenceCheckedAt=null;
+  if(e.message==='EXECUTION_BUSY'&&credentials&&repo){
+   // The lock is fail-closed regardless of this diagnostic. Reuse a recent
+   // read-only inspection rather than re-reading five exchange endpoints on
+   // every scheduler wake and exhausting the shared Demo rate limit.
+   const previous=await db.get('lifecycle-status',{type:'json'}).catch(()=>null);
+   const now=Date.now();
+   if(shouldRefreshDemoLockInspection(previous,now)){
+    lockEvidence=await inspectDemoLock(repo,kalshiClient(credentials,{environment:'demo'}));
+    lockEvidenceCheckedAt=now;
+   }else{
+    lockEvidence=previous.lockEvidence;
+    lockEvidenceCheckedAt=previous.lockEvidenceCheckedAt;
+   }
+  }
+  await db.setJSON('lifecycle-status',{lockEvidence,lockEvidenceCheckedAt,status:'DEMO_LIFECYCLE_UNAVAILABLE',error:/^[A-Z0-9_:.-]+$/.test(e.message)?e.message:'DEMO_CONFIGURATION_OR_TRANSPORT_ERROR',checkedAt:Date.now()});return new Response(null,{status:503,headers:{'x-demo-lifecycle-status':'DEMO_LIFECYCLE_UNAVAILABLE'}});}
 }
 export default ()=>runScheduledDemo();
 export const config={schedule:'* * * * *'};
