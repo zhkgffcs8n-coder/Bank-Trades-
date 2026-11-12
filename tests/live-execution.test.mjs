@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {qualifiesLiveEntry,initialState,makeOrder,reconcile,exitAction,submitIntent,emergencyStop,releaseFailures,validateLimits} from '../src/live-execution.mjs';
+import {qualifiesLiveEntry,initialState,makeOrder,reconcile,exitAction,submitIntent,emergencyStop,releaseFailures,validateLimits,HARD_RISK_CAPS} from '../src/live-execution.mjs';
 import {releaseStatus} from '../netlify/functions/lib/kalshi-release-gate.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {checkDemoConnection} from '../netlify/functions/kalshi-demo-check.mjs';
@@ -153,7 +153,7 @@ test('snapshot failure identifies only the fixed read phase without changing req
  }
 });
 
-test('live execution enforces the $5 exposure cap independently of Demo trial mode',async()=>{
+test('live execution enforces one-position cap even with higher persisted limits',async()=>{
  const x=setup();
  x.state.limits.maxPositions=2;
  // Isolate the exposure check: the independently enforced loss/spend limits must not reject first.
@@ -163,7 +163,7 @@ test('live execution enforces the $5 exposure cap independently of Demo trial mo
  x.snapshot.orders.push({order_id:'prior-order',client_order_id:'prior',ticker:'OLD-ROUND',fill_count_fp:'5.00',status:'executed'});
  x.snapshot.fills.push({fill_id:'prior-fill',order_id:'prior-order',ticker:'OLD-ROUND',count_fp:'5.00',yes_price_dollars:'0.90',fee_cost:'0',created_time:new Date(Date.now()-1000).toISOString()});
  x.snapshot.positions.push({ticker:'OLD-ROUND',position_fp:'5.00'});
- await assert.rejects(submitIntent(x),/EXPOSURE_LIMIT/);
+ await assert.rejects(submitIntent(x),/POSITION_LIMIT/);
  assert.equal(x.stats().calls,0);
 });
 
@@ -199,4 +199,17 @@ test('deployment release evidence must be complete, fresh and build-specific',as
  assert.equal(evaluate(commit,now+3600001).canTrade,false);
  delete evidence.checks.emergencyCancellation;
  assert.equal(evaluate().canTrade,false);
+});
+
+
+test('KaiBot absolute risk ceilings cannot be raised by legacy owner settings',async()=>{
+ assert.deepEqual(HARD_RISK_CAPS,{orderCents:100,dailyCents:500,lossCents:300,maxPositions:1,exposureCents:500});
+ const order=setup();Object.assign(order.state.limits,{orderCents:10000,dailyCents:10000,lossCents:10000,maxPositions:8});
+ order.quote.upAsk=95;order.quote.upBid=94;
+ await assert.rejects(submitIntent(order),/SPENDING_LIMIT/);
+ assert.equal(order.stats().calls,0);
+ const daily=setup();Object.assign(daily.state.limits,{orderCents:10000,dailyCents:10000,lossCents:10000,maxPositions:8});
+ daily.state.spent[new Date(daily.snapshot.at).toISOString().slice(0,10)]=450;
+ await assert.rejects(submitIntent(daily),/SPENDING_LIMIT/);
+ assert.equal(daily.stats().calls,0);
 });
