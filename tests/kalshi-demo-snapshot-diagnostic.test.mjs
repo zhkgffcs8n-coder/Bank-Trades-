@@ -71,3 +71,31 @@ test('Demo probe receipt excludes invalid HTTP statuses and unrecognized phase n
  assert.equal(receipt.httpStatus,null);
  assert.doesNotMatch(JSON.stringify(receipt),/SECRET_INTERNAL_PHASE|999/);
 });
+
+
+test('five-phase Demo probe serializes reads and preserves sanitized 429 evidence',async()=>{
+ const {privateKey}=generateKeyPairSync('ed25519');
+ const credentials={keyId:'secret-test-key',privateKeyPem:privateKey.export({type:'pkcs8',format:'pem'})};
+ let active=0,maxActive=0;
+ const result=await probeDemoSnapshot(credentials,async (url,options)=>{
+  active++;maxActive=Math.max(maxActive,active);
+  try{
+   assert.equal(options.method,'GET');
+   await new Promise(resolve=>setTimeout(resolve,3));
+   const phase=new URL(url).pathname.split('/').pop();
+   if(phase==='balance')return Response.json({private:'never log'},{status:429,headers:{'retry-after':'3'}});
+   const data={orders:{orders:[]},fills:{fills:[]},positions:{market_positions:[]},settlements:{settlements:[]}};
+   return Response.json(data[phase]);
+  }finally{active--;}
+ });
+ assert.equal(maxActive,1);
+ assert.equal(result.ok,false);
+ assert.deepEqual(result.operations.map(o=>o.phase),['BALANCE','ORDERS','FILLS','POSITIONS','SETTLEMENTS']);
+ assert.equal(result.operations[0].httpStatus,429);
+ assert.equal(result.operations[0].failureCategory,'RATE_LIMIT');
+ assert.ok(result.operations.slice(1).every(o=>o.failureCategory===null));
+ const receipt=demoSnapshotProbeReceipt(result,'test-sha');
+ assert.equal(receipt.httpStatus,429);
+ assert.equal(receipt.transportCause,'RATE_LIMIT');
+ assert.doesNotMatch(JSON.stringify(receipt),/secret-test-key|never log/);
+});
