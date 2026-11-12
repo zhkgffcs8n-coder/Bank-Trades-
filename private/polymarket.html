@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BANK TRADES PRO · Polymarket</title>
+<link rel="stylesheet" href="/account.css">
+<link rel="stylesheet" href="/polymarket.css">
+<script defer src="/polymarket.js"></script>
+</head>
+<body>
+<header><a class="brand" href="/dashboard">BANK <span>TRADES</span> PRO</a></header>
+<main class="venue-desk">
+  <nav aria-label="Market venue">
+    <a href="/dashboard">Kalshi</a>
+    <a href="/dashboard?venue=polymarket" aria-current="page">Polymarket</a>
+  </nav>
+  <h1>15-minute crypto markets</h1>
+  <nav id="poly-coins" aria-label="Market"></nav>
+  <section class="venue-card" aria-labelledby="poly-title">
+    <h2 id="poly-title">BTC Up or Down</h2>
+    <p id="poly-clock"></p>
+    <p id="poly-status" role="status">Loading live quotes…</p>
+    <table id="poly-quotes" hidden>
+      <thead><tr><th scope="col">Outcome</th><th scope="col">Bid</th><th scope="col">Ask</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <a id="poly-link" hidden>View market and resolution rules</a>
+  </section>
+</main>
+</body>
+</html>

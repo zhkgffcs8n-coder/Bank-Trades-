@@ -4,7 +4,8 @@ export default async(req)=>{
  try{
   if(!['GET','HEAD'].includes(req.method))return new Response(null,{status:405});
   const user=await member();
-  const html=await readFile(process.cwd()+'/private/dashboard.html','utf8');
+  const template = new URL(req.url).searchParams.get('venue') === 'polymarket' ? 'polymarket' : 'dashboard';
+  const html=await readFile(process.cwd()+'/private/'+template+'.html','utf8');
   const page=html.replace('<head>','<head><script>window.__BANK_TRADES_USER_ID__='+JSON.stringify(user.id).replace(/</g,'\\u003c')+';</script>');
   return new Response(req.method==='HEAD'?null:page,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
  }catch(e){

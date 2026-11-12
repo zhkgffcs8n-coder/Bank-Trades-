@@ -1,0 +1,16 @@
+.venue-desk { display: block; width: min(100% - 32px, 700px); margin: 24px auto; }
+.venue-desk h1 { font-size: clamp(1.6rem, 5vw, 2.5rem); margin: 24px 0 16px; }
+.venue-desk nav, .market-venue-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.market-venue-nav { grid-column: 1 / -1; }
+.venue-desk nav a, .venue-desk nav button, .market-venue-nav a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px;
+  background: #10182d; color: #dbeafe; border: 1px solid #385475;
+  border-radius: 10px; font: inherit; text-decoration: none; cursor: pointer;
+}
+.venue-desk [aria-current="page"], .venue-desk [aria-pressed="true"], .market-venue-nav [aria-current="page"] {
+  border-color: #67e8f9; color: #67e8f9;
+}
+.venue-card { background: #10182d; border: 1px solid #385475; border-radius: 12px; padding: 18px; margin-top: 16px; }
+.venue-card table { width: 100%; text-align: left; font-variant-numeric: tabular-nums; margin: 12px 0; }
+.venue-card th, .venue-card td { padding: 8px; }
+.venue-card a { color: #67e8f9; }
