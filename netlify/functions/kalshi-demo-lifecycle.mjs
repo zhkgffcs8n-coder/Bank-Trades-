@@ -75,7 +75,7 @@ export async function runScheduledDemo(worker,manual={}){
    }
   };
   const invokedAt=Date.now();
-  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,testSide:authorization?.side,entryOnly:manual.entryOnly,exitOnly:manual.exitOnly,checkStopped,commit:liveBuildCommit()});
+  const outcome=await runDemoLifecycle({repo,client,quoteFor,findMarket,marketRejection:()=>marketRejectionReason,championSignals,executionTest,testSide:authorization?.side,testRunId:executionTest?authorization?.requestId:null,entryOnly:manual.entryOnly,exitOnly:manual.exitOnly,checkStopped,commit:liveBuildCommit()});
   await db.setJSON('lifecycle-status',outcome);
   const headers={'x-demo-lifecycle-status':demoWakeStatusForOutcome(outcome,invokedAt)};
   if(outcome?.status==='DEMO_CHAMPION_CONTRACT_INELIGIBLE')
