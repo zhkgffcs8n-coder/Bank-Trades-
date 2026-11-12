@@ -27,7 +27,7 @@ export async function runScheduledDemo(worker,manual={}){
   if(shouldProbeTerminalDemo(lastLifecycle,previousProbe)){
    try{
     const probe=await probeDemoSnapshot(credentials);
-    await db.setJSON('saved-snapshot-probe',demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null));
+    await db.setJSON('saved-snapshot-probe',{...demoSnapshotProbeReceipt(probe,process.env.COMMIT_REF||null),credentialCheckedAt:saved.checkedAt??null});
    }catch{console.warn('DEMO_INDEPENDENT_PROBE_UNAVAILABLE');}
   }
   repo=liveRepository(db,'demo-lifecycle-v1',{
