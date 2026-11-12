@@ -6,7 +6,7 @@
 <title>BANK TRADES PRO · Polymarket</title>
 <link rel="stylesheet" href="/account.css">
 <link rel="stylesheet" href="/polymarket.css">
-<script defer src="/polymarket.js"></script>
+<script type="module" src="/polymarket.js"></script>
 </head>
 <body>
 <header><a class="brand" href="/dashboard">BANK <span>TRADES</span> PRO</a></header>
@@ -21,6 +21,13 @@
     <h2 id="poly-title">BTC Up or Down</h2>
     <p id="poly-clock"></p>
     <p id="poly-status" role="status">Loading live quotes…</p>
+    <label><input id="poly-signal-toggle" type="checkbox"> Polymarket signals</label>
+    <section id="poly-signals" hidden aria-labelledby="poly-signal-title">
+      <h3 id="poly-signal-title">Pro Scalper research</h3>
+      <p id="poly-signal-status"></p>
+      <ul id="poly-signal-calls"></ul>
+      <p>Uses the V8 scalper rules with Polymarket quotes. These research calls use the Kalshi cost model and have no verified Polymarket track record.</p>
+    </section>
     <table id="poly-quotes" hidden>
       <thead><tr><th scope="col">Outcome</th><th scope="col">Bid</th><th scope="col">Ask</th></tr></thead>
       <tbody></tbody>
