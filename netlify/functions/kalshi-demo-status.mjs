@@ -58,7 +58,7 @@ export default async req=>{try{
   }catch{return json({status:'DEMO_CREDENTIAL_LOAD_FAILED'},503);}
   const result=await probeDemoSnapshot(credentials);
   const receipt=demoSnapshotProbeReceipt(result,liveBuildCommit());
-  await store.setJSON('saved-balance-probe',receipt);
+  await store.setJSON('saved-snapshot-probe',receipt);
   return json({...result,status:receipt.status,commit:receipt.commit},result.ok?200:503);
  }
  if(['DEMO_EXECUTION_TEST','STOP_DEMO_EXECUTION_TEST','SELL_DEMO_EXECUTION_TEST'].includes(action)){
