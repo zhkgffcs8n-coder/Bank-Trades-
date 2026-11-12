@@ -53,7 +53,7 @@ export function demoSnapshotProbeReceipt(result,commit=null){
   requestId:result.correlationId,
   operation:'INDEPENDENT_READ_ONLY_SNAPSHOT',
   checkedAt:result.checkedAt,
-  durationMs:result.operations.reduce((sum,operation)=>sum+operation.durationMs,0),
+  durationMs:Math.max(0,...result.operations.map(operation=>operation.durationMs)),
   commit
  };
 }
