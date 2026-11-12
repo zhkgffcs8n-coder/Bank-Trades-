@@ -30,7 +30,7 @@ export async function runDemoLifecycle({repo,client,findMarket,marketRejection,q
    if(!(executionTest&&typeof testRunId==='string'&&
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(testRunId)&&
     state.demo.testRunId!==testRunId))return state.demo;
-   if(exitOnly||entryOnly===false&&await checkStopped())return {status:'DEMO_EXECUTION_TEST_STOPPED'};
+   if(exitOnly||await checkStopped())return {status:'DEMO_EXECUTION_TEST_STOPPED'};
    if(!state.intents.every(intent=>['ABORTED','RECONCILED'].includes(intent.status)))
     return {status:'DEMO_REARM_BLOCKED_UNRESOLVED_INTENTS'};
    try{
