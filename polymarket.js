@@ -16,6 +16,8 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const calls = document.querySelector('#poly-signal-calls');
   const samples = new Map();
   const engines = { A: 'NOVA', B: 'VOLT', C: 'KITSUNE' };
+  const tracker = document.querySelector('#poly-tracker-positions');
+  const trackerEmpty = document.querySelector('#poly-tracker-empty');
   const historyList = document.querySelector('#poly-call-history');
   const storageKey = 'banktrades:polymarket-calls:v1';
   let tracking = {};
@@ -115,6 +117,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     signalStatus.textContent = !market ? 'Waiting for live Polymarket quotes'
       : late ? 'Entry window closed · next round in under 2 minutes'
       : assessment?.radar ?? 'Collecting usable quotes for this round';
+    const trackedCards = [];
     const rows = Object.entries(engines).map(([key, name]) => {
       const row = document.createElement('tr');
       const signal = assessment?.engines[key];
@@ -136,9 +139,30 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const liveBid = position && market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
       const bid = position?.exitBid != null ? position.exitBid / 100 : liveBid;
       row.insertCell().textContent = Number.isFinite(bid) ? formatPrice(bid) : '—';
+      if (position) {
+        const card = document.createElement('article');
+        const instruction = document.createElement('strong');
+        instruction.textContent = !market && !position.exit ? `${name} · HOLD ${side} · BID UNAVAILABLE` : `${name} · ${action}`;
+        if (actionCell.dataset.side) instruction.dataset.side = actionCell.dataset.side;
+        const details = document.createElement('p');
+        const move = (bid * 100 - position.entry).toFixed(1);
+        const bidText = Number.isFinite(bid)
+          ? `${position.exit ? 'Bid at exit call' : 'Current bid'} ${formatPrice(bid)} · ${Number(move) > 0 ? '+' : ''}${move} pts before fees`
+          : 'Waiting for a fresh Polymarket bid';
+        details.textContent = `Entry ${formatPrice(position.entry / 100)} · ${bidText}`;
+        const marketLink = document.createElement('a');
+        marketLink.href = `https://polymarket.com/event/${position.ticker}`;
+        marketLink.target = '_blank';
+        marketLink.rel = 'noopener noreferrer';
+        marketLink.textContent = 'Open this round on Polymarket';
+        card.append(instruction, details, marketLink);
+        trackedCards.push(card);
+      }
       return row;
     });
     calls.replaceChildren(...rows);
+    trackerEmpty.hidden = trackedCards.length > 0;
+    tracker.replaceChildren(...trackedCards);
     const events = tracking[selected]?.events ?? [];
     historyList.replaceChildren(...events.map(event => {
       const item = document.createElement('li');
