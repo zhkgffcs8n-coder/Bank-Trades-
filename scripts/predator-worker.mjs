@@ -30,7 +30,7 @@ if(Boolean(env.PREDATOR_NETLIFY_SITE_ID)!==Boolean(env.PREDATOR_NETLIFY_TOKEN))
 const credentials=await predatorStreamCredentials(env);
 const productionReadClient=credentials?kalshiClient(credentials):null;
 let productionReads=null,nextProductionRead=0;
-let demoProbeReceipt=null,nextDemoProbeRead=0;
+let demoProbeReceipt=null,demoSnapshotReceipt=null,nextDemoProbeRead=0;
 function sampleProductionReads(now){
  if(!productionReadClient||now<nextProductionRead)return;
  nextProductionRead=now+300000;
@@ -44,7 +44,7 @@ const demoProbeStore=remote?getStore({name:'bank-trades-kalshi-demo',siteID:env.
 function sampleDemoProbeReceipt(now){
  if(!demoProbeStore||now<nextDemoProbeRead)return;
  nextDemoProbeRead=now+300000;
- void readSanitizedDemoProbe(demoProbeStore).then(receipt=>{demoProbeReceipt=receipt;});
+ void Promise.all([readSanitizedDemoProbe(demoProbeStore),readSanitizedDemoProbe(demoProbeStore,'saved-snapshot-probe')]).then(([balance,snapshot])=>{demoProbeReceipt=balance;demoSnapshotReceipt=snapshot;});
 }
 let previousEarlyBook=null;
 const demoWakeQueue=[];
@@ -323,7 +323,7 @@ async function run(){
     feeds:{coinbase:tape.snapshot().connectedAt!==null,
      kalshiAuthenticated:bookSource==='KALSHI_WS'&&!!book&&Date.now()-book.receivedAt<=1500,
      kalshiCredentialsConfigured:!!credentials,heartbeatPublishingConfigured:!!remote},
-    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,marketDiscovery,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,
+    mode:'ALWAYS_ON_WORKER',startedAt,at:Date.now(),latest,counters,marketDiscovery,gaps,publishError,championShadow:championDecision,demoWakeAudit:state.demoWakeAudit||[],productionReads,demoProbeReceipt,demoSnapshotReceipt,
     strategyVersion:18,earlyResearchMode:'SHADOW_ONLY',earlyResearchCells:state.predatorEarlyCells,horizonResearch:state.voltV18Cells,
     voltV15:state.closed.filter(row=>row.version!==16&&Number.isFinite(row.warningMs)).reduce((stats,row)=>{
      stats.trades++;stats.wins+=Number(row.net>0);stats.losses+=Number(row.net<0);
