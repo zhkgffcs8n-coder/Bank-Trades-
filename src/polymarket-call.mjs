@@ -13,6 +13,15 @@ export function advancePolymarketCall(previous, { ticker, end, at, now, quotes, 
     }, held);
     return next.position.exit ? { ...next.position, updatedAt: at } : held;
   }
-  if (!side || secondsLeft < 120 || held?.side === side || held?.updatedAt >= at) return held;
+  if (secondsLeft < 120 || held?.updatedAt >= at) return held;
+  if (!side || held?.side === side) {
+    return held?.flipWatchAt ? { ...held, flipWatchAt: null } : held;
+  }
+  if (held) {
+    if (held.flipWatchAt === at) return held;
+    if (!(held.flipWatchAt < at && at - held.flipWatchAt < 15000 && held.flipWatchAt > held.updatedAt)) {
+      return { ...held, flipWatchAt: at };
+    }
+  }
   return { ticker, side, entry: quotes[side].ask, exit: null, updatedAt: at };
 }

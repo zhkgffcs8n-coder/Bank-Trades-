@@ -19,6 +19,12 @@ test('Polymarket call retains entry across reload and SKIP, rejects stale stops,
   });
   assert.equal(exited.exit, 'TAKE PROFIT');
   assert.equal(exited.exitBid, 74);
-  assert.equal(advancePolymarketCall(exited, { ...input, at: 3000, now: 3000, decision: 'DOWN' }).side, 'down');
+  const opposite = { ...input, at: 3000, now: 3000, decision: 'DOWN' };
+  const watch = advancePolymarketCall(exited, opposite);
+  assert.equal(watch.exit, 'TAKE PROFIT');
+  assert.equal(advancePolymarketCall(watch, opposite), watch);
+  const reset = advancePolymarketCall(watch, { ...opposite, at: 4000, now: 4000, decision: 'SKIP' });
+  assert.equal(reset.flipWatchAt, null);
+  assert.equal(advancePolymarketCall(watch, { ...opposite, at: 5000, now: 5000 }).side, 'down');
   assert.equal(advancePolymarketCall(exited, { ...input, ticker: 'new-round', decision: 'SKIP' }), null);
 });
