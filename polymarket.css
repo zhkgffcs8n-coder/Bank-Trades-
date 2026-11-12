@@ -49,3 +49,21 @@
   .poly-live-panel { grid-column: 2; }
   .poly-scalper-panel { grid-column: 3; }
 }
+.poly-action, .poly-history-coin {
+  display: inline-block;
+  padding: .18em .45em;
+  border: 1px solid currentColor;
+  border-radius: 5px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+.poly-live-panel article > strong { display: block; margin-bottom: 5px; }
+.poly-action-buy-up { color: #74f5ab; background: #123627; }
+.poly-action-buy-down { color: #ff9ca9; background: #421c2c; }
+.poly-action-profit { color: #78edff; background: #123947; }
+.poly-action-stop { color: #ff99a1; background: #541d28; }
+.poly-action-sell { color: #ffc083; background: #492d1b; }
+.poly-action-hold, .poly-history-coin { color: #ffe18b; background: #3b321a; }
+.poly-action-watch { color: #b5c8e8; background: #1b2a43; }
+#poly-call-history li > div { margin-bottom: 4px; }
+.poly-tracker article small { display: block; color: #ffe18b; margin-bottom: 4px; }
