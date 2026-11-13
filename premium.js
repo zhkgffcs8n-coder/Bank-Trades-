@@ -536,6 +536,19 @@ function monitorPaperExits(results,age){
  if(exitAlerted.size>500)exitAlerted.clear();
  if(paperExitState.size>500)paperExitState.clear();
 }
+let crossCoinAction;
+function renderContractAction(tile, action){
+ const tracked=tile.dataset.ticker===crossCoinAction?.ticker && crossCoinAction?.ticker;
+ const side=tracked?(crossCoinAction.direction>0?'UP':'DOWN'):tile.dataset.side;
+ action.textContent=tracked?crossCoinAction.label.split(' · ')[0]:side?side+' WATCH':'EVEN';
+ action.style.color=side==='UP'?'#4ade80':side==='DOWN'?'#fb7185':'';
+}
+window.addEventListener('banktrades:cross-coin-action', ({detail})=>{
+ crossCoinAction=detail;
+ for(const tile of $('premiumStrip').querySelectorAll('[data-ticker]')){
+  renderContractAction(tile,tile.querySelector('[data-contract-action]'));
+ }
+});
 let fetching=false,lastFetch=0,failures=0;
 async function update(){
  if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:3000))return;fetching=true;lastFetch=Date.now();
@@ -580,16 +593,23 @@ async function update(){
    const value=document.createElement('b');value.textContent=live?(ya===na?'EVEN':ya<na?'DOWN '+na.toFixed(1)+'%':'UP '+ya.toFixed(1)+'%'):'—';
    const meta=document.createElement('small');meta.textContent=live?Math.ceil((close-now)/60000)+'m':fresh?'Market unavailable':'Quotes stale';
    const down=document.createElement('small');down.textContent=live?(ya<na?'UP '+ya.toFixed(1)+'%':'DOWN '+na.toFixed(1)+'%'):'Waiting for live Kalshi quotes';
+   const action=document.createElement('strong');
+   action.dataset.contractAction='';
+   action.style.display='block';
    if(live){
     tile.dataset.ticker=m.ticker;
+    tile.dataset.side=ya>na?'UP':na>ya?'DOWN':'';
+    renderContractAction(tile,action);
     setTimeout(()=>{
      if(!tile.isConnected)return;
+     delete tile.dataset.ticker;
+     action.textContent='';
      value.textContent='—';
      down.textContent='Waiting for live Kalshi quotes';
      meta.textContent=Date.now()>=close?'Round ended':'Quotes stale';
     },Math.max(0,Math.min(close,latestPositionQuoteAt+18000)-Date.now()));
    }
-   tile.append(label,value,down,meta);$('premiumStrip').append(tile);
+   tile.append(label,action,value,down,meta);$('premiumStrip').append(tile);
   }
  }
  window.dispatchEvent(new CustomEvent('banktrades:premium-contracts',{detail:{contracts,fetched:latestPositionQuoteAt}}));
