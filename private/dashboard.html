@@ -70,7 +70,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     call.className = 'signal ' + color;
     detail.textContent = reason;
     prices.hidden = !entries.length;
-    const rows = entries.map(({ position, action, exitBid }) => {
+    const rows = entries.map(({ position, action, exitBid, liveAsk }) => {
       const row = document.createElement('div');
       const heading = document.createElement('strong');
       heading.textContent = action + ' · ';
@@ -81,8 +81,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       heading.style.color = position.direction > 0 ? '#4ade80' : '#fb7185';
       const quotes = document.createElement('div');
       quotes.className = 'cross-coin-quotes';
-      quotes.textContent = 'Entry bid ' + position.bid.toFixed(1) + '% · Buy ask ' + position.ask.toFixed(1) +
-        '% · Exit bid ' + (Number.isFinite(exitBid) ? exitBid.toFixed(1) + '%' : '—');
+      quotes.textContent = 'Entry bid ' + position.bid.toFixed(1) + '% · Call ask ' + position.ask.toFixed(1) +
+        '% · Exit bid ' + (Number.isFinite(exitBid) ? exitBid.toFixed(1) + '%' : '—') + ' · Live buy ask ' + (Number.isFinite(liveAsk) ? liveAsk.toFixed(1) + '%' : '—');
       row.append(heading, quotes);
       return row;
     });
@@ -101,11 +101,11 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
   window.addEventListener('banktrades:premium-contracts', ({ detail: snapshot }) => {
     const now = Date.now();
     const { contracts, fetched } = snapshot;
-    if (fetched <= lastSnapshot || now - fetched > 18000 || fetched > now + 2000) return;
+    if (fetched <= lastSnapshot || now - fetched > 5000 || fetched > now + 2000) return;
     const recent = fetched - lastSnapshot <= 10000 ? previousQuotes : new Map();
     previousQuotes = new Map(contracts.map(row => [row.ticker, row]));
     lastSnapshot = fetched;
-    validUntil = fetched + 18000;
+    validUntil = fetched + 5000;
     const ready = contracts.map(row => ({ ...row, lean: Math.sign(row.yesAsk - row.noAsk) }));
 
     const rounds = new Map();
@@ -163,7 +163,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const action = entered.has(position.ticker) ? 'BUY' :
         position.sell ? (exitBid === undefined ? 'SELL WATCH' : 'SELL') :
         exitBid === undefined ? 'QUOTE UNAVAILABLE' : 'HOLD';
-      return { position, action: action + (position.direction > 0 ? ' UP' : ' DOWN'), exitBid };
+      const liveAsk = position.direction > 0 ? row?.yesAsk : row?.noAsk;
+      return { position, action: action + (position.direction > 0 ? ' UP' : ' DOWN'), exitBid, liveAsk };
     }).sort((a, b) => Number(entered.has(b.position.ticker)) - Number(entered.has(a.position.ticker)));
     if (entries.length) {
       const lead = entries[0];
@@ -689,7 +690,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-4"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-5"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';

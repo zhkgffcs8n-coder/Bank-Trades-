@@ -551,10 +551,10 @@ window.addEventListener('banktrades:cross-coin-action', ({detail})=>{
 });
 let fetching=false,lastFetch=0,failures=0;
 async function update(){
- if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:1000))return;fetching=true;lastFetch=Date.now();
+ if(fetching||document.hidden||Date.now()-lastFetch<(failures?3000:1000))return;fetching=true;lastFetch=Date.now();
  try{
  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11000);
- let r;try{r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
+ let r;try{r=await fetch('/api/data?mode=markets&live=1',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
@@ -567,7 +567,7 @@ async function update(){
  let open=0;
  const contracts=[];
  const now=Date.now();
- const fresh=age<=18000&&age>=-2000;
+
  for(const asset of assets){
   const row=d.results.find(x=>x.asset===asset),m=row?.market;
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
@@ -586,10 +586,12 @@ async function update(){
   if(valid&&active){open++;const series=history.get(asset)||[];if(series.length&&series[series.length-1].ticker!==m.ticker)series.length=0;series.push({v:(ya+yb)/2,ticker:m.ticker});if(series.length>100)series.shift();history.set(asset,series)}
   {
    const close=Date.parse(m?.close_time);
+   const received=Date.parse(row?.quote_received_at);
+   const fresh=now-received<=5000&&received<=now+2000;
    const live=fresh&&valid&&m.ticker&&close>now&&close<=now+900000;
    if(live)contracts.push({asset,ticker:m.ticker,close,yesBid:yb,yesAsk:ya,noBid:nb,noAsk:na});
    const tile=document.createElement('div');tile.className='premium-tile';
-   const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI';
+   const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI ASKS';
    const value=document.createElement('b');value.textContent=live?(ya===na?'EVEN':ya<na?'DOWN '+na.toFixed(1)+'%':'UP '+ya.toFixed(1)+'%'):'—';
    const meta=document.createElement('small');meta.textContent=live?Math.ceil((close-now)/60000)+'m':fresh?'Market unavailable':'Quotes stale';
    const down=document.createElement('small');down.textContent=live?(ya<na?'UP '+ya.toFixed(1)+'%':'DOWN '+na.toFixed(1)+'%'):'Waiting for live Kalshi quotes';
@@ -607,7 +609,7 @@ async function update(){
      value.textContent='—';
      down.textContent='Waiting for live Kalshi quotes';
      meta.textContent=Date.now()>=close?'Round ended':'Quotes stale';
-    },Math.max(0,Math.min(close,latestPositionQuoteAt+18000)-Date.now()));
+    },Math.max(0,Math.min(close,received+5000)-Date.now()));
    }
    tile.append(label,action,value,down,meta);$('premiumStrip').append(tile);
   }
