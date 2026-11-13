@@ -551,7 +551,7 @@ window.addEventListener('banktrades:cross-coin-action', ({detail})=>{
 });
 let fetching=false,lastFetch=0,failures=0;
 async function update(){
- if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:3000))return;fetching=true;lastFetch=Date.now();
+ if(fetching||document.hidden||Date.now()-lastFetch<(failures?15000:1000))return;fetching=true;lastFetch=Date.now();
  try{
  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11000);
  let r;try{r=await fetch('/api/data?mode=markets',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}

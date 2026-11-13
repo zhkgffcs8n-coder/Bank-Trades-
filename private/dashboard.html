@@ -99,7 +99,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     }
     const direction = up > down ? 1 : -1;
     const agreement = Math.max(up, down);
-    if (aligned.length < 5 || agreement < Math.ceil(aligned.length * 0.75)) {
+    if (aligned.length < 5 || agreement <= aligned.length / 2) {
       show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + (up > down ? 'UP' : 'DOWN'), aligned.length < 5 ? 'Waiting for five live contracts in the same round.' :
         up + ' favor UP · ' + down + ' favor DOWN · ' + (aligned.length - up - down) + ' even');
       return;
@@ -108,13 +108,13 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const bid = direction > 0 ? row.yesBid : row.noBid;
       const ask = direction > 0 ? row.yesAsk : row.noAsk;
       const gap = spread(bid, ask);
-      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.lean === direction && gap <= 4 && ask < 95 ? [{ ...row, ask, gap }] : [];
+      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.lean === direction && gap <= 4 && ask >= 50 && ask < 90 ? [{ ...row, ask, gap }] : [];
     }).sort((a, b) => a.gap - b.gap || a.ask - b.ask);
     const candidate = candidates[0];
     const side = direction > 0 ? 'UP' : 'DOWN';
     const flow = agreement + '/' + aligned.length + ' contracts favor ' + side;
     if (!candidate) {
-      show('FLOW ' + side, flow + ' · Checking for a tight-spread entry between 6 and 1 minutes left.');
+      show('FLOW ' + side, flow + ' · Checking for an ask in the 50s–80s between 6 and 1 minutes left.');
       return;
     }
     position = { ...candidate, direction, sell: false };
@@ -632,7 +632,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-2"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-3"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
