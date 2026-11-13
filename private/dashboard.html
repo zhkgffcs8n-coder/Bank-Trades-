@@ -27,7 +27,12 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 #crossCoinCaller #crossCoinCall{margin:2px 0;font-size:clamp(19px,3vw,28px);font-weight:850}
 #crossCoinCaller #crossCoinCall.green{color:#4ade80}
 #crossCoinCaller #crossCoinCall.red{color:#fb7185}
-#crossCoinPrices{margin:3px 0;color:#f4f7ff;font-size:13px;font-weight:700}
+#crossCoinPrices{margin:4px 0;color:#f4f7ff;font-size:13px;font-weight:700}
+#crossCoinPrices:not([hidden]){display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:6px}
+#crossCoinPrices>div{padding:6px;border:1px solid #40587b;border-radius:8px;background:#172640}
+#crossCoinPrices strong{font-size:16px}
+#crossCoinPrices .cross-coin-symbol{color:#fff;font-size:20px;text-shadow:0 0 9px currentColor}
+#crossCoinPrices .cross-coin-quotes{font-variant-numeric:tabular-nums;line-height:1.5}
 #crossCoinDetail{margin:2px 0;font-size:12px;color:#d5e4ff}
 #crossCoinMarkets{display:block;color:#a7b9d2;font-size:10px}
 </style><link rel="stylesheet" href="/premium.css?v=glowing-market-coins-8"><link rel="stylesheet" href="/arcade-theme.css?v=neon-polish"><script defer src="/push-client.js"></script><link rel="stylesheet" href="/kaibot-command.css?v=2"><link rel="stylesheet" href="/polymarket.css"></head><body class="bt-command-v9"><main>
@@ -67,9 +72,14 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const rows = entries.map(({ position, action, exitBid }) => {
       const row = document.createElement('div');
       const heading = document.createElement('strong');
-      heading.textContent = action + ' · ' + position.asset;
+      heading.textContent = action + ' · ';
+      const symbol = document.createElement('span');
+      symbol.className = 'cross-coin-symbol';
+      symbol.textContent = position.asset;
+      heading.append(symbol);
       heading.style.color = position.direction > 0 ? '#4ade80' : '#fb7185';
       const quotes = document.createElement('div');
+      quotes.className = 'cross-coin-quotes';
       quotes.textContent = 'Entry bid ' + position.bid.toFixed(1) + '% · Buy ask ' + position.ask.toFixed(1) +
         '% · Exit bid ' + (Number.isFinite(exitBid) ? exitBid.toFixed(1) + '%' : '—');
       row.append(heading, quotes);
