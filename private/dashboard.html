@@ -44,6 +44,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
   const history = new Map();
   let lastSnapshot = 0;
   let validUntil = 0;
+  let position;
+  let signaledClose = 0;
 
   function quote(market, key) {
     const dollars = market[key + '_dollars'];
@@ -90,7 +92,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const mid = (yesBid + yesAsk) / 2;
       samples.push({ ticker: market.ticker, time: fetched, mid });
       history.set(asset, samples);
-      if (baseline) ready.push({ asset, close, move: mid - baseline.mid, yesBid, yesAsk, noBid, noAsk });
+      if (baseline) ready.push({ asset, ticker: market.ticker, close, move: mid - baseline.mid, yesBid, yesAsk, noBid, noAsk });
     }
 
     const rounds = new Map();
@@ -106,6 +108,22 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     }).join(' · ');
     const up = aligned.filter(row => row.move >= 3).length;
     const down = aligned.filter(row => row.move <= -3).length;
+    if (position && now >= position.close) position = undefined;
+    if (position) {
+      const round = rounds.get(position.close) ?? [];
+      const row = round.find(item => item.ticker === position.ticker);
+      const side = position.direction > 0 ? 'UP' : 'DOWN';
+      const opposite = round.filter(item => item.move * position.direction <= -3).length;
+      const bid = position.direction > 0 ? row?.yesBid : row?.noBid;
+      if (round.length >= 5 && opposite >= Math.ceil(round.length * 0.75)) position.sell = true;
+      validUntil = Math.min(validUntil, position.close);
+      const hasBid = Number.isFinite(bid) && bid > 0 && bid < 100;
+      show((position.sell && hasBid ? 'SELL ' : position.sell ? 'SELL WATCH ' : 'HOLD ') + side + ' · ' + position.asset,
+        (position.sell ? 'Cross-coin flow reversed' : 'Tracking to round close') +
+        (hasBid ? ' · Exit bid ' + bid.toFixed(1) + '%' : ' · Exit bid unavailable'),
+        position.sell ? 'red' : '');
+      return;
+    }
     const direction = up > down ? 1 : -1;
     const agreement = Math.max(up, down);
     if (aligned.length < 5 || agreement < Math.ceil(aligned.length * 0.75)) {
@@ -117,17 +135,19 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const bid = direction > 0 ? row.yesBid : row.noBid;
       const ask = direction > 0 ? row.yesAsk : row.noAsk;
       const gap = spread(bid, ask);
-      return row.close - now >= 45000 && row.move * direction >= 0 &&
+      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.move * direction >= 0 &&
         row.move * direction < 3 && gap <= 4 && ask < 95 ? [{ ...row, ask, gap }] : [];
     }).sort((a, b) => a.gap - b.gap || direction * (a.move - b.move));
     const candidate = candidates[0];
     const side = direction > 0 ? 'UP' : 'DOWN';
     const flow = agreement + '/' + aligned.length + ' coins moving ' + side;
     if (!candidate) {
-      show('NO CALL', flow + ' · No lagging coin with a qualifying quote.');
+      show('NO CALL', flow + ' · Looking for a tight-spread laggard between 6 and 1 minutes left.');
       return;
     }
-    validUntil = Math.min(validUntil, candidate.close - 45000);
+    position = { ...candidate, direction, sell: false };
+    signaledClose = candidate.close;
+    validUntil = Math.min(validUntil, candidate.close);
     show('PAPER BUY ' + side + ' · ' + candidate.asset,
       flow + ' · Entry ask ' + candidate.ask.toFixed(1) + '% · Spread ' + candidate.gap.toFixed(1) + ' pp',
       direction > 0 ? 'green' : 'red');
@@ -137,7 +157,12 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     if (validUntil && Date.now() >= validUntil) {
       validUntil = 0;
       coins.textContent = '';
-      show('NO CALL', 'Waiting for a fresh Kalshi quote update.');
+      if (position && Date.now() < position.close) {
+        show('QUOTE STALE · ' + position.asset, 'Tracking paused until fresh quotes arrive.');
+      } else {
+        position = undefined;
+        show('NO CALL', 'Waiting for a fresh Kalshi quote update.');
+      }
     }
   }, 1000);
 })();
