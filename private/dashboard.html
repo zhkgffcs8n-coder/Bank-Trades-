@@ -33,7 +33,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 </div><div class="sidebar-note" style="margin-top:18px"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><button id="premiumVoice" type="button" aria-pressed="false">🔇 VOICE OFF</button><button id="enablePush" type="button">🔔 ENABLE ALERTS</button><span id="premiumHealth" class="pill">CHECKING QUOTES</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><section class="card" style="margin-top:12px" aria-labelledby="crossCoinHeading">
 <h2 id="crossCoinHeading">Kalshi Cross-Coin Flow</h2>
 <div class="signal" id="crossCoinCall" role="status">NO CALL</div>
-<p id="crossCoinDetail">Collecting live 15-minute quotes.</p>
+<p id="crossCoinDetail">Collecting live 15-minute quotes.</p><small>Paper signal</small>
 <small id="crossCoinMarkets"></small>
 </section><script>
 (() => {
@@ -148,7 +148,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     position = { ...candidate, direction, sell: false };
     signaledClose = candidate.close;
     validUntil = Math.min(validUntil, candidate.close);
-    show('PAPER BUY ' + side + ' · ' + candidate.asset,
+    show('BUY ' + side + ' · ' + candidate.asset,
       flow + ' · Entry ask ' + candidate.ask.toFixed(1) + '% · Spread ' + candidate.gap.toFixed(1) + ' pp',
       direction > 0 ? 'green' : 'red');
   });
