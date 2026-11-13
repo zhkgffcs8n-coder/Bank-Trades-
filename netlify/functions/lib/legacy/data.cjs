@@ -75,7 +75,7 @@ exports.handler=async event=>{
               limit:'100'
             });
 
-            const d=await get(u,11000);
+            const d=await get(u,q.live==='1'?2000:11000);
             const now=Date.now();
 
             const arr=(d.markets||[])
@@ -105,6 +105,7 @@ exports.handler=async event=>{
               asset,
               series,
               market:arr[0]||null,
+              quote_received_at:new Date(now).toISOString(),
               available:true
             };
 
