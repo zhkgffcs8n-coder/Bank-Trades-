@@ -552,10 +552,13 @@ async function update(){
  if(!table.querySelector('tr[data-asset]'))table.replaceChildren();
  $('premiumStrip').replaceChildren();
  let open=0;
+ const contracts=[];
+ const now=Date.now();
+ const fresh=age<=18000&&age>=-2000;
  for(const asset of assets){
   const row=d.results.find(x=>x.asset===asset),m=row?.market;
   const ya=price(m,'yes_ask'),na=price(m,'no_ask'),yb=price(m,'yes_bid'),nb=price(m,'no_bid');
-  const valid=m&&[ya,na,yb,nb].every(Number.isFinite)&&ya>=yb&&na>=nb&&ya>0&&na>0;
+  const valid=m&&[ya,na,yb,nb].every(value=>Number.isFinite(value)&&value>=0&&value<=100)&&ya>=yb&&na>=nb&&ya>0&&na>0;
   const until=expiry(m)-Date.now(),active=Number.isFinite(until)&&until>0,remaining=!Number.isFinite(until)?'UNKNOWN':until<=0?'ENDED':Math.ceil(until/60000)+'m';
   if(m?.ticker&&active){const previous=roundSeen.get(asset);if(!previous||previous.ticker!==m.ticker){roundSeen.set(asset,{ticker:m.ticker,firstSeen:Date.now()});}}
   let tr=table.querySelector('tr[data-asset="'+asset+'"]');
@@ -568,15 +571,28 @@ async function update(){
   tr.children[2].textContent=valid?na.toFixed(1)+'¢':'—';
   tr.children[4].textContent=m?remaining:'—';
   if(valid&&active){open++;const series=history.get(asset)||[];if(series.length&&series[series.length-1].ticker!==m.ticker)series.length=0;series.push({v:(ya+yb)/2,ticker:m.ticker});if(series.length>100)series.shift();history.set(asset,series)}
-  if(assets.includes(asset)){
+  {
+   const close=Date.parse(m?.close_time);
+   const live=fresh&&valid&&m.ticker&&close>now&&close<=now+900000;
+   if(live)contracts.push({asset,ticker:m.ticker,close,yesBid:yb,yesAsk:ya,noBid:nb,noAsk:na});
    const tile=document.createElement('div');tile.className='premium-tile';
    const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI';
-   const value=document.createElement('b');value.textContent=valid?'UP '+ya.toFixed(1)+'%':'—';
-   const meta=document.createElement('small');meta.textContent=valid?remaining:'Market unavailable';
-   const down=document.createElement('small');down.textContent=valid?'DOWN '+na.toFixed(1)+'% · UP bid '+yb.toFixed(1)+'%':'Waiting for Kalshi quotes';
+   const value=document.createElement('b');value.textContent=live?(ya===na?'EVEN':ya<na?'DOWN '+na.toFixed(1)+'%':'UP '+ya.toFixed(1)+'%'):'—';
+   const meta=document.createElement('small');meta.textContent=live?Math.ceil((close-now)/60000)+'m':fresh?'Market unavailable':'Quotes stale';
+   const down=document.createElement('small');down.textContent=live?(ya<na?'UP '+ya.toFixed(1)+'%':'DOWN '+na.toFixed(1)+'%'):'Waiting for live Kalshi quotes';
+   if(live){
+    tile.dataset.ticker=m.ticker;
+    setTimeout(()=>{
+     if(!tile.isConnected)return;
+     value.textContent='—';
+     down.textContent='Waiting for live Kalshi quotes';
+     meta.textContent=Date.now()>=close?'Round ended':'Quotes stale';
+    },Math.max(0,Math.min(close,latestPositionQuoteAt+18000)-Date.now()));
+   }
    tile.append(label,value,down,meta);$('premiumStrip').append(tile);
   }
  }
+ window.dispatchEvent(new CustomEvent('banktrades:premium-contracts',{detail:{contracts,fetched:latestPositionQuoteAt}}));
  $('premiumHealth').textContent='● '+open+' VERIFIED FEEDS';$('premiumHealth').className='pill green';
  if(!engineSignals.length)$('premiumAI').textContent='Quotes refreshed '+new Date().toLocaleTimeString()+' · Waiting for signal evaluation.';
  failures=0;try { rememberEntryCalls(engineSignals); syncSignals(); } catch (error) { console.warn('Signal presentation error',error); } try { chart(); } catch (error) { console.warn('Chart presentation error',error); }const header=document.getElementById('health');if(header){header.textContent='● '+open+' MARKET QUOTES LOADED';header.className='pill green';}

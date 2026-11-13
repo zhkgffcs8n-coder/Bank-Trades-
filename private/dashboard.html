@@ -33,7 +33,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 </div><div class="sidebar-note" style="margin-top:18px"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><section class="card" style="margin:10px 0" aria-labelledby="crossCoinHeading">
 <h2 id="crossCoinHeading">Kalshi Cross-Coin Flow</h2>
 <div class="signal" id="crossCoinCall" role="status">NO CALL</div>
-<p id="crossCoinDetail">Collecting live 15-minute quotes.</p><small>Paper signal</small>
+<p id="crossCoinDetail">Collecting live 15-minute quotes from the cards above.</p>
 <small id="crossCoinMarkets"></small>
 </section><script>
 (() => {
@@ -41,17 +41,10 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
   const detail = document.getElementById('crossCoinDetail');
   const coins = document.getElementById('crossCoinMarkets');
   const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'ZEC'];
-  const history = new Map();
   let lastSnapshot = 0;
   let validUntil = 0;
   let position;
   let signaledClose = 0;
-
-  function quote(market, key) {
-    const dollars = market[key + '_dollars'];
-    const raw = dollars ?? market[key];
-    return raw == null || raw === '' ? NaN : Number(raw) * (dollars == null ? 1 : 100);
-  }
 
   function spread(bid, ask) {
     return bid > 0 && ask < 100 && ask >= bid ? ask - bid : Infinity;
@@ -63,37 +56,13 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     detail.textContent = reason;
   }
 
-  window.addEventListener('banktrades:quotes', ({ detail: snapshot }) => {
+  window.addEventListener('banktrades:premium-contracts', ({ detail: snapshot }) => {
     const now = Date.now();
-    const { rows, fetched } = snapshot;
+    const { contracts, fetched } = snapshot;
     if (fetched <= lastSnapshot || now - fetched > 18000 || fetched > now + 2000) return;
     lastSnapshot = fetched;
     validUntil = fetched + 18000;
-    const ready = [];
-
-    for (const asset of assets) {
-      const market = rows.find(row => row.asset === asset)?.market;
-      const close = Date.parse(market?.close_time);
-      if (!market?.ticker || !(close > now && close <= now + 900000)) {
-        history.delete(asset);
-        continue;
-      }
-      const yesBid = quote(market, 'yes_bid');
-      const yesAsk = quote(market, 'yes_ask');
-      const noBid = quote(market, 'no_bid');
-      const noAsk = quote(market, 'no_ask');
-      if (spread(yesBid, yesAsk) > 8) {
-        history.delete(asset);
-        continue;
-      }
-      const samples = (history.get(asset) ?? []).filter(sample =>
-        sample.ticker === market.ticker && sample.time >= fetched - 45000);
-      const baseline = samples.find(sample => sample.time >= fetched - 36000 && sample.time <= fetched - 20000);
-      const mid = (yesBid + yesAsk) / 2;
-      samples.push({ ticker: market.ticker, time: fetched, mid });
-      history.set(asset, samples);
-      if (baseline) ready.push({ asset, ticker: market.ticker, close, move: mid - baseline.mid, yesBid, yesAsk, noBid, noAsk });
-    }
+    const ready = contracts.map(row => ({ ...row, lean: Math.sign(row.yesAsk - row.noAsk) }));
 
     const rounds = new Map();
     for (const row of ready) {
@@ -102,21 +71,22 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       rounds.set(row.close, round);
     }
     const aligned = [...rounds.values()].sort((a, b) => b.length - a.length || a[0].close - b[0].close)[0] ?? [];
+    if (aligned.length) validUntil = Math.min(validUntil, aligned[0].close);
     coins.textContent = assets.map(asset => {
       const row = aligned.find(item => item.asset === asset);
-      return row ? asset + ' ' + (row.move >= 0 ? '+' : '') + row.move.toFixed(1) + ' pp' : asset + ' —';
+      return row ? asset + ' ' + (row.lean > 0 ? 'UP ' + row.yesAsk.toFixed(1) + '%' : row.lean < 0 ? 'DOWN ' + row.noAsk.toFixed(1) + '%' : 'EVEN') : asset + ' —';
     }).join(' · ');
-    const up = aligned.filter(row => row.move >= 3).length;
-    const down = aligned.filter(row => row.move <= -3).length;
+    const up = aligned.filter(row => row.lean > 0).length;
+    const down = aligned.filter(row => row.lean < 0).length;
     if (position && now >= position.close) position = undefined;
     if (position) {
       const round = rounds.get(position.close) ?? [];
       const row = round.find(item => item.ticker === position.ticker);
       const side = position.direction > 0 ? 'UP' : 'DOWN';
-      const opposite = round.filter(item => item.move * position.direction <= -3).length;
+      const opposite = round.filter(item => item.lean === -position.direction).length;
       const bid = position.direction > 0 ? row?.yesBid : row?.noBid;
       if (round.length >= 5 && opposite >= Math.ceil(round.length * 0.75)) position.sell = true;
-      validUntil = Math.min(validUntil, position.close);
+      validUntil = Math.min(fetched + 18000, position.close);
       const hasBid = Number.isFinite(bid) && bid > 0 && bid < 100;
       show((position.sell && hasBid ? 'SELL ' : position.sell ? 'SELL WATCH ' : 'HOLD ') + side + ' · ' + position.asset,
         (position.sell ? 'Cross-coin flow reversed' : 'Tracking to round close') +
@@ -127,22 +97,21 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const direction = up > down ? 1 : -1;
     const agreement = Math.max(up, down);
     if (aligned.length < 5 || agreement < Math.ceil(aligned.length * 0.75)) {
-      show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + (up > down ? 'UP' : 'DOWN'), aligned.length < 5 ? 'Waiting for five comparable quotes in the same round. Dashes indicate unavailable or insufficient quote history.' :
-        up + ' rising · ' + down + ' falling · ' + (aligned.length - up - down) + ' flat');
+      show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + (up > down ? 'UP' : 'DOWN'), aligned.length < 5 ? 'Waiting for five live contracts in the same round.' :
+        up + ' favor UP · ' + down + ' favor DOWN · ' + (aligned.length - up - down) + ' even');
       return;
     }
     const candidates = aligned.flatMap(row => {
       const bid = direction > 0 ? row.yesBid : row.noBid;
       const ask = direction > 0 ? row.yesAsk : row.noAsk;
       const gap = spread(bid, ask);
-      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.move * direction >= 0 &&
-        row.move * direction < 3 && gap <= 4 && ask < 95 ? [{ ...row, ask, gap }] : [];
-    }).sort((a, b) => a.gap - b.gap || direction * (a.move - b.move));
+      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.lean === direction && gap <= 4 && ask < 95 ? [{ ...row, ask, gap }] : [];
+    }).sort((a, b) => a.gap - b.gap || a.ask - b.ask);
     const candidate = candidates[0];
     const side = direction > 0 ? 'UP' : 'DOWN';
-    const flow = agreement + '/' + aligned.length + ' coins moving ' + side;
+    const flow = agreement + '/' + aligned.length + ' contracts favor ' + side;
     if (!candidate) {
-      show('FLOW ' + side, flow + ' · Looking for a tight-spread laggard between 6 and 1 minutes left.');
+      show('FLOW ' + side, flow + ' · Checking for a tight-spread entry between 6 and 1 minutes left.');
       return;
     }
     position = { ...candidate, direction, sell: false };
@@ -660,7 +629,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=compact-alert-controls-15"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
