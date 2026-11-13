@@ -22,6 +22,13 @@ input,select{background:#0c1b2e;color:white;border:1px solid #4a6182;border-radi
 pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 @media(min-width:720px){.grid{grid-template-columns:repeat(4,minmax(0,1fr))}.columns{grid-template-columns:1.25fr 1fr}}
 .pro-tabs{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px}.pro-tabs button{white-space:nowrap}.pro-tabs button.active{background:linear-gradient(120deg,#765817,#d2a342);color:#07101c}.pro-panel{display:none}.pro-panel.active{display:block}.pro-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.pro-price{border:1px solid #95722e;border-radius:14px;padding:17px;background:#101c2c}.pro-price b{font-size:27px;color:#ffd477}.pro-state{color:#ffd477}.pro-up{color:#50e6b4}.pro-down{color:#ff8091}.pro-market{padding:12px;border-bottom:1px solid #30415c;display:flex;align-items:center;justify-content:space-between;gap:12px}.pro-market:last-child{border-bottom:0}.pro-market small{display:block}.pro-flag{font-size:11px;color:#ffd477}.pro-disabled{opacity:.8}.pro-grid pre{overflow:auto}@media(max-width:500px){.pro-market{font-size:12px}}
+#crossCoinCaller{margin:0 0 8px;padding:8px 12px;text-align:center;border:1px solid #40587b;border-radius:10px;background:#101d35}
+#crossCoinHeading{margin:0;color:#a7b9d2;font-size:11px;letter-spacing:.08em}
+#crossCoinCaller #crossCoinCall{margin:2px 0;font-size:clamp(19px,3vw,28px);font-weight:850}
+#crossCoinCaller #crossCoinCall.green{color:#4ade80}
+#crossCoinCaller #crossCoinCall.red{color:#fb7185}
+#crossCoinDetail{margin:2px 0;font-size:12px;color:#d5e4ff}
+#crossCoinMarkets{display:block;color:#a7b9d2;font-size:10px}
 </style><link rel="stylesheet" href="/premium.css?v=glowing-market-coins-8"><link rel="stylesheet" href="/arcade-theme.css?v=neon-polish"><script defer src="/push-client.js"></script><link rel="stylesheet" href="/kaibot-command.css?v=2"><link rel="stylesheet" href="/polymarket.css"></head><body class="bt-command-v9"><main>
 <header><div><div class="brand">BANK <span>TRADES</span> PRO</div><div class="tag">KALSHI • 15-MINUTE INTELLIGENCE</div></div><div id="health" class="pill">CHECKING DATA</div></header>
 <nav class="market-venue-nav" aria-label="Market venue"><a href="/dashboard" aria-current="page">Kalshi</a><a href="/dashboard?venue=polymarket">Polymarket</a></nav>
@@ -30,12 +37,12 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 <p style="margin:7px 0;color:#cbd5e1;font-size:12px">Engine strength scores, not proven win probabilities</p>
 <div id="sidebarConfidenceRows" style="font-size:12px;line-height:1.9">Waiting for verified signals…</div>
 <small style="display:block;margin-top:8px">— means no qualified, fresh signal. Scores are experimental and not calibrated accuracy.</small>
-</div><div class="sidebar-note" style="margin-top:18px"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><section class="card" style="margin:10px 0" aria-labelledby="crossCoinHeading">
-<h2 id="crossCoinHeading">Kalshi Cross-Coin Flow</h2>
+</div><div class="sidebar-note" style="margin-top:18px"><b>RESEARCH MODE</b><p>Live quotes. Experimental signals. Virtual trading only.</p><span class="green">● No API keys required</span></div></aside><div class="terminal-content"><div class="terminal-heading"><div><h1>Market overview <span class="terminal-live">15 MIN</span></h1><p>Kalshi crypto contracts · live quote terminal</p></div><a class="terminal-link" href="#pro" data-open-tab="kaibot">OPEN KAIBOT ↗</a></div><section id="crossCoinCaller" aria-labelledby="crossCoinHeading">
+<h2 id="crossCoinHeading">KALSHI CROSS-COIN CALLER</h2>
 <div class="signal" id="crossCoinCall" role="status">NO CALL</div>
-<p id="crossCoinDetail">Collecting live 15-minute quotes from the cards above.</p>
+<p id="crossCoinDetail">Collecting live 15-minute quotes from the cards below.</p>
 <small id="crossCoinMarkets"></small>
-</section><script>
+</section><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><script>
 (() => {
   const call = document.getElementById('crossCoinCall');
   const detail = document.getElementById('crossCoinDetail');
@@ -94,7 +101,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       show((position.sell && hasBid ? 'SELL ' : position.sell ? 'SELL WATCH ' : 'HOLD ') + side + ' · ' + position.asset,
         (position.sell ? 'Cross-coin flow reversed' : 'Tracking to round close') +
         (hasBid ? ' · Exit bid ' + bid.toFixed(1) + '%' : ' · Exit bid unavailable'),
-        position.sell ? 'red' : '');
+        position.direction > 0 ? 'green' : 'red');
       return;
     }
     const direction = up > down ? 1 : -1;
@@ -114,7 +121,12 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const side = direction > 0 ? 'UP' : 'DOWN';
     const flow = agreement + '/' + aligned.length + ' contracts favor ' + side;
     if (!candidate) {
-      show('FLOW ' + side, flow + ' · Checking for an ask in the 50s–80s between 6 and 1 minutes left.');
+      const remaining = aligned[0].close - now;
+      const wait = remaining > 360000 ? 'Entry window opens at 6 minutes left' :
+        remaining < 60000 ? 'Entry window closed for this round' :
+        signaledClose === aligned[0].close ? 'Call already issued this round' :
+        'Waiting for a 50%–89.9% ask with a spread of 4 points or less';
+      show('WATCH ' + side, flow + ' · ' + wait, direction > 0 ? 'green' : 'red');
       return;
     }
     position = { ...candidate, direction, sell: false };
