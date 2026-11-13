@@ -134,7 +134,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
         if (positions.has(row.ticker)) continue;
         const bid = direction > 0 ? row.yesBid : row.noBid;
         const ask = direction > 0 ? row.yesAsk : row.noAsk;
-        if (spread(bid, ask) > 4) continue;
+        if (ask < 40 || ask > 80 || spread(bid, ask) > 4) continue;
         const prior = recent.get(row.ticker);
         const previousAsk = direction > 0 ? prior?.yesAsk : prior?.noAsk;
         const previousBid = direction > 0 ? prior?.yesBid : prior?.noBid;
@@ -181,7 +181,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     }
     const wait = remaining > 360000 ? 'Entry window opens at 6 minutes left' :
       remaining < 60000 ? 'Entry window closed for this round' :
-      'Waiting for a tight-spread contract aligned with the group';
+      'Waiting for a 40%–80% buy ask aligned with the group';
     show('WATCH ' + side, agreement + '/' + aligned.length + ' contracts favor ' + side + ' · ' + wait,
       direction > 0 ? 'green' : 'red');
   });
