@@ -536,15 +536,15 @@ function monitorPaperExits(results,age){
  if(exitAlerted.size>500)exitAlerted.clear();
  if(paperExitState.size>500)paperExitState.clear();
 }
-let crossCoinAction;
+let crossCoinActions=new Map();
 function renderContractAction(tile, action){
- const tracked=tile.dataset.ticker===crossCoinAction?.ticker && crossCoinAction?.ticker;
- const side=tracked?(crossCoinAction.direction>0?'UP':'DOWN'):tile.dataset.side;
- action.textContent=tracked?crossCoinAction.label.split(' · ')[0]:side?side+' WATCH':'EVEN';
+ const tracked=crossCoinActions.get(tile.dataset.ticker);
+ const side=tracked?(tracked.direction>0?'UP':'DOWN'):tile.dataset.side;
+ action.textContent=tracked?tracked.label:side?side+' WATCH':'EVEN';
  action.style.color=side==='UP'?'#4ade80':side==='DOWN'?'#fb7185':'';
 }
 window.addEventListener('banktrades:cross-coin-action', ({detail})=>{
- crossCoinAction=detail;
+ crossCoinActions=new Map(detail.map(action=>[action.ticker,action]));
  for(const tile of $('premiumStrip').querySelectorAll('[data-ticker]')){
   renderContractAction(tile,tile.querySelector('[data-contract-action]'));
  }

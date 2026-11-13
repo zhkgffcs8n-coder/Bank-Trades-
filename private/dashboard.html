@@ -27,6 +27,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 #crossCoinCaller #crossCoinCall{margin:2px 0;font-size:clamp(19px,3vw,28px);font-weight:850}
 #crossCoinCaller #crossCoinCall.green{color:#4ade80}
 #crossCoinCaller #crossCoinCall.red{color:#fb7185}
+#crossCoinPrices{margin:3px 0;color:#f4f7ff;font-size:13px;font-weight:700}
 #crossCoinDetail{margin:2px 0;font-size:12px;color:#d5e4ff}
 #crossCoinMarkets{display:block;color:#a7b9d2;font-size:10px}
 </style><link rel="stylesheet" href="/premium.css?v=glowing-market-coins-8"><link rel="stylesheet" href="/arcade-theme.css?v=neon-polish"><script defer src="/push-client.js"></script><link rel="stylesheet" href="/kaibot-command.css?v=2"><link rel="stylesheet" href="/polymarket.css"></head><body class="bt-command-v9"><main>
@@ -41,29 +42,49 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
 <h2 id="crossCoinHeading">KALSHI CROSS-COIN CALLER</h2>
 <div class="signal" id="crossCoinCall" role="status">NO CALL</div>
 <p id="crossCoinDetail">Collecting live 15-minute quotes from the cards below.</p>
+<div id="crossCoinPrices" hidden></div>
 <small id="crossCoinMarkets"></small>
 </section><section class="premium-market-strip" id="premiumStrip"><div class="premium-tile">Connecting to Kalshi…</div></section><script>
 (() => {
   const call = document.getElementById('crossCoinCall');
   const detail = document.getElementById('crossCoinDetail');
   const coins = document.getElementById('crossCoinMarkets');
+  const prices = document.getElementById('crossCoinPrices');
   const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'BNB', 'HYPE', 'ZEC'];
   let lastSnapshot = 0;
   let validUntil = 0;
-  let position;
-  let signaledClose = 0;
+  const positions = new Map();
 
   function spread(bid, ask) {
     return bid > 0 && ask < 100 && ask >= bid ? ask - bid : Infinity;
   }
 
-  function show(label, reason, color = '') {
+  function show(label, reason, color = '', entries = []) {
     if (call.textContent !== label) call.textContent = label;
     call.className = 'signal ' + color;
     detail.textContent = reason;
+    prices.hidden = !entries.length;
+    const rows = entries.map(({ position, action, exitBid }) => {
+      const row = document.createElement('div');
+      const heading = document.createElement('strong');
+      heading.textContent = action + ' · ' + position.asset;
+      heading.style.color = position.direction > 0 ? '#4ade80' : '#fb7185';
+      const quotes = document.createElement('div');
+      quotes.textContent = 'Entry bid ' + position.bid.toFixed(1) + '% · Buy ask ' + position.ask.toFixed(1) +
+        '% · Exit bid ' + (Number.isFinite(exitBid) ? exitBid.toFixed(1) + '%' : '—');
+      row.append(heading, quotes);
+      return row;
+    });
+    prices.replaceChildren(...rows);
     window.dispatchEvent(new CustomEvent('banktrades:cross-coin-action', {
-      detail: { label, ticker: position?.ticker, direction: position?.direction }
+      detail: entries.map(({ position, action }) => ({ ticker: position.ticker, direction: position.direction, label: action }))
     }));
+  }
+
+  function removeExpired(now) {
+    for (const [ticker, position] of positions) {
+      if (position.close <= now) positions.delete(ticker);
+    }
   }
 
   window.addEventListener('banktrades:premium-contracts', ({ detail: snapshot }) => {
@@ -88,66 +109,64 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     }).join(' · ');
     const up = aligned.filter(row => row.lean > 0).length;
     const down = aligned.filter(row => row.lean < 0).length;
-    if (position && now >= position.close) position = undefined;
-    if (position) {
-      const round = rounds.get(position.close) ?? [];
-      const row = round.find(item => item.ticker === position.ticker);
-      const side = position.direction > 0 ? 'UP' : 'DOWN';
-      const opposite = round.filter(item => item.lean === -position.direction).length;
-      const bid = position.direction > 0 ? row?.yesBid : row?.noBid;
-      if (round.length >= 5 && opposite >= Math.ceil(round.length * 0.75)) position.sell = true;
-      validUntil = Math.min(fetched + 18000, position.close);
-      const hasBid = Number.isFinite(bid) && bid > 0 && bid < 100;
-      show((position.sell && hasBid ? 'SELL ' : position.sell ? 'SELL WATCH ' : 'HOLD ') + side + ' · ' + position.asset,
-        (position.sell ? 'Cross-coin flow reversed' : 'Tracking to round close') +
-        (hasBid ? ' · Exit bid ' + bid.toFixed(1) + '%' : ' · Exit bid unavailable'),
-        position.direction > 0 ? 'green' : 'red');
-      return;
-    }
+    removeExpired(now);
     const direction = up > down ? 1 : -1;
     const agreement = Math.max(up, down);
-    if (aligned.length < 5 || agreement <= aligned.length / 2) {
-      show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + (up > down ? 'UP' : 'DOWN'), aligned.length < 5 ? 'Waiting for five live contracts in the same round.' :
-        up + ' favor UP · ' + down + ' favor DOWN · ' + (aligned.length - up - down) + ' even');
-      return;
-    }
-    const candidates = aligned.flatMap(row => {
-      const bid = direction > 0 ? row.yesBid : row.noBid;
-      const ask = direction > 0 ? row.yesAsk : row.noAsk;
-      const gap = spread(bid, ask);
-      return row.close !== signaledClose && row.close - now >= 60000 && row.close - now <= 360000 && row.lean === direction && gap <= 4 && ask >= 50 && ask < 90 ? [{ ...row, ask, gap }] : [];
-    }).sort((a, b) => a.gap - b.gap || a.ask - b.ask);
-    const candidate = candidates[0];
     const side = direction > 0 ? 'UP' : 'DOWN';
-    const flow = agreement + '/' + aligned.length + ' contracts favor ' + side;
-    if (!candidate) {
-      const remaining = aligned[0].close - now;
-      const wait = remaining > 360000 ? 'Entry window opens at 6 minutes left' :
-        remaining < 60000 ? 'Entry window closed for this round' :
-        signaledClose === aligned[0].close ? 'Call already issued this round' :
-        'Waiting for a 50%–89.9% ask with a spread of 4 points or less';
-      show('WATCH ' + side, flow + ' · ' + wait, direction > 0 ? 'green' : 'red');
+    const hasMajority = aligned.length >= 5 && agreement > aligned.length / 2;
+    const remaining = aligned.length ? aligned[0].close - now : 0;
+    const entered = new Set();
+    if (hasMajority && remaining >= 60000 && remaining <= 360000) {
+      for (const row of aligned) {
+        if (positions.has(row.ticker) || row.lean !== direction) continue;
+        const bid = direction > 0 ? row.yesBid : row.noBid;
+        const ask = direction > 0 ? row.yesAsk : row.noAsk;
+        if (ask < 50 || ask > 80 || spread(bid, ask) > 4) continue;
+        positions.set(row.ticker, { ...row, bid, ask, direction, sell: false });
+        entered.add(row.ticker);
+      }
+    }
+    const entries = [...positions.values()].map(position => {
+      validUntil = Math.min(validUntil, position.close);
+      const round = rounds.get(position.close) ?? [];
+      const row = round.find(item => item.ticker === position.ticker);
+      const opposite = round.filter(item => item.lean === -position.direction).length;
+      if (round.length >= 5 && opposite >= Math.ceil(round.length * 0.75)) position.sell = true;
+      const bid = position.direction > 0 ? row?.yesBid : row?.noBid;
+      const exitBid = bid > 0 && bid < 100 ? bid : undefined;
+      const action = entered.has(position.ticker) ? 'BUY' :
+        position.sell ? (exitBid === undefined ? 'SELL WATCH' : 'SELL') :
+        exitBid === undefined ? 'QUOTE UNAVAILABLE' : 'HOLD';
+      return { position, action: action + (position.direction > 0 ? ' UP' : ' DOWN'), exitBid };
+    }).sort((a, b) => Number(entered.has(b.position.ticker)) - Number(entered.has(a.position.ticker)));
+    if (entries.length) {
+      const lead = entries[0];
+      show(lead.action + ' · ' + lead.position.asset,
+        entries.length > 1 ? entries.length + ' tracked calls' : 'Tracking this contract to round close',
+        lead.position.direction > 0 ? 'green' : 'red', entries);
       return;
     }
-    position = { ...candidate, direction, sell: false };
-    signaledClose = candidate.close;
-    validUntil = Math.min(validUntil, candidate.close);
-    show('BUY ' + side + ' · ' + candidate.asset,
-      flow + ' · Entry ask ' + candidate.ask.toFixed(1) + '% · Spread ' + candidate.gap.toFixed(1) + ' pp',
+    if (!hasMajority) {
+      show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + side,
+        aligned.length < 5 ? 'Waiting for five live contracts in the same round.' :
+        up + ' favor UP · ' + down + ' favor DOWN');
+      return;
+    }
+    const wait = remaining > 360000 ? 'Entry window opens at 6 minutes left' :
+      remaining < 60000 ? 'Entry window closed for this round' :
+      'Waiting for a 50%–80% ask with a spread of 4 points or less';
+    show('WATCH ' + side, agreement + '/' + aligned.length + ' contracts favor ' + side + ' · ' + wait,
       direction > 0 ? 'green' : 'red');
   });
 
   setInterval(() => {
-    if (validUntil && Date.now() >= validUntil) {
-      validUntil = 0;
-      coins.textContent = '';
-      if (position && Date.now() < position.close) {
-        show('QUOTE STALE · ' + position.asset, 'Tracking paused until fresh quotes arrive.');
-      } else {
-        position = undefined;
-        show('NO CALL', 'Waiting for a fresh Kalshi quote update.');
-      }
-    }
+    const now = Date.now();
+    if (!validUntil || now < validUntil) return;
+    validUntil = 0;
+    coins.textContent = '';
+    removeExpired(now);
+    show(positions.size ? 'QUOTES STALE' : 'NO CALL', 'Waiting for a fresh Kalshi quote update.', '',
+      [...positions.values()].map(position => ({ position, action: 'QUOTE STALE' })));
   }, 1000);
 })();
 </script><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><button id="premiumVoice" type="button" aria-pressed="false">🔇 VOICE OFF</button><button id="enablePush" type="button">🔔 ENABLE ALERTS</button><span id="premiumHealth" class="pill">CHECKING QUOTES</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><div class="card" style="margin-top:12px"><b>MY POSITION — EASY MODE</b><p class="premium-foot"><b>1.</b> Tap the coin you bought. <b>2.</b> Type what you paid. <b>3.</b> Tap UP or DOWN.</p><div id="quickAssets" aria-label="Choose the coin you bought" style="display:grid;grid-template-columns:repeat(4,minmax(72px,1fr));gap:8px;margin:12px 0"><button type="button" data-quick-asset="BTC">₿ BTC</button><button type="button" data-quick-asset="ETH">◆ ETH</button><button type="button" data-quick-asset="SOL">◎ SOL</button><button type="button" data-quick-asset="XRP">✕ XRP</button><button type="button" data-quick-asset="DOGE">Ð DOGE</button><button type="button" data-quick-asset="BNB">◇ BNB</button><button type="button" data-quick-asset="HYPE">⚡ HYPE</button><button type="button" data-quick-asset="ZEC">ⓩ ZEC</button></div><div id="quickSelected" class="premium-foot"><b>👆 TAP YOUR COIN</b></div><div class="toolbar"><label><b>WHAT % DID YOU ENTER AT?</b> <input id="quickEntry" type="number" placeholder="Example: 60" min="1" max="99" step=".1"> %</label></div><div class="toolbar"><button type="button" id="quickUp">⬆️ I’M IN UP</button><button type="button" id="quickDown">⬇️ I’M IN DOWN</button><button type="button" id="quickClose">✅ I SOLD / I’M OUT</button></div><div class="toolbar"><button type="button" id="quickStart" style="width:100%;min-height:54px;font-size:18px;font-weight:900">▶ START LIVE TRACKING</button></div><div id="quickPosition" role="status" aria-live="polite" style="margin-top:14px;min-height:92px;padding:16px;border:1px solid rgba(255,255,255,.18);border-radius:12px;font-size:20px;font-weight:800">Pick a coin above, enter your entry %, then tap UP or DOWN.</div></div><p class="premium-foot">Qualified BUY calls are automatically tracked for UP and DOWN separately as simulated one-contract entries. Enter your actual fill below for your own P/L. WAIT means no independently validated directional edge. A tracked position is evaluated separately for HOLD / EXIT / SELL FAST.</p></div><div class="premium-panel"><h2>CONTRACT PRICE <small> / LIVE QUOTES</small></h2><div class="premium-actions"><a href="#pro">OPEN KAIBOT &amp; MARKETS</a><a href="#chart">DETAIL CHART ↓</a></div><p class="premium-foot" id="premiumChartTitle">BTC quote mid-price · browser session</p><canvas id="premiumChart" class="premium-chart"></canvas><p class="premium-foot">One-minute Kalshi YES bid candles. Overlays describe past prices; they do not predict settlement.</p><div class="premium-label">AI / SIGNAL ENGINE</div><p id="premiumAI">Gathering quotes. Predictions are not calibrated.</p></div></section><section class="card" id="coinbaseDirect" aria-label="Coinbase direct market context"></section><section class="card" id="marketRadar"><div class="between"><h2>MARKET RADAR</h2><button id="refresh">↻ REFRESH</button></div><div class="toolbar"><button id="voice">🔇 VOICE OFF</button><button id="auto">AUTO REFRESH ON</button><small>Voice reads all market entries and paper exits while the page is active. Switching apps may suspend speech.</small></div><div id="coins" class="grid"><p>Loading official Kalshi markets…</p></div></section>
@@ -644,7 +663,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-3"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=live-contract-flow-4"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=2"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=compact-above-radar-5"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=2"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
