@@ -127,7 +127,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const direction = up > down ? 1 : -1;
     const agreement = Math.max(up, down);
     if (aligned.length < 5 || agreement < Math.ceil(aligned.length * 0.75)) {
-      show('NO CALL', aligned.length < 5 ? 'Waiting for five comparable quotes in the same round. Dashes indicate unavailable or insufficient quote history.' :
+      show(aligned.length < 5 || up === down ? 'NO CALL' : 'LEAN ' + (up > down ? 'UP' : 'DOWN'), aligned.length < 5 ? 'Waiting for five comparable quotes in the same round. Dashes indicate unavailable or insufficient quote history.' :
         up + ' rising · ' + down + ' falling · ' + (aligned.length - up - down) + ' flat');
       return;
     }
@@ -142,7 +142,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const side = direction > 0 ? 'UP' : 'DOWN';
     const flow = agreement + '/' + aligned.length + ' coins moving ' + side;
     if (!candidate) {
-      show('NO CALL', flow + ' · Looking for a tight-spread laggard between 6 and 1 minutes left.');
+      show('FLOW ' + side, flow + ' · Looking for a tight-spread laggard between 6 and 1 minutes left.');
       return;
     }
     position = { ...candidate, direction, sell: false };
