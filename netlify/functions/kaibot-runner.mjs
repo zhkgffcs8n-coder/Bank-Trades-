@@ -145,7 +145,7 @@ export default async()=>{
  const round=Math.floor(now/900000);
  const mode=['lock','balanced','extreme'].includes(state.mode)?state.mode:'balanced';
  const coverageQuotes=[];
- const roundAudit={at:now,running:true,mode,entriesPaused:entryPaused,markets:{}};
+ const roundAudit={at:now,running:true,mode,entriesPaused:entryPaused,entryPauseReason:entryPaused?'LOSS_COHORT_CIRCUIT_BREAKER':null,markets:{}};
  // Fetch the eight market lists concurrently to reduce scan latency without changing signal qualification.
  const marketLists=await Promise.all(Object.entries(SERIES).map(async([asset,series])=>{
   try{return [asset,{data:await get(base+'/markets?'+new URLSearchParams({series_ticker:series,status:'open',limit:'50'}))}];}
@@ -200,11 +200,11 @@ export default async()=>{
    // only the shared engine's qualified BUY actions can open positions.
    const experimentalEntry=false;
    // Lock also requires a stronger signal score for validated entries.
-   if(mode==='lock'&&['BUY UP','BUY DOWN'].includes(signal.action)&&Number(signal.score)<75){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'LOCK mode requires signal score at least 75',signal:signal.action};continue;}
+   if(mode==='lock'&&['BUY UP','BUY DOWN'].includes(signal.action)&&(!Number.isFinite(Number(signal.score))||Number(signal.score)<75)){roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:'LOCK_SCORE_BELOW_75_OR_MISSING',signal:signal.action,score:Number.isFinite(Number(signal.score))?Number(signal.score):null,requiredScore:75,signalValidation:signal.validation??null};continue;}
    // Only qualified shared-engine signals can open automatic paper positions.
    // WAIT observations remain in the research journal above.
    if(!['BUY UP','BUY DOWN'].includes(signal.action)){
-    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:signal.reason||'Unqualified signal; research observation retained',signal:signal.action,score:signal.score,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null};
+    roundAudit.markets[asset]={status:'SKIPPED',ticker:m.ticker,reason:signal.reason||'Unqualified signal; research observation retained',signal:signal.action,signalValidation:signal.validation??null,score:Number.isFinite(Number(signal.score))?Number(signal.score):null,secondsLeft:Math.round((m._e-now)/1000),sampleCount:records.length,latestSampleAgeMs:records.length?now-Number(records.at(-1).t):null};
     continue;
    }
    const modelUp=Number(signal.probability??signal.prediction);
