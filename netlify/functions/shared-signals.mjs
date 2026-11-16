@@ -1,4 +1,5 @@
 import {getStore} from '@netlify/blobs';
+import {assessAlert,feedKey,feedStore,tradingViewEntryCheck} from './lib/tradingview-btc.mjs';
 import {paperSignal} from './lib/shared-paper-signals.mjs';
 import {performance,gatePaperEntry} from './lib/paper-performance.mjs';
 import {buildCommitteeSnapshot} from '../../src/engine-team.mjs';
@@ -74,7 +75,10 @@ export default async req=>{
    })();
    const recentRead=timed(db.get('recent/'+asset,{type:'json'}),2200,'recent samples').catch(()=>null);
    const hunterRead=timed(db.get('scalp-hunter/latest/'+asset,{type:'json'}),1200,'scalp hunter').catch(()=>null);
-   const [{data,quoteReceivedAt},recent,hunter]=await Promise.all([marketRead,recentRead,hunterRead]);
+   const alertRead=asset==='BTC'&&process.env.TRADINGVIEW_BTC_WEBHOOK_KEY
+    ?timed(Promise.resolve().then(()=>getStore({name:feedStore,consistency:'strong'}).get(feedKey,{type:'json'})),1000,'TradingView BTC').catch(()=>null)
+    :null;
+   const [{data,quoteReceivedAt},recent,hunter,alert]=await Promise.all([marketRead,recentRead,hunterRead,alertRead]);
    const now=Date.now();
    const markets=(data.markets||[]).map(m=>({...m,_expiry:expiry(m,now)})).filter(m=>m._expiry&&m._expiry>now&&m._expiry<=now+960000).sort((a,b)=>a._expiry-b._expiry);
    const selected=selectEligibleRound(markets,now);
@@ -82,6 +86,7 @@ export default async req=>{
    if(!selected)return {asset,action:'WAIT',reason:markets.length?'No active contract with valid binary quotes':'No verified active contract',ticker:null,timing,committeeInput:{status:'MISSING_INPUT',missing:['verified active contract with valid quotes']}};
    const {market,yesAsk:upAsk,noAsk:downAsk,yesBid:upBid,noBid:downBid}=selected;
    if(!Array.isArray(recent))return {asset,ticker:market.ticker,action:'WAIT',reason:'Recent sample history unavailable',timing,committeeInput:{status:'MISSING_INPUT',missing:['scheduled same-contract samples unavailable']}};
+   const tradingView=asset==='BTC'?{...assessAlert(alert,Date.parse(market.open_time),Date.parse(market.close_time),now),ticker:market.ticker,enabled:process.env.TRADINGVIEW_BTC_ENTRIES==='true'}:undefined;
    const records=recent.filter(x=>x?.ticker===market.ticker);
    const activePosition=openPositions.filter(t=>t.asset===asset&&t.ticker===market.ticker).sort((a,b)=>b.at-a.at)[0]||null;
    const v8=evaluateScalperV8({ticker:market.ticker,observedAt:quoteReceivedAt,expiresAt:market._expiry,
@@ -90,6 +95,8 @@ export default async req=>{
    const signal=gatePaperEntry({...rawSignal,asset},stats);
    // Keep the underlying direction and the post-performance veto visible.
    // Never promote a rejected signal into a live BUY.
+   const displayEntryBlock=signal.action==='BUY UP'||signal.action==='BUY DOWN'
+    ?tradingViewEntryCheck(tradingView,market.ticker,signal.action.slice(4),Number(market.floor_strike),now):null;
    const entryGate={rawAction:rawSignal.action,finalAction:signal.action,
     blockedByPerformance:rawSignal.action.startsWith('BUY')&&signal.action==='WAIT',
     validation:signal.validation||null,reason:signal.reason,
@@ -123,7 +130,7 @@ export default async req=>{
    // Feed the same visible forecast into the research committee as non-actionable context.
    // It is quote-implied or momentum-derived, not independently calibrated evidence.
    if(roundCall&&committeeInput&&typeof committeeInput==='object')committeeInput.displayForecast={direction:roundCall.direction,basis:roundCall.basis,asOf:roundCall.asOf,ticker:roundCall.ticker,confidencePercent:roundCall.confidencePercent,actionable:false,mode:'SHADOW_ONLY'};
-   return {asset,...signal,timing,v8,scalpHunter:hunter?.ticker===market.ticker&&now-hunter.at>=0&&now-hunter.at<=75000?hunter:null,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
+   return {asset,...signal,timing,v8,tradingView,displayEntryBlock,scalpHunter:hunter?.ticker===market.ticker&&now-hunter.at>=0&&now-hunter.at<=75000?hunter:null,roundCall,entryGate,researchDirection,committeeInput,forecast,roundAssessment,position:activePosition?{side:activePosition.side,ask:activePosition.ask,qty:activePosition.qty,ticker:activePosition.ticker,source:'server paper ledger'}:null};
   }catch(e){return {asset,action:'WAIT',score:0,reason:'Feed unavailable: '+String(e.message),ticker:null,committeeInput:{status:'MISSING_INPUT',missing:['market feed unavailable: '+String(e.message)]}}}
  }));
  return json({fetched_at:new Date().toISOString(),processingMs:Date.now()-requestStartedAt,source:'Shared read-only Kalshi paper research signals',performance:performanceStatus.state==='AVAILABLE'?stats:null,performanceStatus,collectorHealth:collector,collectionDiagnostics,research:research.status,learning,learningMetrics:learningReport(research.model),perAssetLearningMetrics:Object.fromEntries(Object.keys(assets).map(asset=>[asset,learningReport(assetModels[asset])])),results});

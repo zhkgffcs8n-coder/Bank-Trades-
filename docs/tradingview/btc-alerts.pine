@@ -1,0 +1,11 @@
+// Append to HYPER BTC 15M — KALSHI PREDATOR V1.
+// Create one alert using "Any alert() function call" on a BTCUSD 1S chart.
+var int lastWebhookAt = na
+isBtcOneSecond = timeframe.isseconds and timeframe.multiplier == 1 and syminfo.basecurrency == "BTC" and syminfo.currency == "USD"
+webhookReady = na(lastWebhookAt) or time_close - lastWebhookAt >= 14000
+
+if isBtcOneSecond and barstate.isrealtime and barstate.isconfirmed and webhookReady
+    webhookDirection = bullSetup ? "UP" : bearSetup ? "DOWN" : "MIXED"
+    webhookPayload = '{"symbol":"' + syminfo.tickerid + '","interval":"1S","candleCloseAt":' + str.tostring(time_close) + ',"direction":"' + webhookDirection + '","bullScore":' + str.tostring(bullScore) + ',"bearScore":' + str.tostring(bearScore) + '}'
+    alert(webhookPayload, alert.freq_once_per_bar_close)
+    lastWebhookAt := time_close
