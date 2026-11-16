@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assessAlert, parseAlert, recordAlert } from '../netlify/functions/lib/tradingview-btc.mjs';
+import { assessAlert, parseAlert, recordAlert, tradingViewEntryCheck } from '../netlify/functions/lib/tradingview-btc.mjs';
 
 const close = 1_800_000_000_000;
-const payload = { symbol: 'COINBASE:BTCUSD', interval: '1S', candleCloseAt: close, direction: 'UP', bullScore: 6, bearScore: 3 };
+const payload = { symbol: 'CRYPTO:BTCUSD', interval: '1S', candleCloseAt: close, direction: 'UP', bullScore: 6, bearScore: 3 };
 
 test('accepts timestamped closed BTCUSD 1S alerts and rejects invalid inputs', () => {
   assert.equal(parseAlert(payload, close + 100).receivedAt, close + 100);
@@ -39,4 +39,13 @@ test('concurrent writes cannot replace a newer alert with stale or duplicate dat
   assert.deepEqual(state.data, later);
   assert.equal(await recordAlert(store, later), false);
   assert.equal(await recordAlert(store, earlier), false);
+});
+
+test('enabled entry check requires a fresh, same-round, agreeing signal and a Kalshi target', () => {
+  const feed = { enabled: true, ticker: 'round-a', status: 'FRESH', direction: 'UP', candleCloseAt: close };
+  assert.equal(tradingViewEntryCheck(feed, 'round-a', 'up', 64000, close + 100), null);
+  assert.ok(tradingViewEntryCheck(feed, 'round-b', 'up', 64000, close + 100));
+  assert.ok(tradingViewEntryCheck(feed, 'round-a', 'down', 64000, close + 100));
+  assert.ok(tradingViewEntryCheck(feed, 'round-a', 'up', 0, close + 100));
+  assert.ok(tradingViewEntryCheck(feed, 'round-a', 'up', 64000, close + 20001));
 });

@@ -893,7 +893,7 @@ function showScalp(message,exitSide,ticker){
   }
   if(scalpDetail.textContent!==detail)scalpDetail.textContent=detail;
 }
-function scalp(market,left,side,strong,quotes){
+function scalp(market,left,side,strong,quotes,feed){
   const ticker=market.ticker;
   let entered=false;
   let tracked=positions.get(selectedCoin);
@@ -901,6 +901,12 @@ function scalp(market,left,side,strong,quotes){
   if(!tracked){
     if(!strong||left<180||!['up','down'].includes(side)){
       showScalp('NO ENTRY · Waiting for aligned '+selectedCoin+' momentum and a tight spread');
+      return;
+    }
+    if(feed?.enabled&&(feed.ticker!==ticker||feed.status!=='FRESH'||
+      !(Date.now()-feed.candleCloseAt>=0&&Date.now()-feed.candleCloseAt<=20000)||
+      !(Number(market.floor_strike)>0)||feed.direction!==side.toUpperCase())){
+      showScalp('WAIT · Awaiting fresh TradingView BTC 1s confirmation for this Kalshi round');
       return;
     }
     tracked={ticker,side,entry:quotes[side].ask,exit:null};
@@ -968,7 +974,7 @@ function assess(coin,market,e,visible){
   if(visible){
     if(closeLeft>0&&closeLeft<=900&&
     [ya,yb,na,nb].every(value=>value>0&&value<100)){
-      scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}});
+      scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},coin==='BTC'?sharedV8.find(row=>row.asset==='BTC')?.tradingView:null);
     }else{
       showScalp('DATA WAIT · No open '+coin+' 15-minute contract with valid quotes');
     }

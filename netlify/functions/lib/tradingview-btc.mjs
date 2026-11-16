@@ -4,7 +4,7 @@ export const feedStore = 'bank-trades-tradingview';
 
 export function parseAlert(body, receivedAt) {
   const { symbol, interval, candleCloseAt, direction, bullScore, bearScore } = body ?? {};
-  if (typeof symbol !== 'string' || !/^[A-Z0-9_]+:BTCUSD$/.test(symbol) || interval !== '1S' ||
+  if (symbol !== 'CRYPTO:BTCUSD' || interval !== '1S' ||
       !Number.isSafeInteger(candleCloseAt) || candleCloseAt % 1000 !== 0 ||
       candleCloseAt > receivedAt || receivedAt - candleCloseAt > maxAlertAgeMs ||
       !['UP', 'DOWN', 'MIXED'].includes(direction) ||
@@ -34,4 +34,15 @@ export function assessAlert(alert, roundOpensAt, roundClosesAt, now) {
   const ageMs = now - alert.candleCloseAt;
   if (ageMs < 0 || ageMs > maxAlertAgeMs) return { status: 'STALE', ageMs };
   return { status: 'FRESH', ...alert, ageMs, deliveryMs: alert.receivedAt - alert.candleCloseAt };
+}
+
+
+export function tradingViewEntryCheck(feed, ticker, side, target, now) {
+  if (!feed?.enabled) return null;
+  if (feed.ticker !== ticker || feed.status !== 'FRESH' ||
+      !Number.isFinite(feed.candleCloseAt) || feed.candleCloseAt > now ||
+      now - feed.candleCloseAt > maxAlertAgeMs) return 'TradingView BTC 1s alert unavailable or stale';
+  if (!Number.isFinite(target) || target <= 0) return 'Kalshi BTC round target unavailable';
+  if (feed.direction !== side.toUpperCase()) return 'TradingView BTC 1s direction has not confirmed the entry';
+  return null;
 }
