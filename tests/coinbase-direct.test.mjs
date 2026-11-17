@@ -24,6 +24,7 @@ test('hourly candles cannot masquerade as minute history; rolling levels use com
  const rows=Array.from({length:30},(_,i)=>[1700000000+i*3600,99+i,103+i,100+i,101+i,1]);
  runInNewContext(source,{document:{hidden:false,getElementById:get,addEventListener(){}},
   Option:class{constructor(label,value){this.label=label;this.value=value}},
+  window:{dispatchEvent(){}},CustomEvent:class{},
   WebSocket:Socket,fetch:async()=>({ok:true,json:async()=>rows}),
   setInterval(){},setTimeout(){},clearTimeout(){},Date,Number,Map,Intl,console,encodeURIComponent});
  await new Promise(resolve=>setImmediate(resolve));
