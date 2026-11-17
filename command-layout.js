@@ -76,10 +76,11 @@ function addMarketContext(column){
  <small data-context="source">Full windows required for whale totals.</small>
  <h3>Derivatives</h3>${tiles('deriv',['Funding','Open interest','Long / short'])}
  <h3>Verified forecast scorecard</h3><table><thead><tr><th>Provider</th><th>Rounds</th><th>Brier ↓</th></tr></thead><tbody></tbody></table>
- <small data-context="score">Waiting for verified outcomes</small>`;
+ <small data-context="score">Waiting for verified outcomes</small>
+ <h3>OMEGA probability calibration</h3><table><thead><tr><th>Confidence</th><th>Readings</th><th>Actually right</th></tr></thead><tbody data-calibration></tbody></table>`;
  column.append(panel);
  const fields=Object.fromEntries([...panel.querySelectorAll('[data-context]')].map(el=>[el.dataset.context,el]));
- const meter=panel.querySelector('meter'),body=panel.querySelector('tbody');
+ const meter=panel.querySelector('meter'),body=panel.querySelector('tbody'),calibration=panel.querySelector('[data-calibration]');
  const money=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',notation:'compact',maximumFractionDigits:2});
  const format=(n,digits=2,suffix='')=>Number.isFinite(n)?n.toFixed(digits)+suffix:'—';
  function lean(e){
@@ -114,6 +115,14 @@ function addMarketContext(column){
     const tr=document.createElement('tr');
     for(const value of [row.provider,row.verifiedRounds,format(row.brier??row.meanBrier,3)]){const td=document.createElement('td');td.textContent=value;tr.append(td);}
     return tr;
+   }));
+   const bins=Array.isArray(research?.calibration)?research.calibration:[];
+   calibration.replaceChildren(...bins.map(bin=>{
+    const row=document.createElement('tr');
+    for(const value of [bin.low+'–'+bin.high+'%',bin.readings,bin.readings?format(bin.actualRate*100,1,'%'):'—']){
+     const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+    }
+    return row;
    }));
    fields.score.textContent=rows.length?(research.historyTruncated?'Partial archive · verified shadow rounds':'Verified shadow rounds · lower Brier is better'):'No verified scorecard available';
   }finally{busy=false;}
