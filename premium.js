@@ -707,6 +707,21 @@ function mountBtcRoundCard(){
  .btc-round-card [data-btc="direction"][data-state="UP"]{color:#62e6b0}
  .btc-round-card [data-btc="direction"][data-state="DOWN"]{color:#ff91ac}
  .btc-round-card [data-btc="direction"][data-state="UP"],.btc-round-card [data-btc="direction"][data-state="DOWN"]{animation:btc-round-glow .55s ease-out}
+ .btc-round-card{border-color:#315e73;background:linear-gradient(145deg,#081726,#102035 60%,#142735);box-shadow:inset 0 1px #94eaff25,0 8px 24px #02081266}
+ .btc-round-card h3{color:#8ee6ff;letter-spacing:.09em;text-transform:uppercase;font-size:12px}
+ .btc-round-card header [data-btc="age"]{color:#8cf0cc;padding:3px 8px;border:1px solid #347c73;border-radius:999px}
+ .btc-round-card .btc-target{grid-column:1/-1;background:linear-gradient(115deg,#302a21,#152436);border:1px solid #8b6d37}
+ .btc-round-card .btc-target strong{color:#ffdc91;font-size:clamp(21px,2vw,30px)}
+ .btc-round-card .btc-call{padding:12px 0 8px}
+ .btc-round-card .btc-call small,.btc-round-card .btc-action small,.btc-round-card .btc-gauge small{display:block;color:#b4cadd;font-size:11px}
+ .btc-round-card .btc-call strong{display:block;font-size:clamp(24px,3vw,46px);line-height:1.12;overflow-wrap:anywhere;font-weight:900;letter-spacing:.04em}
+ .btc-round-card .btc-action{background:#0a2332;border:1px solid #317289;border-radius:9px;padding:8px 10px}
+ .btc-round-card .btc-action strong{display:block;color:#a6ecff;font-size:19px}
+ .btc-round-card .btc-gauge{text-align:center;margin-top:12px}
+ .btc-round-card .btc-arc{position:relative;width:min(100%,180px);aspect-ratio:2;overflow:hidden;margin:8px auto 4px}
+ .btc-round-card .btc-arc::before{content:'';position:absolute;inset:0 0 auto;height:200%;border-radius:50%;background:radial-gradient(circle,#0e1e30 0 62%,transparent 63%),conic-gradient(from 270deg,#4ad4ff 0deg,#76f4b6 var(--btc-sweep,0deg),#253b51 var(--btc-sweep,0deg) 180deg,transparent 180deg)}
+ .btc-round-card .btc-arc strong{position:absolute;inset:auto 0 0;font-size:28px;color:#96f6d2}
+ .btc-round-card [data-side="flip"]{display:block;color:#ffd28a;margin-top:6px}
  @keyframes btc-round-glow{from{text-shadow:0 0 15px currentColor}to{text-shadow:none}}
  @media(prefers-reduced-motion:reduce){.btc-round-card [data-btc="direction"]{animation:none!important}}
  @media(max-width:400px){.btc-round-card .btc-round-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -714,7 +729,7 @@ function mountBtcRoundCard(){
  <div class="btc-round-grid">
  <div><small>TradingView 1s</small><strong data-btc="direction">WAIT</strong></div>
  <div><small>Round closes in</small><strong data-btc="timer">—</strong></div>
- <div><small>Kalshi target</small><strong data-btc="target">—</strong></div>
+ <div class="btc-target"><small>Kalshi target</small><strong data-btc="target">—</strong></div>
  <div><small>UP bid / ask</small><strong data-btc="up">—</strong></div>
  <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
  <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
@@ -723,11 +738,10 @@ function mountBtcRoundCard(){
  signalCard.className='card btc-round-card';
  signalCard.style.marginTop='12px';
  signalCard.innerHTML=`<h3>BTC · SIGNAL & CONFIDENCE</h3>
- <div class="btc-round-grid">
- <div><small>Early round call</small><strong data-side="call">WAIT</strong></div>
- <div><small>Live Market Signals</small><strong data-side="action">WAIT</strong></div>
- <div><small>Momentum agreement</small><strong data-side="confidence">—</strong></div></div>
- <progress data-side="meter" max="100" aria-label="Momentum agreement" style="width:100%;accent-color:#2dd4bf"></progress>
+ <div class="btc-call"><small>Early TradingView round call</small><strong data-side="call">WAIT</strong></div>
+ <div class="btc-action"><small>Live Market Signals</small><strong data-side="action">WAIT</strong></div>
+ <div class="btc-gauge"><small>Momentum agreement</small>
+ <div class="btc-arc" data-side="meter"><strong data-side="confidence">—</strong></div></div>
  <small data-side="flip"></small>`;
  card.after(signalCard);
  const sideFields=Object.fromEntries([...signalCard.querySelectorAll('[data-side]')].map(el=>[el.dataset.side,el]));
@@ -774,8 +788,7 @@ function mountBtcRoundCard(){
   const score=round?.confidencePercent;
   const scoreFresh=active&&round?.ticker===market.ticker&&now-round.asOf>=0&&now-round.asOf<90000&&Number.isFinite(score)&&score>=0&&score<=100;
   sideFields.confidence.textContent=scoreFresh?percent(score):'—';
-  sideFields.meter.hidden=!scoreFresh;
-  sideFields.meter.value=scoreFresh?score:0;
+  sideFields.meter.style.setProperty('--btc-sweep',(scoreFresh?score*1.8:0)+'deg');
   const liveAge=now-feed?.candleCloseAt;
   const opposite=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&liveAge>=0&&liveAge<=20000&&
     ((direction==='UP'&&feed.direction==='DOWN')||(direction==='DOWN'&&feed.direction==='UP'));
