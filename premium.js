@@ -688,8 +688,8 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
-function mountBtcLiveCharts(telemetry, signalCard){
- const charts=['BTC · Live round price vs. target','BTCUSD · 5-second candles'].map(title=>{
+function mountBtcLiveCharts(desk){
+ const charts=['Live window chart','BTCUSD · 5-second candles'].map(title=>{
   const panel=document.createElement('section');
   panel.className='card btc-round-card';
   const heading=document.createElement('h3');
@@ -697,20 +697,20 @@ function mountBtcLiveCharts(telemetry, signalCard){
   const canvas=document.createElement('canvas');
   canvas.width=640;
   canvas.height=320;
-  canvas.style.cssText='width:100%;height:auto;display:block;margin-top:10px;background:#091523;border-radius:8px';
+  canvas.style.cssText='width:100%;height:auto;display:block;margin-top:10px;background:#151322;border-radius:8px';
   const status=document.createElement('small');
   panel.append(heading,canvas,status);
   return {panel,canvas,status};
  });
  const [round,fast]=charts;
- telemetry.after(round.panel);
- signalCard.after(fast.panel);
+ desk.append(round.panel,fast.panel);
  const candles=[];
  let last=0;
  window.addEventListener('banktrades:btc-spot-tick',event=>{
   const {t,price}=event.detail;
   if(!Number.isFinite(t)||!Number.isFinite(price)||price<=0)return;
   const bucket=Math.floor(t/5000)*5000, current=candles.at(-1);
+  if(current&&bucket<current.t)return;
   if(current?.t===bucket){
    current.high=Math.max(current.high,price);
    current.low=Math.min(current.low,price);
@@ -740,9 +740,22 @@ function mountBtcLiveCharts(telemetry, signalCard){
   const y=v=>h-18-(v-lo+pad)/(hi-lo+2*pad)*(h-36);
   c.font='15px monospace';
   for(let i=0;i<=3;i++){
+   const t=start+(end-start)*i/3;
+   c.fillStyle='#b699cc';
+   c.fillText(sticks?new Date(t).toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'}):i*5+'m',x(t),h-3);
+  }
+  for(let i=0;i<=3;i++){
    const v=lo+(hi-lo)*i/3;
    c.fillStyle='#294158';c.fillRect(16,y(v),w-100,1);
    c.fillStyle='#b9d0e4';c.fillText(v.toFixed(0),w-78,y(v)+5);
+  }
+  if(!sticks){
+   for(const [from,to,label,color] of [[5,8,'5-MIN ZONE','#9a41cc25'],[14,15,'SETTLE','#d9ad4025']]){
+    c.fillStyle=color;
+    c.fillRect(x(start+(end-start)*from/15),12,(to-from)*(w-100)/15,h-36);
+    c.fillStyle='#c895eb';
+    c.fillText(label,x(start+(end-start)*from/15)+2,25);
+   }
   }
   if(Number.isFinite(target)){
    c.strokeStyle='#ffc776';c.setLineDash([6,5]);c.beginPath();c.moveTo(16,y(target));c.lineTo(w-84,y(target));c.stroke();c.setLineDash([]);
@@ -762,7 +775,12 @@ function mountBtcLiveCharts(telemetry, signalCard){
     c.closePath();c.fill();
     chart.status.textContent+=' · Shading: recent volatility estimate';
    }
-   c.strokeStyle='#62dfff';c.lineWidth=3;c.beginPath();
+   c.beginPath();
+   points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
+   const baseline=Number.isFinite(target)?y(target):h-18;
+   c.lineTo(x(latest.t),baseline);c.lineTo(x(points[0].t),baseline);c.closePath();
+   c.fillStyle=latest.close>=target?'#1caa7950':'#f3316550';c.fill();
+   c.strokeStyle='#d59aff';c.lineWidth=3;c.beginPath();
    points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
    c.stroke();
   }
@@ -770,11 +788,6 @@ function mountBtcLiveCharts(telemetry, signalCard){
  function paint(){
   if(document.hidden)return;
 
-  const chart=$('btcSpotChart')?.closest('section');
-  const anchor=chart?.parentElement===signalCard.parentElement?chart:signalCard;
-  if(fast.panel.previousElementSibling!==anchor)anchor.after(fast.panel);
-  const roundAnchor=telemetry.parentElement===signalCard.parentElement?fast.panel:telemetry;
-  if(round.panel.previousElementSibling!==roundAnchor)roundAnchor.after(round.panel);
   const market=latestPositionQuotes.find(row=>row.asset==='BTC')?.market;
   const start=Date.parse(market?.open_time||''),end=Date.parse(market?.close_time||'');
   const now=Date.now(),target=Number(market?.floor_strike);
@@ -785,69 +798,54 @@ function mountBtcLiveCharts(telemetry, signalCard){
  setInterval(paint,1000);
 }
 function mountBtcRoundCard(){
- const tracker=$('quickPosition')?.closest('.card');
- if(!tracker)return;
- const card=document.createElement('section');
- card.className='card btc-round-card';
- card.setAttribute('aria-labelledby','btcRoundHeading');
- card.innerHTML=`<style>
- .btc-round-card{margin-top:12px;padding:12px;border:1px solid #32606b;border-radius:13px;background:linear-gradient(130deg,#101d2d,#151b29 65%,#252032);color:#f1f5f9;font-variant-numeric:tabular-nums}
- .btc-round-card header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
- .btc-round-card h3{margin:0;font-size:14px;color:#a5f3fc}
- .btc-round-card .btc-round-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
- .btc-round-grid>div{padding:6px 8px;border-radius:8px;background:#0e1827;min-width:0}
- .btc-round-grid small,.btc-round-grid strong{display:block;overflow-wrap:anywhere}
- .btc-round-grid small{color:#c1d0e1;font-size:11px}
- .btc-round-grid strong{font-size:15px}
- .btc-round-card [data-btc="direction"]{color:#fcd58c}
- .btc-round-card [data-btc="direction"][data-state="UP"]{color:#62e6b0}
- .btc-round-card [data-btc="direction"][data-state="DOWN"]{color:#ff91ac}
- .btc-round-card [data-btc="direction"][data-state="UP"],.btc-round-card [data-btc="direction"][data-state="DOWN"]{animation:btc-round-glow .55s ease-out}
- .btc-round-card{border-color:#315e73;background:linear-gradient(145deg,#081726,#102035 60%,#142735);box-shadow:inset 0 1px #94eaff25,0 8px 24px #02081266}
- .btc-round-card h3{color:#8ee6ff;letter-spacing:.09em;text-transform:uppercase;font-size:12px}
- .btc-round-card header [data-btc="age"]{color:#8cf0cc;padding:3px 8px;border:1px solid #347c73;border-radius:999px}
- .btc-round-card .btc-target{grid-column:1/-1;background:linear-gradient(115deg,#302a21,#152436);border:1px solid #8b6d37}
- .btc-round-card .btc-target strong{color:#ffdc91;font-size:clamp(21px,2vw,30px)}
- .btc-round-card .btc-call{padding:12px 0 8px}
- .btc-round-card .btc-call small,.btc-round-card .btc-action small,.btc-round-card .btc-gauge small{display:block;color:#b4cadd;font-size:11px}
- .btc-round-card .btc-call strong{display:block;font-size:clamp(24px,3vw,46px);line-height:1.12;overflow-wrap:anywhere;font-weight:900;letter-spacing:.04em}
- .btc-round-card .btc-action{background:#0a2332;border:1px solid #317289;border-radius:9px;padding:8px 10px}
- .btc-round-card .btc-action strong{display:block;color:#a6ecff;font-size:19px}
- .btc-round-card .btc-gauge{text-align:center;margin-top:12px}
- .btc-round-card .btc-arc{position:relative;width:min(100%,180px);aspect-ratio:2;overflow:hidden;margin:8px auto 4px}
- .btc-round-card .btc-arc::before{content:'';position:absolute;inset:0 0 auto;height:200%;border-radius:50%;background:radial-gradient(circle,#0e1e30 0 62%,transparent 63%),conic-gradient(from 270deg,#4ad4ff 0deg,#76f4b6 var(--btc-sweep,0deg),#253b51 var(--btc-sweep,0deg) 180deg,transparent 180deg)}
- .btc-round-card .btc-arc strong{position:absolute;inset:auto 0 0;font-size:28px;color:#96f6d2}
- .btc-round-card [data-side="flip"]{display:block;color:#ffd28a;margin-top:6px}
- @keyframes btc-round-glow{from{text-shadow:0 0 15px currentColor}to{text-shadow:none}}
- @media(prefers-reduced-motion:reduce){.btc-round-card [data-btc="direction"]{animation:none!important}}
- @media(max-width:400px){.btc-round-card .btc-round-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
- </style><header><h3 id="btcRoundHeading">BTC · Kalshi 15-minute round</h3><small data-btc="age">Waiting for quotes</small></header>
- <div class="btc-round-grid">
- <div><small>TradingView 1s</small><strong data-btc="direction">WAIT</strong></div>
- <div><small>Round closes in</small><strong data-btc="timer">—</strong></div>
- <div class="btc-target"><small>Kalshi target</small><strong data-btc="target">—</strong></div>
- <div><small>BTC spot · last 1m close</small><strong data-btc="spot">—</strong></div>
- <div><small>Spot vs. target</small><strong data-btc="gap">—</strong></div>
- <div><small>Market clock · PT</small><strong data-btc="marketClock">—</strong></div>
- <div><small>UP bid / ask</small><strong data-btc="up">—</strong></div>
- <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
- <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
- tracker.after(card);
- const gold=document.createElement('section');
- gold.className='card btc-round-card';
- gold.innerHTML='<h3>Gold · Kalshi 15-minute round</h3><div class="btc-round-grid"><div class="btc-target"><small>Gold target</small><strong>—</strong></div></div><small data-gold-status>Loading Kalshi Gold</small>';
- card.before(gold);
+ const desk=$('btcMarketDesk');
+ if(!desk)return;
+ desk.innerHTML=`
+ <div class="market-desk-top">
+  <section class="btc-round-card"><h3>₿ Bitcoin · KXBTC15M</h3><strong class="market-desk-price" data-btc="spot">—</strong><small data-btc="summary">Waiting for live prices</small></section>
+  <section class="btc-round-card"><h3>Au Gold · KXGOLD15M</h3><strong class="market-desk-price" data-gold-target>—</strong><small data-gold-status>Loading Kalshi Gold</small></section>
+  <section class="btc-round-card"><h3>Market clock · PT</h3><strong class="market-desk-price" data-btc="marketClock">—</strong><small>Round closes <span data-btc="clock">—</span></small></section>
+ </div>
+ <div class="market-desk-middle">
+  <section class="btc-round-card">
+   <h3>Signal</h3><div class="btc-call"><small>Market direction · TradingView 1s</small><strong data-side="call">WAIT</strong><small data-btc="roundTime"></small></div>
+   <div class="btc-action"><small>Action Oracle · Live Market Signals</small><strong data-side="action">WAIT</strong></div>
+  </section>
+  <section class="btc-round-card">
+   <h3>Confidence</h3>
+   <div class="btc-gauge"><div class="btc-arc" data-side="meter"><strong data-side="confidence">—</strong><i aria-hidden="true"></i></div><small>Round call confidence</small></div>
+   <div class="market-desk-risk"><small>Flip risk index · direction check</small><strong data-side="flip">—</strong></div>
+  </section>
+  <section class="btc-round-card">
+   <header><h3>Kalshi live telemetry</h3><small data-btc="age">Waiting for quotes</small></header>
+   <small data-btc="ticker">—</small><small>BTC price up in next 15 mins?</small>
+   <div class="market-desk-target"><div><small>Current live target price</small><strong data-btc="target">—</strong></div><div><small>Spot now</small><strong data-btc="spotNow">—</strong></div></div>
+   <div class="market-desk-gap"><small>Spot vs target</small><strong data-btc="gap">—</strong></div>
+   <div class="market-desk-quotes">
+    <div><small>Yes bid</small><strong data-btc="yesBid">—</strong></div>
+    <div><small>Yes ask</small><strong data-btc="yesAsk">—</strong></div>
+    <div><small>No bid</small><strong data-btc="noBid">—</strong></div>
+    <div><small>No ask</small><strong data-btc="noAsk">—</strong></div>
+   </div>
+  </section>
+ </div><div class="market-desk-charts"></div>`;
+ const gold=desk.querySelector('[data-gold-target]');
+ const goldStatus=desk.querySelector('[data-gold-status]');
+ let spotTick;
+ window.addEventListener('banktrades:btc-spot-tick',({detail})=>{
+  if(Number.isFinite(detail?.t)&&Number.isFinite(detail?.price)&&detail.price>0&&(!spotTick||detail.t>=spotTick.t))spotTick=detail;
+ });
  let goldBusy=false;
  async function refreshGold(){
   if(goldBusy||document.hidden)return;
   goldBusy=true;
-  const target=gold.querySelector('strong'),status=gold.querySelector('[data-gold-status]');
+  const target=gold,status=goldStatus;
   try{
    const result=await fetch('/api/data?mode=gold-round',{cache:'no-store',signal:AbortSignal.timeout(8000)});
    if(!result.ok)throw Error('Gold request failed');
    const {market}=await result.json(),strike=Number(market?.floor_strike);
    target.textContent=strike>0&&Number.isFinite(strike)?new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(strike):'—';
-   status.textContent=market?market.ticker+' · UP '+goldAsk(price(market,'yes_ask'))+' / DOWN '+goldAsk(price(market,'no_ask')):'No active Gold round';
+   status.textContent=market?'Kalshi target · '+market.ticker+' · UP '+goldAsk(price(market,'yes_ask'))+' / DOWN '+goldAsk(price(market,'no_ask')):'No active Gold round';
   }catch{
    target.textContent='—';status.textContent='Gold feed unavailable';
   }finally{goldBusy=false}
@@ -855,38 +853,9 @@ function mountBtcRoundCard(){
  const goldAsk=value=>Number.isFinite(value)&&value>=0&&value<=100?value.toFixed(1)+'%':'—';
  refreshGold();
  setInterval(refreshGold,15000);
- const signalCard=document.createElement('section');
- signalCard.className='card btc-round-card';
- signalCard.style.marginTop='12px';
- signalCard.innerHTML=`<h3>BTC · SIGNAL & CONFIDENCE</h3>
- <div class="btc-call"><small>Early TradingView round call</small><strong data-side="call">WAIT</strong></div>
- <div class="btc-action"><small>Live Market Signals</small><strong data-side="action">WAIT</strong></div>
- <div class="btc-gauge"><small>Momentum agreement</small>
- <div class="btc-arc" data-side="meter"><strong data-side="confidence">—</strong></div></div>
- <small data-side="flip"></small>`;
- card.after(signalCard);
- mountBtcLiveCharts(card,signalCard);
- const sideFields=Object.fromEntries([...signalCard.querySelectorAll('[data-side]')].map(el=>[el.dataset.side,el]));
- const desktop=matchMedia('(min-width:1100px)');
- function arrange(){
-  const grid=tracker.closest('.bt-command-grid');
-  const left=grid?.querySelector('.bt-command-left');
-  const right=grid?.querySelector('.bt-command-right');
-  const chart=$('btcSpotChart')?.closest('section');
-  if(!left||!right)return;
-  if(desktop.matches){
-   if(signalCard.parentElement!==left)left.append(signalCard);
-   if(card.parentElement!==right)right.append(card);
-   if(gold.nextElementSibling!==card)card.before(gold);
-   if(chart&&chart!==signalCard.nextElementSibling)signalCard.after(chart);
-  }else{
-   if(tracker.nextElementSibling!==card)tracker.after(card);
-   if(card.nextElementSibling!==signalCard)card.after(signalCard);
-   if(signalCard.parentElement!==gold.parentElement)signalCard.before(gold);
-   if(chart&&signalCard.nextElementSibling!==chart)signalCard.after(chart);
-  }
- }
- const fields=Object.fromEntries([...card.querySelectorAll('[data-btc]')].map(el=>[el.dataset.btc,el]));
+ mountBtcLiveCharts(desk.querySelector('.market-desk-charts'));
+ const sideFields=Object.fromEntries([...desk.querySelectorAll('[data-side]')].map(el=>[el.dataset.side,el]));
+ const fields=Object.fromEntries([...desk.querySelectorAll('[data-btc]')].map(el=>[el.dataset.btc,el]));
  const dollars=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
  const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
  const marketClock=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',second:'2-digit'});
@@ -901,39 +870,39 @@ function mountBtcRoundCard(){
   const signal=engineSignals.find(row=>row.asset==='BTC');
   const feed=signal?.tradingView;
   const direction=active?btcRoundDirection(market,feed,now):'WAIT';
-  if(fields.direction.dataset.state!==direction){
-   fields.direction.dataset.state=direction;
-   fields.direction.textContent=direction;
-  }
-  arrange();
   sideFields.call.textContent=direction;
-  sideFields.call.style.color=direction==='UP'?'#62e6b0':direction==='DOWN'?'#ff91ac':'#fcd58c';
-  sideFields.action.textContent=active&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?signal.action||'WAIT':'WAIT';
+  sideFields.call.dataset.direction=direction;
+  sideFields.action.textContent=quotesFresh&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?(signal.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN'):'WAIT';
+  sideFields.action.dataset.direction=sideFields.action.textContent.includes('UP')?'UP':sideFields.action.textContent.includes('DOWN')||/SELL|EXIT/.test(sideFields.action.textContent)?'DOWN':'';
   const round=signal?.roundCall;
   const score=round?.confidencePercent;
   const scoreFresh=active&&round?.ticker===market.ticker&&now-round.asOf>=0&&now-round.asOf<90000&&Number.isFinite(score)&&score>=0&&score<=100;
   sideFields.confidence.textContent=scoreFresh?percent(score):'—';
   sideFields.meter.style.setProperty('--btc-sweep',(scoreFresh?score*1.8:0)+'deg');
+  sideFields.meter.classList.toggle('has-score',scoreFresh);
   const liveAge=now-feed?.candleCloseAt;
   const opposite=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&liveAge>=0&&liveAge<=20000&&
     ((direction==='UP'&&feed.direction==='DOWN')||(direction==='DOWN'&&feed.direction==='UP'));
-  sideFields.flip.textContent=opposite?'Flip watch · TradingView '+feed.direction:'';
+  sideFields.flip.textContent=opposite?'TradingView flipped '+feed.direction:direction==='WAIT'?'Awaiting direction':'No opposite TradingView tick';
   const seconds=Math.max(0,Math.ceil((close-now)/1000));
   fields.age.textContent=quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round';
-  fields.timer.textContent=active?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'—';
+  const timer=active?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'—';
+  fields.roundTime.textContent=active?timer+' left · '+market.ticker:'Waiting for active round';
+  fields.ticker.textContent=active?market.ticker:'—';
   fields.clock.textContent=active?pacific.format(close):'—';
   const target=Number(market?.floor_strike);
   fields.target.textContent=active&&target>0&&Number.isFinite(target)?dollars.format(target):'—';
   fields.marketClock.textContent=marketClock.format(now);
-  const spot=window.__BANK_TRADES_BTC_EVIDENCE__;
-  const spotAge=now-spot?.candleAt;
-  const spotFresh=Number.isFinite(spot?.close)&&spot.close>0&&spotAge>=60000&&spotAge<150000;
-  fields.spot.textContent=spotFresh?dollars.format(spot.close):'—';
-  const gap=active&&spotFresh&&target>0&&Number.isFinite(target)?spot.close-target:NaN;
+  const spotAge=now-spotTick?.t;
+  const spotFresh=spotAge>=0&&spotAge<15000;
+  fields.spot.textContent=fields.spotNow.textContent=spotFresh?dollars.format(spotTick.price):'—';
+  const gap=active&&spotFresh&&target>0&&Number.isFinite(target)?spotTick.price-target:NaN;
   fields.gap.textContent=Number.isFinite(gap)?(gap>0?'+':'')+dollars.format(gap)+' · '+(gap/target*100).toFixed(3)+'%':'—';
-  fields.gap.style.color=gap>0?'#62e6b0':gap<0?'#ff91ac':'';
-  fields.up.textContent=quotesFresh?percent(price(market,'yes_bid'))+' / '+percent(price(market,'yes_ask')):'—';
-  fields.down.textContent=quotesFresh?percent(price(market,'no_bid'))+' / '+percent(price(market,'no_ask')):'—';
+  fields.gap.dataset.direction=gap>0?'UP':gap<0?'DOWN':'';
+  fields.summary.textContent=Number.isFinite(gap)?'vs target '+fields.gap.textContent+' · '+timer+' left':spotFresh?'Coinbase BTC-USD':'Waiting for fresh Coinbase ticks';
+  for(const [field,key] of [['yesBid','yes_bid'],['yesAsk','yes_ask'],['noBid','no_bid'],['noAsk','no_ask']]){
+   fields[field].textContent=quotesFresh?percent(price(market,key)):'—';
+  }
  }
  paint();
  setInterval(()=>{if(!document.hidden)paint()},1000);
