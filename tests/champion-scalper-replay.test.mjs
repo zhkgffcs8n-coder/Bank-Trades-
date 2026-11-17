@@ -11,7 +11,9 @@ for(const side of ['up','down']){
   test(`shadow replay matches dashboard for ${side} / ${exit}`,()=>{
    const positions=new Map();
    let displayed;
-   const browser=runInNewContext(scalp+'\nscalp',{positions,selectedCoin:'BTC',
+   const voice=[];
+   const browser=runInNewContext(scalp+'\nscalp',{positions,selectedCoin:'BTC',window:{dispatchEvent:event=>voice.push(event.detail)},
+    CustomEvent:class {constructor(_type,{detail}){this.detail=detail;}},
     showScalp(message,exitSide){
      const label=message.split(' · ')[0].replace(' SETUP','');
      displayed=exitSide?label+' '+exitSide.toUpperCase():label;
@@ -28,6 +30,9 @@ for(const side of ['up','down']){
     assert.deepEqual(result.position,positions.has('BTC')?JSON.parse(JSON.stringify(positions.get('BTC'))):null);
     previous=result.position;
    }
+   assert.deepEqual(voice.map(call=>call.stage),['entry','hold','exit']);
+   assert.equal(voice[0].entry,60);
+   assert.equal(voice[2].exitBid,last.quotes[side].bid);
   });
  }
 }
