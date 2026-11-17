@@ -624,3 +624,18 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
 
 /* The market desk preserves its own viewport position during idle refreshes. */
 html.bt-market-scroll-stable { overflow-anchor: none; scroll-behavior: auto; }
+
+.radar-chart-controls { display: grid; gap: 5px; margin-bottom: 8px; }
+.radar-chart-controls > div { display: flex; gap: 4px; flex-wrap: wrap; }
+.radar-chart-controls button { padding: 4px 7px; font-size: 11px; }
+.radar-chart-controls [aria-pressed="true"] { background: #d6e7fa; color: #101927; }
+.radar-chart-ohlc { block-size: 2.7em; overflow: auto; }
+#btRadarMarketContext .radar-triple { grid-template-columns: repeat(3,minmax(0,1fr)); }
+#btRadarMarketContext meter,#btRadarMarketContext table { width: 100%; }
+#btRadarMarketContext table { text-align: left; font-size: 12px; }
+#btRadarMarketContext th,#btRadarMarketContext td { padding: 4px; border-bottom: 1px solid #394056; }
+#btRadarMarketContext,#spotTimeframePanel,.bt-radar-chart { overflow-anchor: none; }
+@media(max-width:800px) {
+ .bt-command-professional .bt-radar-chart { grid-area: spot; }
+ .bt-command-professional #btRadarMarketContext { grid-column: 1 / -1; }
+}
