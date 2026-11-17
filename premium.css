@@ -554,3 +554,29 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
   #btcMarketDesk .market-desk-icon { display: none; }
   #btcMarketDesk .market-desk-top .market-desk-badge { position: static; display: inline-block; }
 }
+
+.bt-command-grid .bt-side-research {
+  padding: 14px;
+  min-width: 0;
+  border: 1px solid #544476;
+  border-radius: 14px;
+  background: linear-gradient(150deg,#1b152e,#111827);
+  color: #edf1ff;
+  font-variant-numeric: tabular-nums;
+}
+.bt-side-research h2 { margin: 0 0 8px; font-size: 15px; color: #d7b8f8; }
+.bt-side-research h3 { margin: 14px 0 6px; font-size: 13px; color: #d7b8f8; }
+.bt-side-research p { margin: 0 0 8px; font-size: 13px; }
+.bt-side-research [data-tone="up"] { color: #6ee7b7; }
+.bt-side-research [data-tone="down"] { color: #fda4af; }
+.bt-side-research dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; margin: 0 0 8px; }
+.bt-side-research dl > div { min-width: 0; padding: 8px; border-radius: 8px; background: #282039; }
+.bt-side-research dt,.bt-side-research small { color: #c5b8dc; font-size: 11px; }
+.bt-side-research dd { margin: 3px 0 0; font-weight: 800; overflow-wrap: anywhere; }
+.bt-side-research a { color: #dfc6ff; font-size: 12px; }
+@media (max-width: 1099px) {
+  .bt-command-professional #btTechnicalSide,.bt-command-professional #btPerformanceSide { grid-area: auto; }
+}
+@media (max-width: 640px) {
+  .bt-command-professional #btTechnicalSide,.bt-command-professional #btPerformanceSide { grid-column: 1 / -1; }
+}

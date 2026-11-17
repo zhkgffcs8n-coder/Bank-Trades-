@@ -6,15 +6,24 @@ let paperPositions=[];let paperBotRunning=false;
 const paperPanel=document.getElementById('paperTradeSignalsTitle')?.closest('section');
 const flipPanel=document.getElementById('btVerifiedAlertFeed')?.closest('.bt-command-grid');
 if(paperPanel&&flipPanel&&paperPanel.nextElementSibling!==flipPanel)flipPanel.before(paperPanel);
+function publishPaperScore(detail){
+ window.dispatchEvent(new CustomEvent('banktrades:paper-score',{detail}));
+}
 async function refreshPaperPositions(){
  try{
   const response=await fetch('/.netlify/functions/kaibot-state',{cache:'no-store'});
-  if(!response.ok){syncSignals();return;}
+  if(!response.ok){publishPaperScore(null);syncSignals();return;}
   const data=await response.json();
   paperPositions=Array.isArray(data?.ledger?.trades)?data.ledger.trades:[];
   paperBotRunning=!!data?.state?.running;
+  const session=Number(data?.state?.paperPnlSessionStartedAt)||0;
+  const closed=paperPositions.filter(t=>t&&Number(t.at)>=session&&['CLOSED','SETTLED'].includes(t.status)&&t.pnl!=null&&Number.isFinite(Number(t.pnl)));
+  publishPaperScore(Array.isArray(data?.ledger?.trades)?{
+   wins:closed.filter(t=>Number(t.pnl)>0).length,losses:closed.filter(t=>Number(t.pnl)<0).length,
+   closed:closed.length,net:closed.reduce((sum,t)=>sum+Number(t.pnl),0)
+  }:null);
   syncSignals();
- }catch{syncSignals();}
+ }catch{publishPaperScore(null);syncSignals();}
 }
 
 // Lightweight comic-style signal effects; respect reduced-motion settings.
