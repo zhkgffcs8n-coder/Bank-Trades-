@@ -196,7 +196,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       [...positions.values()].map(position => ({ position, action: 'QUOTE STALE' })));
   }, 1000);
 })();
-</script><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><button id="premiumVoice" type="button" aria-pressed="false">🔇 VOICE OFF</button><button id="enablePush" type="button">🔔 ENABLE ALERTS</button><span id="premiumHealth" class="pill">CHECKING QUOTES</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><p class="premium-foot">Qualified BUY calls are automatically tracked for UP and DOWN separately as simulated one-contract entries. WAIT means no independently validated directional edge. A tracked position is evaluated separately for HOLD / EXIT / SELL FAST.</p></div><div class="premium-panel"><h2>CONTRACT PRICE <small> / LIVE QUOTES</small></h2><div class="premium-actions"><a href="#pro">OPEN KAIBOT &amp; MARKETS</a><a href="#chart">DETAIL CHART ↓</a></div><p class="premium-foot" id="premiumChartTitle">BTC quote mid-price · browser session</p><canvas id="premiumChart" class="premium-chart"></canvas><p class="premium-foot">One-minute Kalshi YES bid candles. Overlays describe past prices; they do not predict settlement.</p><div class="premium-label">AI / SIGNAL ENGINE</div><p id="premiumAI">Gathering quotes. Predictions are not calibrated.</p></div><section id="btcMarketDesk" aria-label="BTC and gold market dashboard"></section></section><section class="card" id="coinbaseDirect" aria-label="Coinbase direct market context"></section><section class="card" id="marketRadar"><div class="between"><h2>MARKET RADAR</h2><button id="refresh">↻ REFRESH</button></div><div class="toolbar"><button id="voice">🔇 VOICE OFF</button><button id="auto">AUTO REFRESH ON</button><small>Voice reads all market entries and paper exits while the page is active. Switching apps may suspend speech.</small></div><div id="coins" class="grid"><p>Loading official Kalshi markets…</p></div></section>
+</script><section class="premium-grid" id="liveTerminal"><div class="premium-panel"><div class="between"><h2>LIVE MARKET SIGNALS <small> / 15 MIN</small></h2><button id="premiumVoice" type="button" aria-pressed="false">🔇 VOICE OFF</button><button id="enablePush" type="button">🔔 ENABLE ALERTS</button><span id="premiumHealth" class="pill">CHECKING QUOTES</span></div><div style="overflow-x:auto"><table class="premium-table"><thead><tr><th>MARKET</th><th>UP ASK</th><th>DOWN ASK</th><th>STATUS</th><th>TIME</th></tr></thead><tbody id="premiumRows"><tr><td colspan="5">Loading verified markets…</td></tr></tbody></table></div><p class="premium-foot">Qualified BUY calls are automatically tracked for UP and DOWN separately as simulated one-contract entries. WAIT means no independently validated directional edge. A tracked position is evaluated separately for HOLD / EXIT / SELL FAST.</p></div><div class="premium-panel"><h2>CONTRACT PRICE <small> / LIVE QUOTES</small></h2><div class="premium-actions"><a href="#pro">OPEN KAIBOT &amp; MARKETS</a><a href="#chart">DETAIL CHART ↓</a></div><p class="premium-foot" id="premiumChartTitle">BTC quote mid-price · browser session</p><canvas id="premiumChart" class="premium-chart"></canvas><p class="premium-foot">One-minute Kalshi YES bid candles. Overlays describe past prices; they do not predict settlement.</p><div class="premium-label">AI / SIGNAL ENGINE</div><p id="premiumAI">Gathering quotes. Predictions are not calibrated.</p></div><section id="btcMarketDesk" aria-label="BTC and gold market dashboard"></section></section><section class="card" id="coinbaseDirect" aria-label="Coinbase direct market context"></section><section class="card" id="marketRadar"><div class="between"><h2>MARKET RADAR</h2><button id="refresh">↻ REFRESH</button></div><div class="toolbar"><button id="voice">🔇 VOICE OFF</button><button id="auto">AUTO REFRESH ON</button><small>Voice reads official Pro Scalper entries and exits while the page is active. Switching apps may suspend speech.</small></div><div id="coins" class="grid"><p>Loading official Kalshi markets…</p></div></section>
 <div class="columns"><div><section class="card" id="signalDesk"><div class="tag">SIGNAL DESK</div><h2 id="title">Select a market</h2><div class="signal" id="signal">WAIT</div><p id="reason">Waiting for verified quotes.</p>
 <div class="metrics"><div class="metric"><small>YES BID / ASK</small><b id="yes">—</b></div><div class="metric"><small>NO BID / ASK</small><b id="no">—</b></div><div class="metric"><small>TIME LEFT</small><b id="left">—</b></div></div>
 <div class="toolbar"><button id="depthBtn">LOAD ORDER BOOK</button><button id="spotBtn">CHECK SPOT</button><button id="kalshiBtn">OPEN KALSHI ↗</button></div>
@@ -292,14 +292,11 @@ try{const saved=JSON.parse(localStorage.getItem('primal-preview-v1')||'null');if
 </div></main><script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id),assets=['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'];
-let rows=[],selected='BTC',fetched=0,auto=true,voice=false,history={},lastSpoken='',busy=false,prevSignal='',signals={};
+let rows=[],selected='BTC',fetched=0,auto=true,voice=false,history={},busy=false,prevSignal='',signals={};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const val=(m,k)=>{if(!m)return null;const dollars=m[k+'_dollars'];if(dollars!==undefined&&dollars!==null){const n=Number(dollars);return Number.isFinite(n)?n:null}const n=Number(m[k]);return m[k]===undefined||m[k]===null||!Number.isFinite(n)?null:n/100};
 const fmt=n=>n==null?'—':(n*100).toFixed(1)+'¢';
 const expiryMs=m=>Date.parse(m?.expires_at||m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
-const spokenAt=new Map();
-let scalperSpeechPending=0,scalperSpeechGeneration=0;
-const lastScalperHold=new Map();
 window.addEventListener('banktrades:scalper-voice',({detail:d})=>{
  if(!voice||document.hidden||!('speechSynthesis' in window)||!d||!assets.includes(d.asset)||
     !['up','down'].includes(d.side)||!Number.isFinite(d.entry))return;
@@ -309,24 +306,12 @@ window.addEventListener('banktrades:scalper-voice',({detail:d})=>{
  const side=d.side.toUpperCase();
  let message;
  if(d.stage==='entry')message=prefix+'Buy '+side+'. Entry '+entry+'.';
- if(d.stage==='hold')message=prefix+'Hold '+side+'. Entry '+entry+'.';
  if(d.stage==='exit'&&Number.isFinite(d.exitBid))message=prefix+d.action+'. '+side+' position. Entry '+entry+'. Exit bid '+d.exitBid.toFixed(1)+' percent.';
  if(!message)return;
- if(d.stage==='hold'){
-  if(lastScalperHold.get(d.asset)===d.ticker)return;
-  lastScalperHold.set(d.asset,d.ticker);
- }
- if(!scalperSpeechPending)window.speechSynthesis.cancel();
  const utterance=new SpeechSynthesisUtterance(message);
- const generation=scalperSpeechGeneration;
  utterance.rate=1.08;
- utterance.onend=utterance.onerror=()=>{
-  if(generation===scalperSpeechGeneration)scalperSpeechPending=Math.max(0,scalperSpeechPending-1);
- };
- scalperSpeechPending++;
  window.speechSynthesis.speak(utterance);
 });
-const say=(s,urgent=false)=>{if(!voice||document.hidden||scalperSpeechPending||!('speechSynthesis'in window))return;if(!urgent&&Date.now()-(spokenAt.get(s)||0)<60000)return;spokenAt.set(s,Date.now());lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.12;window.speechSynthesis.speak(u)};
 const direction=a=>a.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
@@ -341,16 +326,6 @@ async function preloadHistory(){
 }
 
 let sharedSignals=new Map(),sharedFetched=0;
-const announcedEntries=new Set();
-function announceAllEntries(force=false){
- if(!voice||document.hidden||Date.now()-sharedFetched>45000)return;
- const entries=assets.map(asset=>sharedSignals.get(asset)).filter(s=>s&&['BUY UP','BUY DOWN','SELL FAST'].includes(s.action)&&s.ticker);
- const fresh=entries.filter(s=>force||!announcedEntries.has(s.ticker+':'+s.action));
- if(!fresh.length){if(force)say('Voice alerts enabled. No verified entry alerts right now.',true);return;}
- fresh.forEach(s=>announcedEntries.add(s.ticker+':'+s.action));
- say(fresh.map(s=>s.asset+'. '+s.action+'. '+(s.action==='SELL FAST'?'Review open paper position immediately.':'Experimental paper signal.')).join(' '),true);
-}
-
 async function loadSharedSignals(){
  try{
   const r=await fetch('/.netlify/functions/shared-signals',{cache:'no-store'});
@@ -360,7 +335,6 @@ async function loadSharedSignals(){
   sharedSignals=new Map(data.results.map(x=>[x.asset,x]));sharedFetched=time;window.__BANK_TRADES_SHARED_ERROR__=null;
   window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:data.results}));
   if(data.performance)window.dispatchEvent(new CustomEvent('banktrades:paper-performance',{detail:data.performance}));
-  announceAllEntries();
  }catch(e){sharedSignals.clear();sharedFetched=0;window.__BANK_TRADES_SHARED_ERROR__=String(e.message||e);window.dispatchEvent(new CustomEvent('banktrades:shared-signals',{detail:['BTC','ETH','SOL','XRP','DOGE','BNB','HYPE','ZEC'].map(asset=>({asset,action:'WAIT',reason:'Shared signal endpoint failed: '+String(e.message||e)}))}));}
 }
 function updateSidebarConfidence(){
@@ -561,22 +535,17 @@ async function refresh(){
 $('refresh').onclick=refresh;
 $('auto').onclick=()=>{auto=!auto;$('auto').textContent='AUTO REFRESH '+(auto?'ON':'OFF')};
 function syncVoice(){for(const id of ['voice','premiumVoice']){const b=$(id);if(b){b.textContent=voice?'🔊 VOICE ON':'🔇 VOICE OFF';b.setAttribute('aria-pressed',String(voice));b.style.setProperty('background',voice?'#facc15':'','important');b.style.setProperty('color',voice?'#171717':'','important');b.style.setProperty('border',voice?'4px solid #fff176':'','important');b.style.setProperty('box-shadow',voice?'0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)':'','important');b.style.fontWeight=voice?'900':''}}}
-function toggleVoice(){if(!('speechSynthesis'in window)){alert('Voice playback is unavailable in this browser.');return;}voice=!voice;try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}syncVoice();if(voice){announcedEntries.clear();say('Voice alerts on. Monitoring Pro Scalper and Kalshi market signals.',true);announceAllEntries(false)}else{scalperSpeechGeneration++;scalperSpeechPending=0;window.speechSynthesis.cancel()}}
+function toggleVoice(){
+ if(!('speechSynthesis' in window)){alert('Voice playback is unavailable in this browser.');return;}
+ voice=!voice;
+ try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}
+ syncVoice();
+ if(!voice)window.speechSynthesis.cancel();
+}
 $('voice').onclick=toggleVoice;
 $('premiumVoice').onclick=toggleVoice;
-const spokenLiveEvents=new Set();
-window.addEventListener('banktrades:live-voice-alert',event=>{
- if(!voice||document.hidden)return;
- const d=event.detail||{},asset=String(d.asset||''),ticker=String(d.ticker||''),action=String(d.action||'');
- if(!assets.includes(asset)||!ticker||!action)return;
- const key=[asset,ticker,action].join(':');if(spokenLiveEvents.has(key))return;
- spokenLiveEvents.add(key);if(spokenLiveEvents.size>200)spokenLiveEvents.clear();
- const message=action==='BUY UP'||action==='BUY DOWN'?asset+'. '+action+'. Entry signal. Check Kalshi price.':/SELL FAST|CASH OUT|TAKE PROFITS|EXIT ALERT/.test(action)?'Attention. '+asset+'. '+action+'. Review exit immediately.':/POSSIBLE FLIP/.test(action)?asset+'. Possible flip. Verify opposite signal.':null;
- if(message)say(message,true);
-});
 try{voice=localStorage.getItem('banktrades:voice-enabled')==='1'}catch{}
 syncVoice();
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&voice){announcedEntries.clear();announceAllEntries(true)}});
 
 $('depthBtn').onclick=async()=>{const m=current()?.market;if(!m){$('book').textContent='No open market';return}$('book').textContent='Loading…';try{const d=await api('/api/data?mode=orderbook&ticker='+encodeURIComponent(m.ticker));$('book').textContent=JSON.stringify(d.orderbook,null,2).slice(0,3500)}catch(e){$('book').textContent='Depth unavailable: '+e.message}};
 $('spotBtn').onclick=async()=>{try{const d=await api('/api/data?mode=spot&asset='+selected);$('spot').textContent='Coinbase '+selected+' spot: $'+Number(d.price).toLocaleString()+' · NOT Kalshi settlement oracle'}catch(e){$('spot').textContent='Spot unavailable: '+e.message}};
@@ -721,7 +690,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=radar-context-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=scalper-voice-1"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=radar-context-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=scalper-voice-2"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
