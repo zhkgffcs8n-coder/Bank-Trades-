@@ -226,6 +226,20 @@ function flipWatchFor(asset,sig,ticker){
  flipWatchHistory.set(asset,{ticker,direction,flippedAt,observed:call.basis==='observed same-round momentum'});
  return {direction,recentFlip:!!flippedAt&&Date.now()-flippedAt<60000,observed:call.basis==='observed same-round momentum'};
 }
+let lockedBtcCall;
+function btcRoundDirection(market,feed,now){
+ const close=Date.parse(market?.close_time||'');
+ if(!market?.ticker||!(close>now))return 'WAIT';
+ if(lockedBtcCall?.ticker===market.ticker)return lockedBtcCall.direction;
+ const remaining=close-feed?.candleCloseAt;
+ const age=now-feed?.candleCloseAt;
+ if(feed?.ticker===market.ticker&&feed.status==='FRESH'&&age>=0&&age<=20000&&
+    remaining>=420000&&remaining<=840000&&['UP','DOWN'].includes(feed.direction)){
+  lockedBtcCall={ticker:market.ticker,direction:feed.direction};
+  return lockedBtcCall.direction;
+ }
+ return close-now<420000?'NO EARLY CALL':'WAIT';
+}
 function syncSignals(){
  document.querySelectorAll('#premiumRows tr').forEach(tr=>{
   const sig=engineSignals.find(x=>x.asset===tr.dataset.asset),cell=tr.children[3];
@@ -408,16 +422,13 @@ function syncSignals(){
   if(forecastFresh){badge.title='Directional forecast only. Actual entry remains blocked until qualified; no order placed.';badge.style.borderColor='#38bdf8';badge.style.color='#7dd3fc';}
   const isBtc = tr.dataset.asset === 'BTC';
   if(isBtc){
-   const feed = sig?.tradingView;
-   const age = Date.now() - feed?.candleCloseAt;
-   const fresh = Boolean(ticker && feed?.ticker === ticker && feed.status === 'FRESH' && age >= 0 && age <= 20000);
-   const direction = fresh && ['UP','DOWN'].includes(feed.direction) ? feed.direction : 'WAIT';
+   const direction = btcRoundDirection(liveMarket,sig?.tradingView,Date.now());
    const official = document.createElement('strong');
    official.style.cssText = 'display:block;font-size:16px;margin-bottom:4px;color:' +
     (direction === 'UP' ? '#4ade80' : direction === 'DOWN' ? '#ff718a' : '#facc15');
    official.textContent = 'BTC · TRADINGVIEW 1s · ' + direction;
-   if(direction === 'WAIT') official.textContent += fresh ? ' · MIXED' : ' · FEED UNAVAILABLE';
-   badge.textContent = 'ENTRY · ' + decision;
+   const guidance=advice?.action.match(/^(UP|DOWN) · (HOLD|CASH OUT|SELL FAST|QUOTE UNAVAILABLE)$/);
+   badge.textContent=guidance?'TRACKED · '+(guidance[2]==='CASH OUT'?'TAKE PROFIT':guidance[2])+' '+guidance[1]:'ENTRY · '+decision;
    badge.title = '';
    badge.style.borderColor = color;
    badge.style.color = color;
@@ -720,9 +731,7 @@ function mountBtcRoundCard(){
   const age=now-latestPositionQuoteAt;
   const quotesFresh=active&&age>=0&&age<15000;
   const feed=engineSignals.find(row=>row.asset==='BTC')?.tradingView;
-  const feedAge=now-feed?.candleCloseAt;
-  const fresh=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&feedAge>=0&&feedAge<=20000;
-  const direction=fresh&&['UP','DOWN','MIXED'].includes(feed.direction)?feed.direction:'WAIT';
+  const direction=active?btcRoundDirection(market,feed,now):'WAIT';
   if(fields.direction.dataset.state!==direction){
    fields.direction.dataset.state=direction;
    fields.direction.textContent=direction;
