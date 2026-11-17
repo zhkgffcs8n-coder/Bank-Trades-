@@ -677,6 +677,70 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
+function mountBtcRoundCard(){
+ const tracker=$('quickPosition')?.closest('.card');
+ if(!tracker)return;
+ const card=document.createElement('section');
+ card.className='card btc-round-card';
+ card.setAttribute('aria-labelledby','btcRoundHeading');
+ card.innerHTML=`<style>
+ .btc-round-card{margin-top:12px;padding:12px;border:1px solid #32606b;border-radius:13px;background:linear-gradient(130deg,#101d2d,#151b29 65%,#252032);color:#f1f5f9;font-variant-numeric:tabular-nums}
+ .btc-round-card header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+ .btc-round-card h3{margin:0;font-size:14px;color:#a5f3fc}
+ .btc-round-card .btc-round-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+ .btc-round-grid>div{padding:6px 8px;border-radius:8px;background:#0e1827;min-width:0}
+ .btc-round-grid small,.btc-round-grid strong{display:block;overflow-wrap:anywhere}
+ .btc-round-grid small{color:#c1d0e1;font-size:11px}
+ .btc-round-grid strong{font-size:15px}
+ .btc-round-card [data-btc="direction"]{color:#fcd58c}
+ .btc-round-card [data-btc="direction"][data-state="UP"]{color:#62e6b0}
+ .btc-round-card [data-btc="direction"][data-state="DOWN"]{color:#ff91ac}
+ .btc-round-card [data-btc="direction"][data-state="UP"],.btc-round-card [data-btc="direction"][data-state="DOWN"]{animation:btc-round-glow .55s ease-out}
+ @keyframes btc-round-glow{from{text-shadow:0 0 15px currentColor}to{text-shadow:none}}
+ @media(prefers-reduced-motion:reduce){.btc-round-card [data-btc="direction"]{animation:none!important}}
+ @media(max-width:400px){.btc-round-card .btc-round-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+ </style><header><h3 id="btcRoundHeading">BTC · Kalshi 15-minute round</h3><small data-btc="age">Waiting for quotes</small></header>
+ <div class="btc-round-grid">
+ <div><small>TradingView 1s</small><strong data-btc="direction">WAIT</strong></div>
+ <div><small>Round closes in</small><strong data-btc="timer">—</strong></div>
+ <div><small>Kalshi target</small><strong data-btc="target">—</strong></div>
+ <div><small>UP bid / ask</small><strong data-btc="up">—</strong></div>
+ <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
+ <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
+ tracker.after(card);
+ const fields=Object.fromEntries([...card.querySelectorAll('[data-btc]')].map(el=>[el.dataset.btc,el]));
+ const dollars=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
+ const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
+ const percent=value=>Number.isFinite(value)&&value>=0&&value<=100?value.toFixed(1)+'%':'—';
+ function paint(){
+  const now=Date.now();
+  const market=latestPositionQuotes.find(row=>row.asset==='BTC')?.market;
+  const close=Date.parse(market?.close_time||'');
+  const active=Boolean(market?.ticker&&close>now&&Date.parse(market.open_time)<=now);
+  const age=now-latestPositionQuoteAt;
+  const quotesFresh=active&&age>=0&&age<15000;
+  const feed=engineSignals.find(row=>row.asset==='BTC')?.tradingView;
+  const feedAge=now-feed?.candleCloseAt;
+  const fresh=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&feedAge>=0&&feedAge<=20000;
+  const direction=fresh&&['UP','DOWN','MIXED'].includes(feed.direction)?feed.direction:'WAIT';
+  if(fields.direction.dataset.state!==direction){
+   fields.direction.dataset.state=direction;
+   fields.direction.textContent=direction;
+  }
+  const seconds=Math.max(0,Math.ceil((close-now)/1000));
+  fields.age.textContent=quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round';
+  fields.timer.textContent=active?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'—';
+  fields.clock.textContent=active?pacific.format(close):'—';
+  const target=Number(market?.floor_strike);
+  fields.target.textContent=active&&target>0&&Number.isFinite(target)?dollars.format(target):'—';
+  fields.up.textContent=quotesFresh?percent(price(market,'yes_bid'))+' / '+percent(price(market,'yes_ask')):'—';
+  fields.down.textContent=quotesFresh?percent(price(market,'no_bid'))+' / '+percent(price(market,'no_ask')):'—';
+ }
+ paint();
+ setInterval(()=>{if(!document.hidden)paint()},1000);
+ window.addEventListener('banktrades:shared-signals',paint);
+}
+mountBtcRoundCard();
 update();refreshSharedSignalTable();refreshPaperPositions();
 // Recheck immediately on return from background or after connectivity is restored.
 function resumeLiveMonitoring(){if(document.hidden)return;lastFetch=0;signalLastFetch=0;update();refreshSharedSignalTable();refreshPaperPositions();reconcileHealth()}
