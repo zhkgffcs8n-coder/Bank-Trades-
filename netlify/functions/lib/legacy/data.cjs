@@ -209,13 +209,15 @@ exports.handler=async event=>{
       const asset=q.mode==='btc-candles'?'BTC':String(q.asset||'').toUpperCase();
       if(!Object.hasOwn(SERIES,asset))return reply(400,{error:'Invalid asset'});
       const pair=asset+'-USD';
-      const granularity=60,end=Math.floor(Date.now()/60000)*60000;
-      const start=end-180*60000;
+      const granularity=Number(q.granularity||60);
+      if(![60,300,900,3600].includes(granularity))return reply(400,{error:'Invalid candle interval'});
+      const end=Math.floor(Date.now()/(granularity*1000))*granularity*1000;
+      const start=end-240*granularity*1000;
       const url='https://api.exchange.coinbase.com/products/'+pair+'/candles?'+new URLSearchParams({granularity:String(granularity),start:new Date(start).toISOString(),end:new Date(end).toISOString()});
       const rows=await get(url,6500);
       if(!Array.isArray(rows))throw Error('Invalid spot candle feed');
       const candles=rows.filter(x=>Array.isArray(x)&&x.length>=6&&x.slice(0,6).every(Number.isFinite)&&x[0]*1000<end).map(x=>({t:x[0],low:x[1],high:x[2],open:x[3],close:x[4],volume:x[5]})).sort((a,b)=>a.t-b.t);
-      return reply(200,{asset,source:'Coinbase Exchange '+pair+' 1-minute completed candles; not Kalshi settlement oracle',fetched_at:new Date().toISOString(),granularity_seconds:60,candles});
+      return reply(200,{asset,source:'Coinbase Exchange '+pair+' completed candles; not Kalshi settlement oracle',fetched_at:new Date().toISOString(),granularity_seconds:granularity,candles});
     }
     if(q.mode==='spot'){
       const asset=String(q.asset||'').toUpperCase();
