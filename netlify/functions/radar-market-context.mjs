@@ -14,22 +14,33 @@ async function get(path,params={}){
 }
 export default async function handler(){
  const windows=['5m','15m','1h'];
- const [mark,interest,ratio,depth,trades,...flow]=await Promise.all([
+ let [mark,interest,ratio,depth,trades,...flow]=await Promise.all([
   get('/fapi/v1/premiumIndex'),get('/fapi/v1/openInterest'),
   get('/futures/data/globalLongShortAccountRatio',{period:'5m',limit:1}),
   get('/fapi/v1/depth',{limit:20}),get('/fapi/v1/aggTrades',{limit:1000}),
   ...windows.map(period=>get('/futures/data/takerlongshortRatio',{period,limit:1}))
  ]);
+ let source='Binance BTCUSDT perpetual';
  if(!mark&&!interest&&!depth){
-  try{
-   const response=await fetch('https://futures.kraken.com/derivatives/api/v3/tickers?symbol=PF_XBTUSD',{signal:AbortSignal.timeout(2500)});
-   const market=response.ok?(await response.json()).tickers?.find(t=>t.symbol==='PF_XBTUSD'&&!t.suspended):null;
-   if(market)return new Response(JSON.stringify({
-    source:'Kraken BTC/USD perpetual',book:null,slices:windows.map(window=>({window,delta:null,whales:null})),
-    fundingPct:Number.isFinite(market.relativeFundingRate)?market.relativeFundingRate*100:null,
-    openInterest:Number.isFinite(market.openInterest*market.markPrice)?market.openInterest*market.markPrice:null,longShort:null
-   }),{headers:cacheHeaders});
-  }catch{}
+  const read=async endpoint=>{
+   try{
+    const response=await fetch('https://futures.kraken.com/derivatives/api/v3/'+endpoint+'?symbol=PF_XBTUSD',{signal:AbortSignal.timeout(2500)});
+    return response.ok?await response.json():null;
+   }catch{return null;}
+  };
+  const [ticker,book,history]=await Promise.all(['tickers','orderbook','history'].map(read));
+  const market=ticker?.tickers?.find(t=>t.symbol==='PF_XBTUSD'&&!t.suspended);
+  source='Kraken BTC/USD perpetual';
+  mark=market?{markPrice:market.markPrice,lastFundingRate:market.relativeFundingRate}:null;
+  interest=market?{openInterest:market.openInterest}:null;
+  ratio=null;
+  flow=[];
+  const orderBook=book?.orderBook;
+  depth=Array.isArray(orderBook?.bids)&&Array.isArray(orderBook?.asks)?{
+   bids:orderBook.bids.sort((a,b)=>b[0]-a[0]).slice(0,20),
+   asks:orderBook.asks.sort((a,b)=>a[0]-b[0]).slice(0,20)
+  }:null;
+  trades=history?.history?.filter(t=>t.type==='fill'&&(t.side==='buy'||t.side==='sell')).map(t=>({T:Date.parse(t.time),m:t.side==='sell',p:t.price,q:t.size}));
  }
  const now=Date.now(),markPrice=numeric(mark?.markPrice),contracts=numeric(interest?.openInterest);
  const validLevels=levels=>Array.isArray(levels)?levels.map(([p,q])=>[Number(p),Number(q)]).filter(([p,q])=>p>0&&q>0&&Number.isFinite(p*q)):[];
@@ -41,14 +52,16 @@ export default async function handler(){
   spreadBps:(asks[0][0]-bids[0][0])/((asks[0][0]+bids[0][0])/2)*10000,bidWall:wall(bids),askWall:wall(asks)
  }:null;
  // Binance aggregate fills can combine executions from one taker order at one price.
- const tape=Array.isArray(trades)?trades.filter(t=>Number.isFinite(t.T)&&t.T<=now&&typeof t.m==='boolean'):[];
+ const tape=Array.isArray(trades)?trades.filter(t=>Number.isFinite(t.T)&&t.T<=now&&typeof t.m==='boolean'&&Number(t.p)>0&&Number(t.q)>0&&Number.isFinite(Number(t.p)*Number(t.q))):[];
  const slices=windows.map((window,i)=>{
   const duration=[5,15,60][i]*60000,cutoff=now-duration;
   const row=flow[i]?.[0],buy=numeric(row?.buyVol),sell=numeric(row?.sellVol),time=numeric(row?.timestamp);
-  const delta=buy!=null&&sell!=null&&buy+sell>0&&time!=null&&now-time>=0&&now-time<=duration*3?(buy-sell)/(buy+sell)*100:null;
+  const providerDelta=buy!=null&&sell!=null&&buy+sell>0&&time!=null&&now-time>=0&&now-time<=duration*3?(buy-sell)/(buy+sell)*100:null;
   const recent=tape.filter(t=>t.T>=cutoff);
   const large=recent.filter(t=>Number(t.p)*Number(t.q)>=250000);
   const coverage=tape.length&&tape.some(t=>t.T<=cutoff)&&now-Math.max(...tape.map(t=>t.T))<60000;
+  const volume=recent.reduce((sum,t)=>sum+Number(t.q),0);
+  const delta=providerDelta??(coverage&&volume>0?recent.reduce((sum,t)=>sum+(t.m?-1:1)*Number(t.q),0)/volume*100:null);
   return {window,delta,whales:coverage?{
    net:large.reduce((sum,t)=>sum+(t.m?-1:1)*Number(t.p)*Number(t.q),0),
    buys:large.filter(t=>!t.m).length,sells:large.filter(t=>t.m).length
@@ -56,7 +69,7 @@ export default async function handler(){
  });
  const funding=numeric(mark?.lastFundingRate);
  return new Response(JSON.stringify({
-  source:'Binance BTCUSDT perpetual',book,slices,
+  source,book,slices,
   fundingPct:funding==null?null:funding*100,
   openInterest:markPrice!=null&&contracts!=null?markPrice*contracts:null,
   longShort:numeric(ratio?.[0]?.longShortRatio)
