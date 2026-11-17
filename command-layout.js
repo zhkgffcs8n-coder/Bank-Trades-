@@ -60,6 +60,51 @@ function addResearchPanels(grid){
  setInterval(()=>{if(!document.hidden){paint();renderAnalysis(window.__BANK_TRADES_BTC_EVIDENCE__);}},1000);
  renderAnalysis(window.__BANK_TRADES_BTC_EVIDENCE__);
 }
+function stabilizeMarketScroll(desk){
+ const scroller=document.scrollingElement;
+ if(!scroller||!window.ResizeObserver)return;
+ scroller.classList.add('bt-market-scroll-stable');
+ let anchor=null,lastInput=0;
+ function capture(){
+  const rect=desk.getBoundingClientRect();
+  anchor=rect.bottom>0&&rect.top<scroller.clientHeight?rect.top:null;
+
+ }
+ function release(){
+  lastInput=performance.now();
+  anchor=null;
+
+ }
+ function preserve(){
+  if(document.hidden||performance.now()-lastInput<220)return;
+  if(anchor===null){capture();return;}
+  const shift=desk.getBoundingClientRect().top-anchor;
+  if(Math.abs(shift)<1)return;
+  scroller.scrollTop+=shift;
+  capture();
+ }
+ const observer=new ResizeObserver(preserve);
+ observer.observe(scroller);
+ observer.observe(document.body);
+ observer.observe(desk);
+ for(let node=desk;node&&node!==document.body;node=node.parentElement){
+  if(node.parentElement)observer.observe(node.parentElement);
+  for(let sibling=node.previousElementSibling;sibling;sibling=sibling.previousElementSibling)observer.observe(sibling);
+ }
+ let settle;
+ window.addEventListener('scroll',()=>{
+  clearTimeout(settle);
+  settle=setTimeout(capture,240);
+ },{passive:true});
+ for(const type of ['wheel','touchstart','touchmove','pointerdown','hashchange','resize']){
+  window.addEventListener(type,release,{passive:true});
+ }
+ window.addEventListener('keydown',event=>{
+  if(['ArrowUp','ArrowDown','PageUp','PageDown','Home','End',' '].includes(event.key))release();
+ });
+ window.addEventListener('resize',()=>requestAnimationFrame(capture));
+ capture();
+}
 function arrange(){
  const grid=document.querySelector('.bt-command-grid.bt-command-stacked');
  const middle=grid?.querySelector('.bt-command-middle');
@@ -68,7 +113,7 @@ function arrange(){
  if(!grid||!middle||!signals||!radar)return false;
  if(radar.previousElementSibling!==signals)radar.before(signals);
  const marketDesk=document.getElementById('btcMarketDesk');
- if(marketDesk)grid.after(marketDesk);
+ if(marketDesk){grid.after(marketDesk);stabilizeMarketScroll(marketDesk);}
  const lower=document.getElementById('btLowerCommandRow');
  if(lower){const easy=document.getElementById('quickAssets')?.closest('.card');const desk=document.getElementById('signalDesk');if(easy&&easy.parentElement===lower)grid.querySelector('.bt-command-left')?.append(easy);if(desk&&desk.parentElement===lower)grid.querySelector('.bt-command-right')?.append(desk);lower.remove()}
  grid.classList.remove('bt-command-bottom-filled');

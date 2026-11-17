@@ -621,3 +621,6 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
 .bt-command-grid :is(#btVerifiedAlertFeed,#btTechnicalSide,#btPerformanceSide,#spotTimeframePanel) {
   overflow-anchor: none;
 }
+
+/* The market desk preserves its own viewport position during idle refreshes. */
+html.bt-market-scroll-stable { overflow-anchor: none; scroll-behavior: auto; }
