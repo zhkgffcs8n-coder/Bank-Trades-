@@ -719,6 +719,35 @@ function mountBtcRoundCard(){
  <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
  <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
  tracker.after(card);
+ const signalCard=document.createElement('section');
+ signalCard.className='card btc-round-card';
+ signalCard.style.marginTop='12px';
+ signalCard.innerHTML=`<h3>BTC · SIGNAL & CONFIDENCE</h3>
+ <div class="btc-round-grid">
+ <div><small>Early round call</small><strong data-side="call">WAIT</strong></div>
+ <div><small>Live Market Signals</small><strong data-side="action">WAIT</strong></div>
+ <div><small>Momentum agreement</small><strong data-side="confidence">—</strong></div></div>
+ <progress data-side="meter" max="100" aria-label="Momentum agreement" style="width:100%;accent-color:#2dd4bf"></progress>
+ <small data-side="flip"></small>`;
+ card.after(signalCard);
+ const sideFields=Object.fromEntries([...signalCard.querySelectorAll('[data-side]')].map(el=>[el.dataset.side,el]));
+ const desktop=matchMedia('(min-width:1100px)');
+ function arrange(){
+  const grid=tracker.closest('.bt-command-grid');
+  const left=grid?.querySelector('.bt-command-left');
+  const right=grid?.querySelector('.bt-command-right');
+  const chart=$('btcSpotChart')?.closest('section');
+  if(!left||!right)return;
+  if(desktop.matches){
+   if(signalCard.parentElement!==left)left.append(signalCard);
+   if(card.parentElement!==right)right.append(card);
+   if(chart&&chart!==signalCard.nextElementSibling)signalCard.after(chart);
+  }else{
+   if(tracker.nextElementSibling!==card)tracker.after(card);
+   if(card.nextElementSibling!==signalCard)card.after(signalCard);
+   if(chart&&signalCard.nextElementSibling!==chart)signalCard.after(chart);
+  }
+ }
  const fields=Object.fromEntries([...card.querySelectorAll('[data-btc]')].map(el=>[el.dataset.btc,el]));
  const dollars=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
  const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
@@ -730,12 +759,27 @@ function mountBtcRoundCard(){
   const active=Boolean(market?.ticker&&close>now&&Date.parse(market.open_time)<=now);
   const age=now-latestPositionQuoteAt;
   const quotesFresh=active&&age>=0&&age<15000;
-  const feed=engineSignals.find(row=>row.asset==='BTC')?.tradingView;
+  const signal=engineSignals.find(row=>row.asset==='BTC');
+  const feed=signal?.tradingView;
   const direction=active?btcRoundDirection(market,feed,now):'WAIT';
   if(fields.direction.dataset.state!==direction){
    fields.direction.dataset.state=direction;
    fields.direction.textContent=direction;
   }
+  arrange();
+  sideFields.call.textContent=direction;
+  sideFields.call.style.color=direction==='UP'?'#62e6b0':direction==='DOWN'?'#ff91ac':'#fcd58c';
+  sideFields.action.textContent=active&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?signal.action||'WAIT':'WAIT';
+  const round=signal?.roundCall;
+  const score=round?.confidencePercent;
+  const scoreFresh=active&&round?.ticker===market.ticker&&now-round.asOf>=0&&now-round.asOf<90000&&Number.isFinite(score)&&score>=0&&score<=100;
+  sideFields.confidence.textContent=scoreFresh?percent(score):'—';
+  sideFields.meter.hidden=!scoreFresh;
+  sideFields.meter.value=scoreFresh?score:0;
+  const liveAge=now-feed?.candleCloseAt;
+  const opposite=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&liveAge>=0&&liveAge<=20000&&
+    ((direction==='UP'&&feed.direction==='DOWN')||(direction==='DOWN'&&feed.direction==='UP'));
+  sideFields.flip.textContent=opposite?'Flip watch · TradingView '+feed.direction:'';
   const seconds=Math.max(0,Math.ceil((close-now)/1000));
   fields.age.textContent=quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round';
   fields.timer.textContent=active?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'—';
