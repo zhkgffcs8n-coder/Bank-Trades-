@@ -899,17 +899,29 @@ function scalp(market,left,side,strong,quotes,feed){
   let tracked=positions.get(selectedCoin);
   if(tracked?.ticker!==ticker)tracked=null;
   if(!tracked){
-    if(!strong||left<180||!['up','down'].includes(side)){
+    let entrySide=side;
+    if(feed?.enabled){
+      const age=Date.now()-feed.candleCloseAt;
+      if(left>840||left<420){
+        showScalp('NO ENTRY · TradingView BTC entry window: 14:00–7:00 left');
+        return;
+      }
+      if(feed.ticker!==ticker||feed.status!=='FRESH'||!(age>=0&&age<=20000)||
+         !(Number(market.floor_strike)>0)||!['UP','DOWN'].includes(feed.direction)){
+        showScalp('WAIT · Awaiting fresh TradingView BTC 1s direction for this round');
+        return;
+      }
+      entrySide=feed.direction.toLowerCase();
+      const {ask,bid}=quotes[entrySide];
+      if(ask<35||ask>80||ask-bid>3){
+        showScalp('NO ENTRY · TradingView '+feed.direction+' · Ask '+ask.toFixed(1)+'% · Requires 35–80% ask and spread ≤3 pts');
+        return;
+      }
+    }else if(!strong||left<180||!['up','down'].includes(side)){
       showScalp('NO ENTRY · Waiting for aligned '+selectedCoin+' momentum and a tight spread');
       return;
     }
-    if(feed?.enabled&&(feed.ticker!==ticker||feed.status!=='FRESH'||
-      !(Date.now()-feed.candleCloseAt>=0&&Date.now()-feed.candleCloseAt<=20000)||
-      !(Number(market.floor_strike)>0)||feed.direction!==side.toUpperCase())){
-      showScalp('WAIT · Awaiting fresh TradingView BTC 1s confirmation for this Kalshi round');
-      return;
-    }
-    tracked={ticker,side,entry:quotes[side].ask,exit:null};
+    tracked={ticker,side:entrySide,entry:quotes[entrySide].ask,exit:null};
     positions.set(selectedCoin,tracked);
     entered=true;
   }
@@ -919,7 +931,7 @@ function scalp(market,left,side,strong,quotes,feed){
     if(left<=90)tracked.exit='TIME EXIT';
     else if(move<=-5)tracked.exit='SELL FAST';
     else if(move>=8)tracked.exit='TAKE PROFIT';
-    else if(side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
+    else if(!entered&&side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
   }
   if(tracked.exit&&tracked.exitBid==null)tracked.exitBid=quote.bid;
   const liveMove=move.toFixed(1);
