@@ -20,6 +20,17 @@ export default async function handler(){
   get('/fapi/v1/depth',{limit:20}),get('/fapi/v1/aggTrades',{limit:1000}),
   ...windows.map(period=>get('/futures/data/takerlongshortRatio',{period,limit:1}))
  ]);
+ if(!mark&&!interest&&!depth){
+  try{
+   const response=await fetch('https://futures.kraken.com/derivatives/api/v3/tickers?symbol=PF_XBTUSD',{signal:AbortSignal.timeout(2500)});
+   const market=response.ok?(await response.json()).tickers?.find(t=>t.symbol==='PF_XBTUSD'&&!t.suspended):null;
+   if(market)return new Response(JSON.stringify({
+    source:'Kraken BTC/USD perpetual',book:null,slices:windows.map(window=>({window,delta:null,whales:null})),
+    fundingPct:Number.isFinite(market.relativeFundingRate)?market.relativeFundingRate*100:null,
+    openInterest:Number.isFinite(market.openInterest*market.markPrice)?market.openInterest*market.markPrice:null,longShort:null
+   }),{headers:cacheHeaders});
+  }catch{}
+ }
  const now=Date.now(),markPrice=numeric(mark?.markPrice),contracts=numeric(interest?.openInterest);
  const validLevels=levels=>Array.isArray(levels)?levels.map(([p,q])=>[Number(p),Number(q)]).filter(([p,q])=>p>0&&q>0&&Number.isFinite(p*q)):[];
  const bids=validLevels(depth?.bids),asks=validLevels(depth?.asks);
