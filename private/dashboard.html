@@ -298,7 +298,35 @@ const val=(m,k)=>{if(!m)return null;const dollars=m[k+'_dollars'];if(dollars!==u
 const fmt=n=>n==null?'—':(n*100).toFixed(1)+'¢';
 const expiryMs=m=>Date.parse(m?.expires_at||m?.expected_expiration_time||m?.expiration_time||m?.close_time||'');
 const spokenAt=new Map();
-const say=(s,urgent=false)=>{if(!voice||document.hidden||!('speechSynthesis'in window))return;if(!urgent&&Date.now()-(spokenAt.get(s)||0)<60000)return;spokenAt.set(s,Date.now());lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.12;window.speechSynthesis.speak(u)};
+let scalperSpeechPending=0,scalperSpeechGeneration=0;
+const lastScalperHold=new Map();
+window.addEventListener('banktrades:scalper-voice',({detail:d})=>{
+ if(!voice||document.hidden||!('speechSynthesis' in window)||!d||!assets.includes(d.asset)||
+    !['up','down'].includes(d.side)||!Number.isFinite(d.entry))return;
+ const coin=d.asset==='BTC'?'Bitcoin':d.asset;
+ const prefix='Pro Scalper. '+coin+'. ';
+ const entry=d.entry.toFixed(1)+' percent';
+ const side=d.side.toUpperCase();
+ let message;
+ if(d.stage==='entry')message=prefix+'Buy '+side+'. Entry '+entry+'.';
+ if(d.stage==='hold')message=prefix+'Hold '+side+'. Entry '+entry+'.';
+ if(d.stage==='exit'&&Number.isFinite(d.exitBid))message=prefix+d.action+'. '+side+' position. Entry '+entry+'. Exit bid '+d.exitBid.toFixed(1)+' percent.';
+ if(!message)return;
+ if(d.stage==='hold'){
+  if(lastScalperHold.get(d.asset)===d.ticker)return;
+  lastScalperHold.set(d.asset,d.ticker);
+ }
+ if(!scalperSpeechPending)window.speechSynthesis.cancel();
+ const utterance=new SpeechSynthesisUtterance(message);
+ const generation=scalperSpeechGeneration;
+ utterance.rate=1.08;
+ utterance.onend=utterance.onerror=()=>{
+  if(generation===scalperSpeechGeneration)scalperSpeechPending=Math.max(0,scalperSpeechPending-1);
+ };
+ scalperSpeechPending++;
+ window.speechSynthesis.speak(utterance);
+});
+const say=(s,urgent=false)=>{if(!voice||document.hidden||scalperSpeechPending||!('speechSynthesis'in window))return;if(!urgent&&Date.now()-(spokenAt.get(s)||0)<60000)return;spokenAt.set(s,Date.now());lastSpoken=s;window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(s);u.rate=1.12;window.speechSynthesis.speak(u)};
 const direction=a=>a.replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN');
 async function api(url){const c=new AbortController(),t=setTimeout(()=>c.abort(),11500);try{const r=await fetch(url,{cache:'no-store',signal:c.signal});const d=await r.json();if(!r.ok)throw Error(d.error||'HTTP '+r.status);return d}finally{clearTimeout(t)}}
 function current(){return rows.find(x=>x.asset===selected)}
@@ -533,7 +561,7 @@ async function refresh(){
 $('refresh').onclick=refresh;
 $('auto').onclick=()=>{auto=!auto;$('auto').textContent='AUTO REFRESH '+(auto?'ON':'OFF')};
 function syncVoice(){for(const id of ['voice','premiumVoice']){const b=$(id);if(b){b.textContent=voice?'🔊 VOICE ON':'🔇 VOICE OFF';b.setAttribute('aria-pressed',String(voice));b.style.setProperty('background',voice?'#facc15':'','important');b.style.setProperty('color',voice?'#171717':'','important');b.style.setProperty('border',voice?'4px solid #fff176':'','important');b.style.setProperty('box-shadow',voice?'0 0 0 3px #dca900,0 0 18px rgba(250,204,21,.55)':'','important');b.style.fontWeight=voice?'900':''}}}
-function toggleVoice(){if(!('speechSynthesis'in window)){alert('Voice playback is unavailable in this browser.');return;}voice=!voice;try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}syncVoice();if(voice){announcedEntries.clear();say('Voice alerts on. Monitoring all eight Kalshi markets.',true);announceAllEntries(false)}else window.speechSynthesis.cancel()}
+function toggleVoice(){if(!('speechSynthesis'in window)){alert('Voice playback is unavailable in this browser.');return;}voice=!voice;try{localStorage.setItem('banktrades:voice-enabled',voice?'1':'0')}catch{}syncVoice();if(voice){announcedEntries.clear();say('Voice alerts on. Monitoring Pro Scalper and Kalshi market signals.',true);announceAllEntries(false)}else{scalperSpeechGeneration++;scalperSpeechPending=0;window.speechSynthesis.cancel()}}
 $('voice').onclick=toggleVoice;
 $('premiumVoice').onclick=toggleVoice;
 const spokenLiveEvents=new Set();
@@ -693,7 +721,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=radar-context-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=chart-signal-swap-2"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=radar-context-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=scalper-voice-1"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
