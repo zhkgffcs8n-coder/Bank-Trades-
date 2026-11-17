@@ -627,7 +627,7 @@ async function update(){
    const received=Date.parse(row?.quote_received_at);
    const fresh=now-received<=5000&&received<=now+2000;
    const live=fresh&&valid&&m.ticker&&close>now&&close<=now+900000;
-   if(live)contracts.push({asset,ticker:m.ticker,close,yesBid:yb,yesAsk:ya,noBid:nb,noAsk:na});
+   if(live)contracts.push({asset,ticker:m.ticker,close,strike:Number(m.floor_strike)||null,yesBid:yb,yesAsk:ya,noBid:nb,noAsk:na});
    const tile=document.createElement('div');tile.className='premium-tile';
    const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI ASKS';
    const value=document.createElement('b');value.textContent=live?(ya===na?'EVEN':ya<na?'DOWN '+na.toFixed(1)+'%':'UP '+ya.toFixed(1)+'%'):'—';
