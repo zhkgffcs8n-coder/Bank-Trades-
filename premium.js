@@ -730,6 +730,9 @@ function mountBtcRoundCard(){
  <div><small>TradingView 1s</small><strong data-btc="direction">WAIT</strong></div>
  <div><small>Round closes in</small><strong data-btc="timer">—</strong></div>
  <div class="btc-target"><small>Kalshi target</small><strong data-btc="target">—</strong></div>
+ <div><small>BTC spot · last 1m close</small><strong data-btc="spot">—</strong></div>
+ <div><small>Spot vs. target</small><strong data-btc="gap">—</strong></div>
+ <div><small>Market clock · PT</small><strong data-btc="marketClock">—</strong></div>
  <div><small>UP bid / ask</small><strong data-btc="up">—</strong></div>
  <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
  <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
@@ -765,6 +768,7 @@ function mountBtcRoundCard(){
  const fields=Object.fromEntries([...card.querySelectorAll('[data-btc]')].map(el=>[el.dataset.btc,el]));
  const dollars=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
  const pacific=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit'});
+ const marketClock=new Intl.DateTimeFormat('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',second:'2-digit'});
  const percent=value=>Number.isFinite(value)&&value>=0&&value<=100?value.toFixed(1)+'%':'—';
  function paint(){
   const now=Date.now();
@@ -799,6 +803,14 @@ function mountBtcRoundCard(){
   fields.clock.textContent=active?pacific.format(close):'—';
   const target=Number(market?.floor_strike);
   fields.target.textContent=active&&target>0&&Number.isFinite(target)?dollars.format(target):'—';
+  fields.marketClock.textContent=marketClock.format(now);
+  const spot=window.__BANK_TRADES_BTC_EVIDENCE__;
+  const spotAge=now-spot?.candleAt;
+  const spotFresh=Number.isFinite(spot?.close)&&spot.close>0&&spotAge>=60000&&spotAge<150000;
+  fields.spot.textContent=spotFresh?dollars.format(spot.close):'—';
+  const gap=active&&spotFresh&&target>0&&Number.isFinite(target)?spot.close-target:NaN;
+  fields.gap.textContent=Number.isFinite(gap)?(gap>0?'+':'')+dollars.format(gap)+' · '+(gap/target*100).toFixed(3)+'%':'—';
+  fields.gap.style.color=gap>0?'#62e6b0':gap<0?'#ff91ac':'';
   fields.up.textContent=quotesFresh?percent(price(market,'yes_bid'))+' / '+percent(price(market,'yes_ask')):'—';
   fields.down.textContent=quotesFresh?percent(price(market,'no_bid'))+' / '+percent(price(market,'no_ask')):'—';
  }
