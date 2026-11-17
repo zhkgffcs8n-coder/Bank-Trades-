@@ -285,7 +285,7 @@ function syncSignals(){
    const note=document.createElement('small');note.style.cssText='display:block;font-size:11px;opacity:.85';
    note.textContent='LIVE ASK · UP '+(validSide(upAsk,upBid)?upAsk.toFixed(1)+'%':'—')+' / DOWN '+(validSide(downAsk,downBid)?downAsk.toFixed(1)+'%':'—')+' · no qualified entry';cell.append(note);
   }
-  for(const [label,tracked] of [['MY POSITION',advice],['AUTO CALL · SIMULATED',hypothetical]]){
+  for(const [label,tracked] of [['MANUALLY TRACKED POSITION',advice],['AUTO CALL · SIMULATED',hypothetical]]){
    if(!tracked)continue;
    const box=document.createElement('div');box.className='bt-position-alert';
    box.style.cssText='display:block;padding:8px;margin:6px 0;border:1px solid #64748b;border-radius:8px;white-space:normal;font-size:12px';
@@ -406,7 +406,25 @@ function syncSignals(){
   const forecastFresh=decision==='WAIT'&&forecast?.ticker===ticker&&Number.isFinite(forecast.asOf)&&Date.now()-forecast.asOf>=0&&Date.now()-forecast.asOf<90000&&['UP','DOWN'].includes(forecast.direction);
   badge.textContent=forecastFresh?tr.dataset.asset+' · '+(forecast.direction==='UP'?'▲ UP BIAS':'▼ DOWN BIAS')+' · FORECAST ONLY':(decision==='BUY UP'?'🟢 ':decision==='BUY DOWN'?'🔴 ':decision==='SELL FAST'?'🚨 ':decision==='HOLD'?'🟣 ':'🟡 ')+tr.dataset.asset+' · '+decision;
   if(forecastFresh){badge.title='Directional forecast only. Actual entry remains blocked until qualified; no order placed.';badge.style.borderColor='#38bdf8';badge.style.color='#7dd3fc';}
-  cell.prepend(badge);
+  const isBtc = tr.dataset.asset === 'BTC';
+  if(isBtc){
+   const feed = sig?.tradingView;
+   const age = Date.now() - feed?.candleCloseAt;
+   const fresh = Boolean(ticker && feed?.ticker === ticker && feed.status === 'FRESH' && age >= 0 && age <= 20000);
+   const direction = fresh && ['UP','DOWN'].includes(feed.direction) ? feed.direction : 'WAIT';
+   const official = document.createElement('strong');
+   official.style.cssText = 'display:block;font-size:16px;margin-bottom:4px;color:' +
+    (direction === 'UP' ? '#4ade80' : direction === 'DOWN' ? '#ff718a' : '#facc15');
+   official.textContent = 'BTC · TRADINGVIEW 1s · ' + direction;
+   if(direction === 'WAIT') official.textContent += fresh ? ' · MIXED' : ' · FEED UNAVAILABLE';
+   badge.textContent = 'ENTRY · ' + decision;
+   badge.title = '';
+   badge.style.borderColor = color;
+   badge.style.color = color;
+   cell.prepend(official, badge);
+  }else{
+   cell.prepend(badge);
+  }
   const receivedAt=sig?.timing?.quoteReceivedAt;
   if(sig?.ticker===ticker&&Number.isFinite(receivedAt)){
    const quoteAge=Math.max(0,Math.floor((Date.now()-receivedAt)/1000));
@@ -437,7 +455,7 @@ function syncSignals(){
   };
   const tracked=advice||hypothetical;
   const exitAction=String(tracked?.action||'').toUpperCase();
-  if(flip)makeTile(flip.recentFlip?'⚡ FLIP '+flip.direction:'👀 FLIP WATCH '+flip.direction,'flip',flip.recentFlip?'Momentum reversal observed':'Direction watch · not an entry');
+  if(flip&&!isBtc)makeTile(flip.recentFlip?'⚡ FLIP '+flip.direction:'👀 FLIP WATCH '+flip.direction,'flip',flip.recentFlip?'Momentum reversal observed':'Direction watch · not an entry');
   if(tracked){
    if(/SELL FAST|SELL|EXIT/.test(exitAction))makeTile('🚨 SELL FAST','sell','Position exit guidance');
    else if(/CASH OUT|TAKE PROFITS/.test(exitAction))makeTile('💰 CASH OUT','profit','Position profit guidance');
@@ -449,7 +467,7 @@ function syncSignals(){
   const researchChip=sig?.researchDirection;
   const researchFresh=researchChip?.mode==='SHADOW_ONLY'&&researchChip.roundTicker===ticker&&
     Number.isFinite(researchChip.asOf)&&Date.now()-researchChip.asOf>=0&&Date.now()-researchChip.asOf<90000;
-  if(decision==='WAIT'&&researchFresh&&['UP','DOWN'].includes(researchChip.direction)){
+  if(!isBtc&&decision==='WAIT'&&researchFresh&&['UP','DOWN'].includes(researchChip.direction)){
    const direction=researchChip.direction;
    const chip=document.createElement('span');
    const hue=direction==='UP'?'#4ade80':'#fb7185';
