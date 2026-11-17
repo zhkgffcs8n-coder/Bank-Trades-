@@ -688,6 +688,88 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
+function mountBtcLiveCharts(telemetry, signalCard){
+ const charts=['BTC · Live round price vs. target','BTCUSD · 5-second candles'].map(title=>{
+  const panel=document.createElement('section');
+  panel.className='card btc-round-card';
+  const heading=document.createElement('h3');
+  heading.textContent=title;
+  const canvas=document.createElement('canvas');
+  canvas.width=640;
+  canvas.height=320;
+  canvas.style.cssText='width:100%;height:auto;display:block;margin-top:10px;background:#091523;border-radius:8px';
+  const status=document.createElement('small');
+  panel.append(heading,canvas,status);
+  return {panel,canvas,status};
+ });
+ const [round,fast]=charts;
+ telemetry.after(round.panel);
+ signalCard.after(fast.panel);
+ const candles=[];
+ let last=0;
+ window.addEventListener('banktrades:btc-spot-tick',event=>{
+  const {t,price}=event.detail;
+  if(!Number.isFinite(t)||!Number.isFinite(price)||price<=0)return;
+  const bucket=Math.floor(t/5000)*5000, current=candles.at(-1);
+  if(current?.t===bucket){
+   current.high=Math.max(current.high,price);
+   current.low=Math.min(current.low,price);
+   current.close=price;
+  }else{
+   candles.push({t:bucket,open:price,high:price,low:price,close:price});
+   if(candles.length>180)candles.shift();
+  }
+  last=t;
+ });
+ function draw(chart,points,start,end,target,sticks){
+  const c=chart.canvas.getContext('2d'),w=chart.canvas.width,h=chart.canvas.height;
+  if(!c)return;
+  c.clearRect(0,0,w,h);
+  chart.status.textContent=!last?'Waiting for Coinbase BTC ticks':Date.now()-last>15000?'Coinbase BTC feed stale':points.length?'Coinbase BTC-USD · '+(sticks?'5-second OHLC':'Current Kalshi round'):'Waiting for current-round prices';
+  if(!points.length)return;
+  const values=points.flatMap(p=>[p.high,p.low]);
+  if(Number.isFinite(target))values.push(target);
+  const lo=Math.min(...values),hi=Math.max(...values),pad=Math.max(1,(hi-lo)*.08);
+  const x=t=>16+(t-start)/Math.max(5000,end-start)*(w-100);
+  const y=v=>h-18-(v-lo+pad)/(hi-lo+2*pad)*(h-36);
+  c.font='15px monospace';
+  for(let i=0;i<=3;i++){
+   const v=lo+(hi-lo)*i/3;
+   c.fillStyle='#294158';c.fillRect(16,y(v),w-100,1);
+   c.fillStyle='#b9d0e4';c.fillText(v.toFixed(0),w-78,y(v)+5);
+  }
+  if(Number.isFinite(target)){
+   c.strokeStyle='#ffc776';c.setLineDash([6,5]);c.beginPath();c.moveTo(16,y(target));c.lineTo(w-84,y(target));c.stroke();c.setLineDash([]);
+  }
+  if(sticks){
+   for(const p of points){
+    c.fillStyle=p.close>=p.open?'#58e7ae':'#ff789c';
+    c.fillRect(x(p.t),y(p.high),2,Math.max(1,y(p.low)-y(p.high)));
+    c.fillRect(x(p.t)-3,Math.min(y(p.open),y(p.close)),8,Math.max(2,Math.abs(y(p.open)-y(p.close))));
+   }
+  }else{
+   c.strokeStyle='#62dfff';c.lineWidth=3;c.beginPath();
+   points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
+   c.stroke();
+  }
+ }
+ function paint(){
+  if(document.hidden)return;
+
+  const chart=$('btcSpotChart')?.closest('section');
+  const anchor=chart?.parentElement===signalCard.parentElement?chart:signalCard;
+  if(fast.panel.previousElementSibling!==anchor)anchor.after(fast.panel);
+  const roundAnchor=telemetry.parentElement===signalCard.parentElement?fast.panel:telemetry;
+  if(round.panel.previousElementSibling!==roundAnchor)roundAnchor.after(round.panel);
+  const market=latestPositionQuotes.find(row=>row.asset==='BTC')?.market;
+  const start=Date.parse(market?.open_time||''),end=Date.parse(market?.close_time||'');
+  const now=Date.now(),target=Number(market?.floor_strike);
+  draw(round,end>now?candles.filter(p=>p.t>=start&&p.t<end):[],start,end,target>0?target:NaN,false);
+  draw(fast,candles.filter(p=>p.t>=now-180000),now-180000,now,NaN,true);
+ }
+ paint();
+ setInterval(paint,1000);
+}
 function mountBtcRoundCard(){
  const tracker=$('quickPosition')?.closest('.card');
  if(!tracker)return;
@@ -747,6 +829,7 @@ function mountBtcRoundCard(){
  <div class="btc-arc" data-side="meter"><strong data-side="confidence">—</strong></div></div>
  <small data-side="flip"></small>`;
  card.after(signalCard);
+ mountBtcLiveCharts(card,signalCard);
  const sideFields=Object.fromEntries([...signalCard.querySelectorAll('[data-side]')].map(el=>[el.dataset.side,el]));
  const desktop=matchMedia('(min-width:1100px)');
  function arrange(){
