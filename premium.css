@@ -516,3 +516,41 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
   transform-origin: left;
   transform: rotate(calc(var(--btc-sweep) - 180deg));
 }
+#btcMarketDesk .btc-round-card { position: relative; }
+#btcMarketDesk .market-desk-top { grid-template-columns: minmax(0,1fr) minmax(0,1.25fr) minmax(0,.35fr); }
+#btcMarketDesk .market-desk-middle { grid-template-columns: minmax(0,1fr) minmax(0,.78fr) minmax(0,.96fr); }
+#btcMarketDesk .market-desk-top > :nth-child(-n+2) { padding-inline-start: calc(clamp(12px, 1.5vw, 20px) + 48px); }
+#btcMarketDesk .market-desk-top > :last-child { text-align: center; }
+#btcMarketDesk .market-desk-top > :last-child strong { font-size: clamp(.9rem, 1.45vw, 1.5rem); }
+#btcMarketDesk .market-desk-icon {
+  position: absolute; left: clamp(10px,1.5vw,20px); top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px;
+  color: #f7e0ff; font-weight: 900; background: radial-gradient(circle,#9149ff,#512087 72%);
+  box-shadow: 0 0 18px #8c40fc70;
+}
+#btcMarketDesk .market-desk-badge {
+  position: absolute; right: 10px; top: 9px; padding: 2px 7px;
+  border-radius: 999px; border: 1px solid currentColor; font-size: .65rem; font-weight: 800;
+}
+#btcMarketDesk .btc-arc { --arc-end: #35ff9d; --arc-mid: #5385e9; }
+#btcMarketDesk .btc-arc[data-direction="DOWN"] { --arc-end: #ff3862; --arc-mid: #d530ad; }
+#btcMarketDesk .btc-arc::before {
+  background: radial-gradient(circle,#150e22 0 58%,transparent 59%), conic-gradient(from 270deg,#8734ff,var(--arc-mid) calc(var(--btc-sweep,0deg) * .58),var(--arc-end) var(--btc-sweep,0deg),#342640 var(--btc-sweep,0deg) 180deg,transparent 180deg);
+}
+#btcMarketDesk .btc-arc.has-score strong { color: var(--arc-end); bottom: 24%; }
+#btcMarketDesk .market-desk-risk-bar {
+  display: block; margin-top: 5px; height: 5px; border-radius: 8px; background: #392b4d;
+}
+#btcMarketDesk .market-desk-risk-bar[data-state="aligned"] { background: linear-gradient(90deg,#32ff9e 33%,#392b4d 33%); }
+#btcMarketDesk .market-desk-risk-bar[data-state="opposing"] { background: linear-gradient(90deg,#32ff9e,#ffb453 43%,#ff406a 72%,#392b4d 72%); }
+#btcMarketDesk .btc-action:has([data-direction="UP"]) { background: #11271f; border-color: #276f55; }
+#btcMarketDesk .btc-action:has([data-direction="DOWN"]) { background: #2b1424; border-color: #81324b; }
+@media(max-width:1000px) {
+  #btcMarketDesk .market-desk-middle { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:620px) {
+  #btcMarketDesk .market-desk-top { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  #btcMarketDesk .market-desk-top > :nth-child(-n+2) { padding-inline-start: 12px; }
+  #btcMarketDesk .market-desk-icon { display: none; }
+  #btcMarketDesk .market-desk-top .market-desk-badge { position: static; display: inline-block; }
+}
