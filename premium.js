@@ -707,7 +707,8 @@ function mountBtcLiveCharts(desk){
  const candles=[];
  let last=0;
  window.addEventListener('banktrades:btc-spot-tick',event=>{
-  const {t,price}=event.detail;
+  const {t,price,size}=event.detail;
+  const volume=Number.isFinite(size)&&size>0?size:0;
   if(!Number.isFinite(t)||!Number.isFinite(price)||price<=0)return;
   const bucket=Math.floor(t/5000)*5000, current=candles.at(-1);
   if(current&&bucket<current.t)return;
@@ -715,8 +716,9 @@ function mountBtcLiveCharts(desk){
    current.high=Math.max(current.high,price);
    current.low=Math.min(current.low,price);
    current.close=price;
+   current.volume+=volume;
   }else{
-   candles.push({t:bucket,open:price,high:price,low:price,close:price});
+   candles.push({t:bucket,open:price,high:price,low:price,close:price,volume});
    if(candles.length>180)candles.shift();
   }
   last=t;
@@ -725,7 +727,7 @@ function mountBtcLiveCharts(desk){
   const c=chart.canvas.getContext('2d'),w=chart.canvas.width,h=chart.canvas.height;
   if(!c)return;
   c.clearRect(0,0,w,h);
-  chart.status.textContent=!last?'Waiting for Coinbase BTC ticks':Date.now()-last>15000?'Coinbase BTC feed stale':points.length?'Coinbase BTC-USD · '+(sticks?'5-second OHLC':'Current Kalshi round'):'Waiting for current-round prices';
+  chart.status.textContent=!last?'Waiting for Coinbase BTC ticks':Date.now()-last>15000?'Coinbase BTC feed stale':points.length?'Coinbase BTC-USD · '+(sticks?'5-second OHLC · reported trade size':'Current Kalshi round'):'Waiting for current-round prices';
   if(!points.length)return;
   const values=points.flatMap(p=>[p.high,p.low]);
   if(Number.isFinite(target))values.push(target);
@@ -761,8 +763,18 @@ function mountBtcLiveCharts(desk){
    c.strokeStyle='#ffc776';c.setLineDash([6,5]);c.beginPath();c.moveTo(16,y(target));c.lineTo(w-84,y(target));c.stroke();c.setLineDash([]);
   }
   if(sticks){
+   c.font='bold 43px monospace';
+   c.fillStyle='#b8a9dd12';
+   c.fillText('BTCUSD | 5s',w*.23,h*.49);
+   const peakVolume=Math.max(0,...points.map(p=>p.volume));
    for(const p of points){
     c.fillStyle=p.close>=p.open?'#58e7ae':'#ff789c';
+    if(peakVolume>0&&p.volume>0){
+     const height=36*p.volume/peakVolume;
+     c.globalAlpha=.48;
+     c.fillRect(x(p.t)-3,h-18-height,8,height);
+     c.globalAlpha=1;
+    }
     c.fillRect(x(p.t),y(p.high),2,Math.max(1,y(p.low)-y(p.high)));
     c.fillRect(x(p.t)-3,Math.min(y(p.open),y(p.close)),8,Math.max(2,Math.abs(y(p.open)-y(p.close))));
    }
@@ -783,7 +795,18 @@ function mountBtcLiveCharts(desk){
    c.strokeStyle='#d59aff';c.lineWidth=3;c.beginPath();
    points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
    c.stroke();
+   if(Number.isFinite(target)){
+    c.fillStyle='#ffe094';
+    c.fillText('TARGET '+target.toFixed(2),w-228,y(target)-6);
+   }
   }
+  c.fillStyle=Number.isFinite(target)?(latest.close>=target?'#3cf4a0':'#ff4b78'):(latest.close>=latest.open?'#3cf4a0':'#ff4b78');
+  c.beginPath();c.arc(x(latest.t),y(latest.close),4,0,2*Math.PI);c.fill();
+  const labelY=Math.max(14,Math.min(h-28,y(latest.close)-9));
+  c.fillRect(w-82,labelY,80,18);
+  c.font='13px monospace';
+  c.fillStyle='#100a1a';
+  c.fillText(latest.close.toFixed(2),w-78,labelY+13);
  }
  function paint(){
   if(document.hidden)return;
@@ -802,19 +825,19 @@ function mountBtcRoundCard(){
  if(!desk)return;
  desk.innerHTML=`
  <div class="market-desk-top">
-  <section class="btc-round-card"><h3>₿ Bitcoin · KXBTC15M</h3><strong class="market-desk-price" data-btc="spot">—</strong><small data-btc="summary">Waiting for live prices</small></section>
-  <section class="btc-round-card"><h3>Au Gold · KXGOLD15M</h3><strong class="market-desk-price" data-gold-target>—</strong><small data-gold-status>Loading Kalshi Gold</small></section>
+  <section class="btc-round-card"><span class="market-desk-icon" aria-hidden="true">₿</span><h3>Bitcoin · KXBTC15M</h3><span class="market-desk-badge" data-btc="tileDirection">WAIT</span><strong class="market-desk-price" data-btc="spot">—</strong><small data-btc="summary">Waiting for live prices</small></section>
+  <section class="btc-round-card"><span class="market-desk-icon" aria-hidden="true">Au</span><h3>Gold · KXGOLD15M</h3><strong class="market-desk-price" data-gold-target>—</strong><small data-gold-status>Loading Kalshi Gold</small></section>
   <section class="btc-round-card"><h3>Market clock · PT</h3><strong class="market-desk-price" data-btc="marketClock">—</strong><small>Round closes <span data-btc="clock">—</span></small></section>
  </div>
  <div class="market-desk-middle">
   <section class="btc-round-card">
-   <h3>Signal</h3><div class="btc-call"><small>Market direction · TradingView 1s</small><strong data-side="call">WAIT</strong><small data-btc="roundTime"></small></div>
+   <h3>Signal</h3><span class="market-desk-badge" data-side="confidenceBadge">—</span><div class="btc-call"><small>Market direction · TradingView 1s</small><strong data-side="call">WAIT</strong><small data-btc="roundTime"></small></div>
    <div class="btc-action"><small>Action Oracle · Live Market Signals</small><strong data-side="action">WAIT</strong></div>
   </section>
   <section class="btc-round-card">
    <h3>Confidence</h3>
    <div class="btc-gauge"><div class="btc-arc" data-side="meter"><strong data-side="confidence">—</strong><i aria-hidden="true"></i></div><small>Round call confidence</small></div>
-   <div class="market-desk-risk"><small>Flip risk index · direction check</small><strong data-side="flip">—</strong></div>
+   <div class="market-desk-risk"><small>Flip risk index · direction check</small><strong data-side="flip">—</strong><span class="market-desk-risk-bar" data-side="flipBar" aria-hidden="true"></span></div>
   </section>
   <section class="btc-round-card">
    <header><h3>Kalshi live telemetry</h3><small data-btc="age">Waiting for quotes</small></header>
@@ -872,17 +895,22 @@ function mountBtcRoundCard(){
   const direction=active?btcRoundDirection(market,feed,now):'WAIT';
   sideFields.call.textContent=direction;
   sideFields.call.dataset.direction=direction;
+  fields.tileDirection.textContent=direction;
+  fields.tileDirection.dataset.direction=direction;
+  sideFields.meter.dataset.direction=direction;
   sideFields.action.textContent=quotesFresh&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?(signal.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN'):'WAIT';
   sideFields.action.dataset.direction=sideFields.action.textContent.includes('UP')?'UP':sideFields.action.textContent.includes('DOWN')||/SELL|EXIT/.test(sideFields.action.textContent)?'DOWN':'';
   const round=signal?.roundCall;
   const score=round?.confidencePercent;
   const scoreFresh=active&&round?.ticker===market.ticker&&now-round.asOf>=0&&now-round.asOf<90000&&Number.isFinite(score)&&score>=0&&score<=100;
-  sideFields.confidence.textContent=scoreFresh?percent(score):'—';
+  sideFields.confidence.textContent=sideFields.confidenceBadge.textContent=scoreFresh?Math.round(score)+'%':'—';
+  sideFields.confidenceBadge.dataset.direction=direction;
   sideFields.meter.style.setProperty('--btc-sweep',(scoreFresh?score*1.8:0)+'deg');
   sideFields.meter.classList.toggle('has-score',scoreFresh);
   const liveAge=now-feed?.candleCloseAt;
   const opposite=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&liveAge>=0&&liveAge<=20000&&
     ((direction==='UP'&&feed.direction==='DOWN')||(direction==='DOWN'&&feed.direction==='UP'));
+  sideFields.flipBar.dataset.state=opposite?'opposing':direction==='WAIT'?'pending':'aligned';
   sideFields.flip.textContent=opposite?'TradingView flipped '+feed.direction:direction==='WAIT'?'Awaiting direction':'No opposite TradingView tick';
   const seconds=Math.max(0,Math.ceil((close-now)/1000));
   fields.age.textContent=quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round';
