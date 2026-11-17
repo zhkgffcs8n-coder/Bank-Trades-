@@ -936,17 +936,14 @@ function scalp(market,left,side,strong,quotes,feed){
     else if(move>=8)tracked.exit='TAKE PROFIT';
     else if(!entered&&side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
   }
-  if(entered)announce('entry','BUY');
-  if(tracked.exit&&tracked.exitBid==null){
-    tracked.exitBid=quote.bid;
-    announce('exit',tracked.exit.replace(' · ',' because '));
-  }else if(!entered&&!tracked.exit){
-    announce('hold','HOLD');
-  }
+  const newExit=tracked.exit&&tracked.exitBid==null;
+  if(newExit)tracked.exitBid=quote.bid;
   const liveMove=move.toFixed(1);
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
   showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
+  if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
+  else if(entered)announce('entry','BUY');
 }
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');
 const directions=new Map();
