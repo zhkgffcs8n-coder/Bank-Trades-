@@ -580,3 +580,44 @@ section:has(>#paperTradeSignalsTitle) #paperTradeSignalsRows>div{margin:0!import
 @media (max-width: 640px) {
   .bt-command-professional #btTechnicalSide,.bt-command-professional #btPerformanceSide { grid-column: 1 / -1; }
 }
+
+/* Keep live copy in reserved rows so quote and signal refreshes do not move the desk. */
+#btcMarketDesk :is([data-btc],[data-side],[data-gold-status],.market-desk-charts small) {
+  overflow-anchor: none;
+}
+#btcMarketDesk .market-desk-top :is([data-btc="summary"],[data-gold-status]),
+#btcMarketDesk .market-desk-charts small,
+#btcMarketDesk :is([data-btc="roundTime"],[data-side="flip"]) {
+  line-height: 1.3;
+  block-size: 2.6em;
+  overflow: auto;
+}
+#btcMarketDesk .btc-call strong {
+  block-size: 2.3em;
+  overflow: auto;
+}
+#btcMarketDesk .btc-action strong {
+  line-height: 1.25;
+  block-size: 2.5em;
+  overflow: auto;
+}
+#btcMarketDesk .market-desk-middle header {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) minmax(0,7em);
+  align-items: start;
+}
+#btcMarketDesk [data-btc="age"] {
+  line-height: 1.2;
+  block-size: 2.4em;
+  overflow: auto;
+}
+#btcMarketDesk .market-desk-gap strong {
+  line-height: 1.25;
+  block-size: 2.5em;
+  overflow: auto;
+}
+#btcMarketDesk .market-desk-top .market-desk-badge { white-space: nowrap; }
+#liveTerminal .premium-table tbody,
+.bt-command-grid :is(#btVerifiedAlertFeed,#btTechnicalSide,#btPerformanceSide,#spotTimeframePanel) {
+  overflow-anchor: none;
+}
