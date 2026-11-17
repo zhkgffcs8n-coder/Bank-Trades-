@@ -73,7 +73,7 @@ function addMarketContext(column){
  <h3>Order flow · taker delta</h3>${tiles('flow',windows)}
  <h3>Order book · top 20 levels</h3><p data-context="book">Waiting for depth</p>
  <h3>Whale flow · fills ≥ $250K</h3>${tiles('whale',windows)}
- <small>Binance BTCUSDT perpetual · full windows required for whale totals.</small>
+ <small data-context="source">Full windows required for whale totals.</small>
  <h3>Derivatives</h3>${tiles('deriv',['Funding','Open interest','Long / short'])}
  <h3>Verified forecast scorecard</h3><table><thead><tr><th>Provider</th><th>Rounds</th><th>Brier ↓</th></tr></thead><tbody></tbody></table>
  <small data-context="score">Waiting for verified outcomes</small>`;
@@ -103,6 +103,7 @@ function addMarketContext(column){
     fields['flow'+i].textContent=format(row?.delta,1,'%');
     fields['whale'+i].textContent=row?.whales?money.format(row.whales.net)+' · '+row.whales.buys+'B / '+row.whales.sells+'S':'Insufficient coverage';
    });
+   fields.source.textContent=(data?.source?data.source+' · ':'')+'Full windows required for whale totals.';
    const book=data?.book;
    fields.book.textContent=book?format(book.imbalance,1,'%')+' imbalance · '+format(book.spreadBps,2,' bps')+' spread · Bid wall '+money.format(book.bidWall.usd)+' @ '+book.bidWall.price+' · Ask wall '+money.format(book.askWall.usd)+' @ '+book.askWall.price:'Order book unavailable';
    fields.deriv0.textContent=format(data?.fundingPct,4,'%');
