@@ -697,6 +697,9 @@ function reconcileHealth(){
  else if(age>30000){badge.textContent='● QUOTES STALE';badge.className='pill red';}
  else{badge.textContent='● LOADING QUOTES';badge.className='pill';}
 }
+function setDeskText(element, text){
+ if(element.textContent!==text)element.textContent=text;
+}
 function mountBtcLiveCharts(desk){
  const charts=['Live window chart','BTCUSD · 5-second candles'].map(title=>{
   const panel=document.createElement('section');
@@ -736,8 +739,8 @@ function mountBtcLiveCharts(desk){
   const c=chart.canvas.getContext('2d'),w=chart.canvas.width,h=chart.canvas.height;
   if(!c)return;
   c.clearRect(0,0,w,h);
-  chart.status.textContent=!last?'Waiting for Coinbase BTC ticks':Date.now()-last>15000?'Coinbase BTC feed stale':points.length?'Coinbase BTC-USD · '+(sticks?'5-second OHLC · reported trade size':'Current Kalshi round'):'Waiting for current-round prices';
-  if(!points.length)return;
+  let statusText=!last?'Waiting for Coinbase BTC ticks':Date.now()-last>15000?'Coinbase BTC feed stale':points.length?'Coinbase BTC-USD · '+(sticks?'5-second OHLC · reported trade size':'Current Kalshi round'):'Waiting for current-round prices';
+  if(!points.length){setDeskText(chart.status,statusText);return;}
   const values=points.flatMap(p=>[p.high,p.low]);
   if(Number.isFinite(target))values.push(target);
   const latest=points.at(-1);
@@ -794,7 +797,7 @@ function mountBtcLiveCharts(desk){
     c.lineTo(x(end),y(latest.close+width));
     c.lineTo(x(end),y(latest.close-width));
     c.closePath();c.fill();
-    chart.status.textContent+=' · Shading: recent volatility estimate';
+    statusText+=' · Shading: recent volatility estimate';
    }
    c.beginPath();
    points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
@@ -816,6 +819,7 @@ function mountBtcLiveCharts(desk){
   c.font='13px monospace';
   c.fillStyle='#100a1a';
   c.fillText(latest.close.toFixed(2),w-78,labelY+13);
+  setDeskText(chart.status,statusText);
  }
  function paint(){
   if(document.hidden)return;
@@ -902,17 +906,19 @@ function mountBtcRoundCard(){
   const signal=engineSignals.find(row=>row.asset==='BTC');
   const feed=signal?.tradingView;
   const direction=active?btcRoundDirection(market,feed,now):'WAIT';
-  sideFields.call.textContent=direction;
+  setDeskText(sideFields.call,direction);
   sideFields.call.dataset.direction=direction;
-  fields.tileDirection.textContent=direction;
+  setDeskText(fields.tileDirection,direction);
   fields.tileDirection.dataset.direction=direction;
   sideFields.meter.dataset.direction=direction;
-  sideFields.action.textContent=quotesFresh&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?(signal.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN'):'WAIT';
+  setDeskText(sideFields.action,quotesFresh&&signal?.ticker===market.ticker&&!signal.displayEntryBlock?(signal.action||'WAIT').replace('BUY YES','BUY UP').replace('BUY NO','BUY DOWN'):'WAIT');
   sideFields.action.dataset.direction=sideFields.action.textContent.includes('UP')?'UP':sideFields.action.textContent.includes('DOWN')||/SELL|EXIT/.test(sideFields.action.textContent)?'DOWN':'';
   const round=signal?.roundCall;
   const score=round?.confidencePercent;
   const scoreFresh=active&&round?.ticker===market.ticker&&now-round.asOf>=0&&now-round.asOf<90000&&Number.isFinite(score)&&score>=0&&score<=100;
-  sideFields.confidence.textContent=sideFields.confidenceBadge.textContent=scoreFresh?Math.round(score)+'%':'—';
+  const confidence=scoreFresh?Math.round(score)+'%':'—';
+  setDeskText(sideFields.confidence,confidence);
+  setDeskText(sideFields.confidenceBadge,confidence);
   sideFields.confidenceBadge.dataset.direction=direction;
   sideFields.meter.style.setProperty('--btc-sweep',(scoreFresh?score*1.8:0)+'deg');
   sideFields.meter.classList.toggle('has-score',scoreFresh);
@@ -920,25 +926,27 @@ function mountBtcRoundCard(){
   const opposite=active&&feed?.ticker===market.ticker&&feed.status==='FRESH'&&liveAge>=0&&liveAge<=20000&&
     ((direction==='UP'&&feed.direction==='DOWN')||(direction==='DOWN'&&feed.direction==='UP'));
   sideFields.flipBar.dataset.state=opposite?'opposing':direction==='WAIT'?'pending':'aligned';
-  sideFields.flip.textContent=opposite?'TradingView flipped '+feed.direction:direction==='WAIT'?'Awaiting direction':'No opposite TradingView tick';
+  setDeskText(sideFields.flip,opposite?'TradingView flipped '+feed.direction:direction==='WAIT'?'Awaiting direction':'No opposite TradingView tick');
   const seconds=Math.max(0,Math.ceil((close-now)/1000));
-  fields.age.textContent=quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round';
+  setDeskText(fields.age,quotesFresh?'Quotes '+Math.floor(age/1000)+'s ago':active?'Quotes stale':'Waiting for active round');
   const timer=active?Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0'):'—';
-  fields.roundTime.textContent=active?timer+' left · '+market.ticker:'Waiting for active round';
-  fields.ticker.textContent=active?market.ticker:'—';
-  fields.clock.textContent=active?pacific.format(close):'—';
+  setDeskText(fields.roundTime,active?timer+' left · '+market.ticker:'Waiting for active round');
+  setDeskText(fields.ticker,active?market.ticker:'—');
+  setDeskText(fields.clock,active?pacific.format(close):'—');
   const target=Number(market?.floor_strike);
-  fields.target.textContent=active&&target>0&&Number.isFinite(target)?dollars.format(target):'—';
-  fields.marketClock.textContent=marketClock.format(now);
+  setDeskText(fields.target,active&&target>0&&Number.isFinite(target)?dollars.format(target):'—');
+  setDeskText(fields.marketClock,marketClock.format(now));
   const spotAge=now-spotTick?.t;
   const spotFresh=spotAge>=0&&spotAge<15000;
-  fields.spot.textContent=fields.spotNow.textContent=spotFresh?dollars.format(spotTick.price):'—';
+  const spot=spotFresh?dollars.format(spotTick.price):'—';
+  setDeskText(fields.spot,spot);
+  setDeskText(fields.spotNow,spot);
   const gap=active&&spotFresh&&target>0&&Number.isFinite(target)?spotTick.price-target:NaN;
-  fields.gap.textContent=Number.isFinite(gap)?(gap>0?'+':'')+dollars.format(gap)+' · '+(gap/target*100).toFixed(3)+'%':'—';
+  setDeskText(fields.gap,Number.isFinite(gap)?(gap>0?'+':'')+dollars.format(gap)+' · '+(gap/target*100).toFixed(3)+'%':'—');
   fields.gap.dataset.direction=gap>0?'UP':gap<0?'DOWN':'';
-  fields.summary.textContent=Number.isFinite(gap)?'vs target '+fields.gap.textContent+' · '+timer+' left':spotFresh?'Coinbase BTC-USD':'Waiting for fresh Coinbase ticks';
+  setDeskText(fields.summary,Number.isFinite(gap)?'vs target '+fields.gap.textContent+' · '+timer+' left':spotFresh?'Coinbase BTC-USD':'Waiting for fresh Coinbase ticks');
   for(const [field,key] of [['yesBid','yes_bid'],['yesAsk','yes_ask'],['noBid','no_bid'],['noAsk','no_ask']]){
-   fields[field].textContent=quotesFresh?percent(price(market,key)):'—';
+   setDeskText(fields[field],quotesFresh?percent(price(market,key)):'—');
   }
  }
  paint();
