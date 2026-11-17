@@ -6,6 +6,8 @@ function arrange(){
  const radar=document.getElementById('btcLockDesk');
  if(!grid||!middle||!signals||!radar)return false;
  if(radar.previousElementSibling!==signals)radar.before(signals);
+ const marketDesk=document.getElementById('btcMarketDesk');
+ if(marketDesk)grid.after(marketDesk);
  const lower=document.getElementById('btLowerCommandRow');
  if(lower){const easy=document.getElementById('quickAssets')?.closest('.card');const desk=document.getElementById('signalDesk');if(easy&&easy.parentElement===lower)grid.querySelector('.bt-command-left')?.append(easy);if(desk&&desk.parentElement===lower)grid.querySelector('.bt-command-right')?.append(desk);lower.remove()}
  grid.classList.remove('bt-command-bottom-filled');
