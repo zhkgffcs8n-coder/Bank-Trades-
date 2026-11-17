@@ -154,6 +154,13 @@ exports.handler=async event=>{
         research_only:true,calibrated_probabilities:false,results});
     }
 
+    if(q.mode==='gold-round'){
+      const data=await get(base+'/markets?series_ticker=KXGOLD15M&status=open&limit=20',4500);
+      const now=Date.now();
+      const market=(data.markets||[]).find(m=>Date.parse(m.open_time)<=now&&Date.parse(m.close_time)>now)||null;
+      return reply(200,{market,fetched_at:new Date().toISOString()});
+    }
+
     if(q.mode==='commodities'){
       // Search live Kalshi events by commodity keywords rather than assuming series tickers.
       const names=['GOLD','SILVER','PLATINUM','PALLADIUM','COPPER','OIL','NATURAL GAS'];

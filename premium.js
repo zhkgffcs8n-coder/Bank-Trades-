@@ -729,6 +729,12 @@ function mountBtcLiveCharts(telemetry, signalCard){
   if(!points.length)return;
   const values=points.flatMap(p=>[p.high,p.low]);
   if(Number.isFinite(target))values.push(target);
+  const latest=points.at(-1);
+  const recent=points.slice(-25);
+  const moves=recent.slice(1).map((point,index)=>({delta:point.close-recent[index].close,seconds:(point.t-recent[index].t)/1000}));
+  const rate=moves.length>=12?Math.sqrt(moves.reduce((sum,m)=>sum+m.delta*m.delta,0)/moves.reduce((sum,m)=>sum+m.seconds,0)):NaN;
+  const width=!sticks&&latest.t<end?rate*Math.sqrt((end-latest.t)/1000):NaN;
+  if(Number.isFinite(width))values.push(latest.close-width,latest.close+width);
   const lo=Math.min(...values),hi=Math.max(...values),pad=Math.max(1,(hi-lo)*.08);
   const x=t=>16+(t-start)/Math.max(5000,end-start)*(w-100);
   const y=v=>h-18-(v-lo+pad)/(hi-lo+2*pad)*(h-36);
@@ -748,6 +754,14 @@ function mountBtcLiveCharts(telemetry, signalCard){
     c.fillRect(x(p.t)-3,Math.min(y(p.open),y(p.close)),8,Math.max(2,Math.abs(y(p.open)-y(p.close))));
    }
   }else{
+   if(Number.isFinite(width)){
+    c.fillStyle='#8c8bff35';c.beginPath();
+    c.moveTo(x(latest.t),y(latest.close));
+    c.lineTo(x(end),y(latest.close+width));
+    c.lineTo(x(end),y(latest.close-width));
+    c.closePath();c.fill();
+    chart.status.textContent+=' · Shading: recent volatility estimate';
+   }
    c.strokeStyle='#62dfff';c.lineWidth=3;c.beginPath();
    points.forEach((p,i)=>i?c.lineTo(x(p.t),y(p.close)):c.moveTo(x(p.t),y(p.close)));
    c.stroke();
@@ -819,6 +833,28 @@ function mountBtcRoundCard(){
  <div><small>DOWN bid / ask</small><strong data-btc="down">—</strong></div>
  <div><small>Round closes (PT)</small><strong data-btc="clock">—</strong></div></div>`;
  tracker.after(card);
+ const gold=document.createElement('section');
+ gold.className='card btc-round-card';
+ gold.innerHTML='<h3>Gold · Kalshi 15-minute round</h3><div class="btc-round-grid"><div class="btc-target"><small>Gold target</small><strong>—</strong></div></div><small data-gold-status>Loading Kalshi Gold</small>';
+ card.before(gold);
+ let goldBusy=false;
+ async function refreshGold(){
+  if(goldBusy||document.hidden)return;
+  goldBusy=true;
+  const target=gold.querySelector('strong'),status=gold.querySelector('[data-gold-status]');
+  try{
+   const result=await fetch('/api/data?mode=gold-round',{cache:'no-store',signal:AbortSignal.timeout(8000)});
+   if(!result.ok)throw Error('Gold request failed');
+   const {market}=await result.json(),strike=Number(market?.floor_strike);
+   target.textContent=strike>0&&Number.isFinite(strike)?new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(strike):'—';
+   status.textContent=market?market.ticker+' · UP '+goldAsk(price(market,'yes_ask'))+' / DOWN '+goldAsk(price(market,'no_ask')):'No active Gold round';
+  }catch{
+   target.textContent='—';status.textContent='Gold feed unavailable';
+  }finally{goldBusy=false}
+ }
+ const goldAsk=value=>Number.isFinite(value)&&value>=0&&value<=100?value.toFixed(1)+'%':'—';
+ refreshGold();
+ setInterval(refreshGold,15000);
  const signalCard=document.createElement('section');
  signalCard.className='card btc-round-card';
  signalCard.style.marginTop='12px';
@@ -841,10 +877,12 @@ function mountBtcRoundCard(){
   if(desktop.matches){
    if(signalCard.parentElement!==left)left.append(signalCard);
    if(card.parentElement!==right)right.append(card);
+   if(gold.nextElementSibling!==card)card.before(gold);
    if(chart&&chart!==signalCard.nextElementSibling)signalCard.after(chart);
   }else{
    if(tracker.nextElementSibling!==card)tracker.after(card);
    if(card.nextElementSibling!==signalCard)card.after(signalCard);
+   if(signalCard.parentElement!==gold.parentElement)signalCard.before(gold);
    if(chart&&signalCard.nextElementSibling!==chart)signalCard.after(chart);
   }
  }
