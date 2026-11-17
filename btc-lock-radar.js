@@ -925,6 +925,9 @@ function scalp(market,left,side,strong,quotes,feed){
     positions.set(selectedCoin,tracked);
     entered=true;
   }
+  const announce=(stage,action)=>window.dispatchEvent(new CustomEvent('banktrades:scalper-voice',{
+    detail:{stage,action,asset:selectedCoin,ticker,side:tracked.side,entry:tracked.entry,exitBid:tracked.exitBid}
+  }));
   const quote=quotes[tracked.side];
   const move=quote.bid-tracked.entry;
   if(!tracked.exit){
@@ -933,7 +936,13 @@ function scalp(market,left,side,strong,quotes,feed){
     else if(move>=8)tracked.exit='TAKE PROFIT';
     else if(!entered&&side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
   }
-  if(tracked.exit&&tracked.exitBid==null)tracked.exitBid=quote.bid;
+  if(entered)announce('entry','BUY');
+  if(tracked.exit&&tracked.exitBid==null){
+    tracked.exitBid=quote.bid;
+    announce('exit',tracked.exit.replace(' · ',' because '));
+  }else if(!entered&&!tracked.exit){
+    announce('hold','HOLD');
+  }
   const liveMove=move.toFixed(1);
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
