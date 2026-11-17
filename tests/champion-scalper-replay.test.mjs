@@ -30,9 +30,9 @@ for(const side of ['up','down']){
     assert.deepEqual(result.position,positions.has('BTC')?JSON.parse(JSON.stringify(positions.get('BTC'))):null);
     previous=result.position;
    }
-   assert.deepEqual(voice.map(call=>call.stage),['entry','hold','exit']);
+   assert.deepEqual(voice.map(call=>call.stage),['entry','exit']);
    assert.equal(voice[0].entry,60);
-   assert.equal(voice[2].exitBid,last.quotes[side].bid);
+   assert.equal(voice[1].exitBid,last.quotes[side].bid);
   });
  }
 }
