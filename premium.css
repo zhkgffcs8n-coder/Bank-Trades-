@@ -648,3 +648,5 @@ html.bt-market-scroll-stable { overflow-anchor: none; scroll-behavior: auto; }
 #btcProScalper .bt-scalp-prices [data-price-cash]{border-color:#22d3ee;background:#082b38;color:#67e8f9}
 #btcProScalper .bt-scalp-prices[data-side="down"] [data-price-entry]{border-color:#fb7185;background:#350f21;color:#fda4af}
 #btcProScalper .bt-scalp-prices[data-closed="true"] [data-price-cash]{border-color:#facc15;background:#302609;color:#fef08a;box-shadow:0 0 15px #facc1533}
+
+#btcProScalper [data-cash-percent]:empty::before{content:"\00a0"}

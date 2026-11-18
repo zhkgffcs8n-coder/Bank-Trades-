@@ -7,7 +7,7 @@ scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 const scalpPrices=document.createElement('div');
 scalpPrices.className='bt-scalp-prices';
-scalpPrices.innerHTML='<div data-price-entry><span>BUY IN · ASK</span><strong data-entry-percent>—%</strong></div><div data-price-cash><span data-cash-label>CASH OUT · LIVE BID</span><strong data-cash-percent>—%</strong></div>';
+scalpPrices.innerHTML='<div data-price-entry><span>BUY IN · ASK</span><strong data-entry-percent>—%</strong></div><div data-price-cash><span data-cash-label>CASH OUT · WAIT</span><strong data-cash-percent></strong></div>';
 scalper.querySelector('[data-action]').after(scalpPrices);
 const entryPercent=scalpPrices.querySelector('[data-entry-percent]');
 const cashPercent=scalpPrices.querySelector('[data-cash-percent]');
@@ -15,9 +15,9 @@ const cashLabel=scalpPrices.querySelector('[data-cash-label]');
 function paintScalpPrices(position,bid){
   const active=position&&Number.isFinite(position.entry);
   entryPercent.textContent=active?position.entry.toFixed(1)+'%':'—%';
-  const cash=position?.exitBid??bid;
-  cashPercent.textContent=active&&Number.isFinite(cash)?cash.toFixed(1)+'%':'—%';
-  cashLabel.textContent=position?.exitBid!=null?'CASH OUT · EXIT CALL':'CASH OUT · LIVE BID';
+  const cash=position?.exit?position.exitBid:undefined;
+  cashPercent.textContent=active&&Number.isFinite(cash)?cash.toFixed(1)+'%':'';
+  cashLabel.textContent=position?.exitBid!=null?'CASH OUT · EXIT CALL':'CASH OUT · WAIT';
   scalpPrices.dataset.side=active?position.side:'';
   scalpPrices.dataset.closed=String(position?.exitBid!=null);
 }
