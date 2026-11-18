@@ -15,7 +15,7 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
  const refresh=runInNewContext(book+'\n'+listener+'\nrefreshBtcScalpBook',{
   window:{addEventListener:(name,fn)=>{if(name==='banktrades:kalshi-quote')receive=fn;if(name==='banktrades:shared-signals')onEvidence=fn;}},
   Date:{parse:Date.parse,now:()=>now},Number,scalpQuotes:quotes,positions,selectedCoin:'BTC',
-  document:{hidden:false},AbortSignal,btcScalpBookMaxAge:1800,btcScalpBookPending:false,
+  document:{hidden:false},AbortSignal,btcScalpBookMaxAge:1800,btcScalpBookPending:false,latestBtcStreamQuote:null,
   async fetch(url){
    assert.equal(url,'/api/data?mode=orderbook&live=1&ticker='+ticker);
    return {ok:true,json:async()=>({fetched_at:new Date(now).toISOString(),orderbook:{orderbook_fp:{
@@ -42,6 +42,28 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
  const checks=calls.length;
  onEvidence();
  assert.equal(calls.length,checks,'stale depth cannot authorize an evidence-triggered exit');
+});
+test('browser forwards same-millisecond stream bids in order and invalidates on interruption',()=>{
+ const ticker='KXBTC15M-TEST';
+ const calls=[],snapshots=new Map();
+ const {apply,reset}=runInNewContext(listener+'\n({apply:applyBtcStreamQuote,reset:invalidateBtcStream})',{
+  window:{addEventListener(){}},setInterval(){},Date,scalpQuotes:snapshots,
+  selectedCoin:'BTC',positions:new Map([['BTC',{ticker}]]),
+  btcScalpBookMaxAge:1800,latestBtcStreamQuote:null,
+  price:(market,key)=>Number(market[key+'_dollars'])*100,
+  scalp:(_market,_left,_side,_strong,quotes)=>calls.push(quotes.up.bid),
+  scalpExitEvidence:()=>null,showScalp(){}
+ });
+ const now=Date.now();
+ const quote={ticker,receivedAt:now,expiresAt:now+60000,yesBid:80,noBid:19};
+ assert.equal(apply({...quote,ticker:'KXBTC15M-WRONG'}),false);
+ assert.equal(apply(quote),true);
+ assert.equal(apply({...quote,yesBid:43,noBid:56}),true);
+ assert.deepEqual(calls,[80,43]);
+ assert.equal(snapshots.get('BTC').isStream,true);
+ reset();
+ assert.equal(snapshots.get('BTC').at,0);
+ assert.equal(snapshots.get('BTC').isStream,false);
 });
 test('single asset endpoint does not wait for unrelated markets',async()=>{
  const previous=globalThis.fetch;let count=0;
