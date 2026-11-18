@@ -345,6 +345,19 @@ window.addEventListener('banktrades:shared-signals',event=>{
  paintV8();
 });
 const researchRowStyle='margin:6px 0;padding:8px;border:1px solid #526aaf;border-radius:9px;font-size:13px;line-height:1.4';
+function bestBid(book,side,minSize=1){
+  const dollars=book?.[side+'_dollars'];
+  const levels=dollars??book?.[side];
+  let best=null;
+  for(const level of Array.isArray(levels)?levels:[]){
+    const price=Number(level?.[0])/(dollars?1:100),size=Number(level?.[1]);
+    if(!Number.isFinite(price)||price<=0||price>=1||!Number.isFinite(size)||size<=0||size<minSize)continue;
+    if(!best||price>best.price)best={price,size};
+  }
+  return best;
+}
+// One-contract research estimate. Reserve a cent per leg for slippage.
+function estimatedCost(price){return Math.ceil(7*price*(1-price))/100+.01}
 function createScalperBots(coin){
 const shadow=document.createElement('p');
 shadow.style.cssText=researchRowStyle;
@@ -456,19 +469,6 @@ function updatePredator(input){
   (predatorWatch.target*100).toFixed(1)+'% · modeled target net '+(predatorWatch.estimatedNet*100).toFixed(1)+
   '¢ · 30s trial · uncalibrated · Coinbase event-to-display '+(Date.now()-predatorWatch.sourceEventAt)+'ms';
 }
-function bestBid(book,side,minSize=1){
-  const dollars=book?.[side+'_dollars'];
-  const levels=dollars??book?.[side];
-  let best=null;
-  for(const level of Array.isArray(levels)?levels:[]){
-    const price=Number(level?.[0])/(dollars?1:100),size=Number(level?.[1]);
-    if(!Number.isFinite(price)||price<=0||price>=1||!Number.isFinite(size)||size<=0||size<minSize)continue;
-    if(!best||price>best.price)best={price,size};
-  }
-  return best;
-}
-// One-contract research estimate. Reserve a cent per leg for slippage.
-function estimatedCost(price){return Math.ceil(7*price*(1-price))/100+.01}
 const cents=value=>Math.round(value*100)+'¢ / '+Math.round(value*100)+'%';
 // V6 consumes the same timestamped book and trade tape as V5.
 const challenger=document.createElement('p');
@@ -1024,7 +1024,7 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
     reversalReadings.set(selectedCoin,reversal.reading);
     if(selectedCoin==='BTC'){
       const net=move/100-estimatedCost(tracked.entry/100)-estimatedCost(quote.bid/100);
-      if(net>0.000001&&(quote.bid>=80||move>=16||reversal.confirmed))tracked.exit='TAKE PROFIT';
+      if(net>0.000001&&(quote.bid>=80||Math.round(quote.bid*100)*5>=Math.round(tracked.entry*100)*6||reversal.confirmed))tracked.exit='TAKE PROFIT';
     }else if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
