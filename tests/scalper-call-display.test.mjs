@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import {runInNewContext} from 'node:vm';
 const source=readFileSync(new URL('../btc-lock-radar.js',import.meta.url),'utf8');
-const status=source.slice(source.indexOf('function scalpQuoteStatus('),source.indexOf('function showScalp('));
+const status=source.slice(source.indexOf('const scalpEntryVisibleUntil='),source.indexOf('function showScalp('));
 const display=source.slice(source.indexOf('function showScalp('),source.indexOf('function scalp(market'));
 function harness(position,snapshot){
  const scalpLabel={textContent:''},scalpDetail={textContent:''},prices=[];
