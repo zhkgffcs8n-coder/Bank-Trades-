@@ -938,6 +938,7 @@ function showScalp(message,exitSide,ticker){
   const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(1)+'% '+(quoteStatus.fresh?'LIVE BID':'LAST BID · STALE'):'BID UNAVAILABLE'):'';
   const label=callLabel+(liveLabel?' · '+liveLabel:'');
   sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
+  scalpAction.classList.toggle('bt-hold-glow',action.startsWith('HOLD'));
   if(scalpLabel.textContent!==label){
     const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
       :action.startsWith('HOLD')?'hold':action==='TAKE PROFIT'?'profit':action==='SELL FAST'?'fast'

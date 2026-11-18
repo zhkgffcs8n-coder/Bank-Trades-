@@ -8,7 +8,7 @@ const display=source.slice(source.indexOf('function showScalp('),source.indexOf(
 function harness(position,snapshot){
  const scalpLabel={textContent:''},scalpDetail={textContent:''},prices=[];
  const context={positions:new Map([['BTC',position]]),scalpQuotes:new Map([['BTC',snapshot]]),selectedCoin:'BTC',
-  scalpLabel,scalpDetail,scalpAction:{style:{}},scalpIcon:{},scalpMotion:null,
+  scalpLabel,scalpDetail,scalpAction:{style:{},classList:{toggle(){}}},scalpIcon:{},scalpMotion:null,
   actionLooks:new Proxy({},{get:()=>['icon','black','white',null]}),
   paintScalpPrices:(p,bid)=>prices.push({p,bid})};
  const show=runInNewContext('let sharedScalpCall;'+status+display+'\nshowScalp',context);
