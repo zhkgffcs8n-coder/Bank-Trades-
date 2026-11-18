@@ -1019,7 +1019,8 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   if(!tracked.exit&&!entered){
     const reversal=confirmedScalpReversal(tracked,quotes,evidence,reversalReadings.get(selectedCoin));
     reversalReadings.set(selectedCoin,reversal.reading);
-    if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
+    const takeProfit=selectedCoin==='BTC'&&quote.bid>=80&&move>0;
+    if(takeProfit||reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
   if(newExit)tracked.exitBid=quote.bid;
