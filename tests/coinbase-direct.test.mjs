@@ -8,7 +8,7 @@ test('Coinbase panel is shipped and its exact public endpoints are allowed by CS
  const build=readFileSync(new URL('../scripts/build.mjs',import.meta.url),'utf8');
  const policy=readFileSync(new URL('../netlify.toml',import.meta.url),'utf8');
  assert.ok(build.includes("'coinbase-direct.js'"));
- assert.ok(policy.includes("connect-src 'self' https://api.exchange.coinbase.com wss://advanced-trade-ws.coinbase.com;"));
+ assert.deepEqual(policy.match(/connect-src ([^;]+);/)[1].split(" "),["'self'","https://bank-trades-production.up.railway.app","https://api.exchange.coinbase.com","wss://advanced-trade-ws.coinbase.com"]);
 });
 test('hourly candles cannot masquerade as minute history; rolling levels use completed candles',async()=>{
  const nodes=new Map();
