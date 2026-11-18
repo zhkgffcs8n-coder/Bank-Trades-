@@ -917,8 +917,9 @@ function persistScalpPosition(coin,position,market,left){
 const scalpQuotes=new Map();
 const btcScalpBookMaxAge=1800;
 let btcScalpBookPending=false;
+let latestBtcStreamQuote=null;
 function scalpQuoteStatus(position,snapshot,now=Date.now()){
-  const fresh=snapshot?.ticker===position.ticker&&now>=snapshot.at&&now-snapshot.at<=(snapshot.isOrderBook?btcScalpBookMaxAge:5000)&&now<snapshot.expiresAt;
+  const fresh=snapshot?.ticker===position.ticker&&snapshot.at<=now+2000&&now-snapshot.at<=(snapshot.isOrderBook?btcScalpBookMaxAge:5000)&&now<snapshot.expiresAt;
   const bid=snapshot?.ticker===position.ticker?snapshot[position.side]:null;
   return {bid:Number.isFinite(bid)?bid:null,fresh:fresh&&Number.isFinite(bid)&&(!position.ticker.startsWith('KXBTC15M-')||snapshot.isOrderBook)};
 }
@@ -937,7 +938,7 @@ function showScalp(message,exitSide,ticker){
   const action=separator<0?message:message.slice(0,separator);
   const detail=separator<0?'':message.slice(separator+3);
   const callLabel=exitSide?action+' '+exitSide.toUpperCase():action;
-  const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(2).replace(/0$/,'')+'% '+(quoteStatus.fresh?'LIVE BID':'LAST BID · STALE'):'BID UNAVAILABLE'):'';
+  const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(2).replace(/0$/,'')+'% '+(quoteStatus.fresh?('LIVE BID'+(selectedCoin==='BTC'&&scalpQuotes.get(selectedCoin)?.isOrderBook&&!scalpQuotes.get(selectedCoin)?.isStream?' · POLLING':'')):'LAST BID · STALE'):'BID UNAVAILABLE'):'';
   const label=callLabel+(liveLabel?' · '+liveLabel:'');
   sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
   scalpAction.classList.toggle('bt-hold-glow',action.startsWith('HOLD'));
@@ -1032,9 +1033,11 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
   showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
   paintScalpPrices(tracked,quote.bid);
-  if(entered&&selectedCoin==='BTC')refreshBtcScalpBook();
   if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
-  else if(entered)announce('entry','BUY');
+  else if(entered){
+    announce('entry','BUY');
+    if(selectedCoin==='BTC')refreshBtcScalpBook();
+  }
 }
 // Each coin quote is delivered immediately, without waiting for slower peers or spot candles.
 window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
@@ -1061,10 +1064,37 @@ function refreshScalpExit(){
     scalp(market,(snapshot.expiresAt-now)/1000,'mixed',false,quotes,undefined,scalpExitEvidence(coin,market.ticker));
   }
 }
+function applyBtcStreamQuote(quote){
+  const position=positions.get('BTC'),now=Date.now();
+  if(selectedCoin!=='BTC'||!position||!quote||position.ticker!==quote.ticker||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=now||
+     !Number.isFinite(quote.receivedAt)||quote.receivedAt>now+2000||now-quote.receivedAt>btcScalpBookMaxAge||
+     ![quote.yesBid,quote.noBid].every(bid=>Number.isFinite(bid)&&bid>0&&bid<100)||
+     Math.round((quote.yesBid+quote.noBid)*100)>10000)return false;
+  const previous=scalpQuotes.get('BTC');
+  if(previous?.isStream&&previous.ticker===quote.ticker&&previous.at>quote.receivedAt)return true;
+  const market={ticker:quote.ticker,close_time:new Date(quote.expiresAt).toISOString(),
+    yes_ask_dollars:((100-quote.noBid)/100).toFixed(4),no_ask_dollars:((100-quote.yesBid)/100).toFixed(4)};
+  scalpQuotes.set('BTC',{ticker:quote.ticker,at:quote.receivedAt,expiresAt:quote.expiresAt,
+    up:quote.yesBid,down:quote.noBid,market,isOrderBook:true,isStream:true});
+  refreshScalpExit();
+  return true;
+}
+function invalidateBtcStream(){
+  latestBtcStreamQuote=null;
+  const previous=scalpQuotes.get('BTC');
+  if(previous?.isStream){
+    scalpQuotes.set('BTC',{...previous,at:0,isStream:false});
+    if(selectedCoin==='BTC')showScalp('QUOTE STREAM INTERRUPTED · Reconnecting to Kalshi');
+  }
+}
 async function refreshBtcScalpBook(){
   const position=positions.get('BTC');
   if(document.hidden||selectedCoin!=='BTC'||!position||btcScalpBookPending)return;
   const previous=scalpQuotes.get('BTC');
+  if(latestBtcStreamQuote?.ticker===position.ticker&&Date.now()-latestBtcStreamQuote.receivedAt<=btcScalpBookMaxAge){
+    if(previous?.isStream&&previous.at===latestBtcStreamQuote.receivedAt)return;
+    if(applyBtcStreamQuote(latestBtcStreamQuote))return;
+  }
   if(previous?.ticker!==position.ticker||previous.expiresAt<=Date.now())return;
   btcScalpBookPending=true;
   try{
@@ -1073,7 +1103,8 @@ async function refreshBtcScalpBook(){
     if(!response.ok)return;
     const data=await response.json(),now=Date.now(),at=Date.parse(data.fetched_at);
     if(positions.get('BTC')!==position||!Number.isFinite(at)||at>now||now-at>btcScalpBookMaxAge||
-       previous.expiresAt<=now||at<=(scalpQuotes.get('BTC')?.at??0))return;
+       previous.expiresAt<=now||at<=(scalpQuotes.get('BTC')?.at??0)||
+       (scalpQuotes.get('BTC')?.isStream&&now-scalpQuotes.get('BTC').at<=btcScalpBookMaxAge))return;
     const book=data.orderbook?.orderbook_fp??data.orderbook;
     const yes=bestBid(book,'yes',0),no=bestBid(book,'no',0);
     if(!yes||!no||Math.round((yes.price+no.price)*10000)>10000)return;
@@ -1174,6 +1205,15 @@ refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
 refreshPredatorReport();setInterval(refreshPredatorReport,2000);
 setInterval(()=>{if(!document.hidden){paintV8();paintSuperTracker();refreshSuperTracker();}},5000);
+const btcQuoteStream=new EventSource('https://bank-trades-production.up.railway.app/btc-quotes');
+btcQuoteStream.addEventListener('quote',event=>{
+  try{
+    latestBtcStreamQuote=JSON.parse(event.data);
+    applyBtcStreamQuote(latestBtcStreamQuote);
+  }catch{invalidateBtcStream();}
+});
+btcQuoteStream.addEventListener('unavailable',invalidateBtcStream);
+btcQuoteStream.addEventListener('error',invalidateBtcStream);
 setInterval(refreshBtcScalpBook,400);
 evaluate();setInterval(()=>{if(!document.hidden&&selectedCoin==='BTC')evaluate()},5000);
 setInterval(()=>{if(!document.hidden&&selectedCoin!=='BTC')evaluate()},30000);
