@@ -885,12 +885,29 @@ if(!mountScalper()){
 }
 
 const positions=new Map();
+const scalpQuotes=new Map();
+function scalpQuoteStatus(position,snapshot,now=Date.now()){
+  const fresh=snapshot?.ticker===position.ticker&&now>=snapshot.at&&now-snapshot.at<=30000&&now<snapshot.expiresAt;
+  const bid=snapshot?.ticker===position.ticker?snapshot[position.side]:null;
+  return {bid:Number.isFinite(bid)?bid:null,fresh:fresh&&Number.isFinite(bid)};
+}
 function showScalp(message,exitSide,ticker){
-  if(!ticker)paintScalpPrices(positions.get(selectedCoin));
+  const position=positions.get(selectedCoin);
+  const quoteStatus=position?scalpQuoteStatus(position,scalpQuotes.get(selectedCoin)):null;
+  if(!ticker&&position){
+    const feedMessage=message;
+    const action=position.exit||'HOLD '+position.side.toUpperCase();
+    exitSide=position.exit?position.side:null;
+    ticker=position.ticker;
+    message=action+' · Called BUY '+position.side.toUpperCase()+' at '+position.entry.toFixed(1)+'% · '+ticker+' · '+feedMessage;
+    paintScalpPrices(position,quoteStatus?.fresh?quoteStatus.bid:undefined);
+  }
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
   const detail=separator<0?'':message.slice(separator+3);
-  const label=exitSide?action+' '+exitSide.toUpperCase():action;
+  const callLabel=exitSide?action+' '+exitSide.toUpperCase():action;
+  const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(1)+'% '+(quoteStatus.fresh?'LIVE BID':'LAST BID · STALE'):'BID UNAVAILABLE'):'';
+  const label=callLabel+(liveLabel?' · '+liveLabel:'');
   sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
   if(scalpLabel.textContent!==label){
     const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
@@ -1001,6 +1018,12 @@ async function evaluate(){
 function assess(coin,market,e,visible){
   const unavailable=message=>{if(visible)waitForData(message)};
   if(!market?.ticker?.startsWith('KX'+coin+'15M-'))return unavailable('Kalshi '+coin+' 15-minute contract unavailable');
+  // Refresh the called contract's bid even when spot entry evidence is unavailable.
+  const quoteAt=Date.now(),quoteExpiry=Date.parse(market.close_time||market.expires_at);
+  const upBid=price(market,'yes_bid'),downBid=price(market,'no_bid');
+  if(quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
+    scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid});
+  }
   if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||Date.now()-e.at>90000||Date.now()-e.candleAt>180000||e.at>Date.now()||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');
   const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
   if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb)return unavailable('Invalid '+coin+' market or quotes');
