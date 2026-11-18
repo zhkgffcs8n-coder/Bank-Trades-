@@ -887,7 +887,7 @@ if(!mountScalper()){
 const positions=new Map();
 const scalpQuotes=new Map();
 function scalpQuoteStatus(position,snapshot,now=Date.now()){
-  const fresh=snapshot?.ticker===position.ticker&&now>=snapshot.at&&now-snapshot.at<=30000&&now<snapshot.expiresAt;
+  const fresh=snapshot?.ticker===position.ticker&&now>=snapshot.at&&now-snapshot.at<=5000&&now<snapshot.expiresAt;
   const bid=snapshot?.ticker===position.ticker?snapshot[position.side]:null;
   return {bid:Number.isFinite(bid)?bid:null,fresh:fresh&&Number.isFinite(bid)};
 }
@@ -980,10 +980,32 @@ function scalp(market,left,side,strong,quotes,feed){
   if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
   else if(entered)announce('entry','BUY');
 }
+// Each coin quote is delivered immediately, without waiting for slower peers or spot candles.
+window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
+  const coin=row?.asset,market=row?.market,at=Date.parse(row?.quote_received_at),now=Date.now();
+  if(!row?.available||!market?.ticker?.startsWith('KX'+coin+'15M-')||!Number.isFinite(at)||now-at>5000||at>now+2000)return;
+  const expiresAt=Date.parse(market.close_time),up=price(market,'yes_bid'),down=price(market,'no_bid');
+  if(!(expiresAt>now)||![up,down].every(value=>Number.isFinite(value)&&value>=0&&value<=100))return;
+  const previous=scalpQuotes.get(coin);
+  if(previous&&previous.at>=at)return;
+  scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down});
+  if(coin!==selectedCoin)return;
+  const position=positions.get(coin);
+  if(position?.ticker===market.ticker){
+    const quotes={up:{ask:price(market,'yes_ask'),bid:up},down:{ask:price(market,'no_ask'),bid:down}};
+    if(Object.values(quotes).every(q=>Number.isFinite(q.ask)&&q.ask>=q.bid&&q.ask<=100)){
+      scalp(market,(expiresAt-now)/1000,'mixed',false,quotes);
+    }
+  }
+});
+setInterval(()=>{
+ const position=positions.get(selectedCoin);
+ if(position&&!scalpQuoteStatus(position,scalpQuotes.get(selectedCoin)).fresh&&scalpLabel.textContent.includes('LIVE BID'))showScalp('QUOTES STALE · Waiting for Kalshi');
+},1000);
 const state=box.querySelector('#btcLockState'),facts=box.querySelector('#btcLockFacts');
 const directions=new Map();
 let pendingVersion;
-const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:Number(m?.[k]);
+const price=(m,k)=>m?.[k+'_dollars']!=null?Number(m[k+'_dollars'])*100:m?.[k]!=null?Number(m[k]):NaN;
 function waitForData(message){
   facts.textContent='';
   state.textContent='DATA WAIT · '+message;
@@ -995,7 +1017,7 @@ async function evaluate(){
   pendingVersion=version;
   try{
     const [markets,e]=await Promise.all([
-      fetch('/api/data?mode=markets',{cache:'no-store',signal:AbortSignal.timeout(15000)})
+      fetch('/api/data?mode=markets&live=1',{cache:'no-store',signal:AbortSignal.timeout(15000)})
         .then(r=>r.ok?r.json():null)
         .then(d=>Math.abs(Date.now()-Date.parse(d?.fetched_at))<30000
           ? d.results??[]:[]).catch(()=>[]),
@@ -1003,7 +1025,7 @@ async function evaluate(){
         :window.bankTradesSpotEvidence?.(coin,AbortSignal.timeout(10000)).catch(()=>null)
     ]);
     if(version!==selectionVersion)return;
-    const marketFor=asset=>markets.find(x=>x.asset===asset)?.market;
+    const marketFor=asset=>{const row=markets.find(x=>x.asset===asset);const at=Date.parse(row?.quote_received_at);return row?.available&&Date.now()-at<=5000&&at<=Date.now()+2000?{...row.market,quote_received_at:row.quote_received_at}:null;};
     const btcMarket=marketFor('BTC');
     for(const [asset,bot] of bots){
       const market=marketFor(asset);
@@ -1019,9 +1041,9 @@ function assess(coin,market,e,visible){
   const unavailable=message=>{if(visible)waitForData(message)};
   if(!market?.ticker?.startsWith('KX'+coin+'15M-'))return unavailable('Kalshi '+coin+' 15-minute contract unavailable');
   // Refresh the called contract's bid even when spot entry evidence is unavailable.
-  const quoteAt=Date.now(),quoteExpiry=Date.parse(market.close_time||market.expires_at);
+  const quoteAt=Date.parse(market.quote_received_at),quoteExpiry=Date.parse(market.close_time||market.expires_at);
   const upBid=price(market,'yes_bid'),downBid=price(market,'no_bid');
-  if(quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
+  if(quoteAt>=(scalpQuotes.get(coin)?.at??0)&&Date.now()-quoteAt<=5000&&quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
     scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid});
   }
   if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||Date.now()-e.at>90000||Date.now()-e.candleAt>180000||e.at>Date.now()||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');

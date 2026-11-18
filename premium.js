@@ -592,7 +592,19 @@ async function update(){
  if(fetching||document.hidden||Date.now()-lastFetch<(failures?3000:1000))return;fetching=true;lastFetch=Date.now();
  try{
  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),11000);
- let r;try{r=await fetch('/api/data?mode=markets&live=1',{cache:'no-store',signal:controller.signal})}finally{clearTimeout(timeout)}
+ let r;try{
+  const results=await Promise.all(assets.map(async asset=>{
+   try{
+    const response=await fetch('/api/data?mode=markets&live=1&asset='+encodeURIComponent(asset),{cache:'no-store',signal:controller.signal});
+    if(!response.ok)throw Error('Quote HTTP '+response.status);
+    const payload=await response.json(),row=payload.results?.find(item=>item.asset===asset);
+    if(!row)throw Error('Missing quote');
+    window.dispatchEvent(new CustomEvent('banktrades:kalshi-quote',{detail:row}));
+    return row;
+   }catch{return {asset,available:false,market:null};}
+  }));
+  r={ok:true,json:async()=>({results,fetched_at:new Date().toISOString()})};
+ }finally{clearTimeout(timeout)}
  if(!r.ok)throw Error('Feed HTTP '+r.status);
  const d=await r.json(),age=Date.now()-Date.parse(d.fetched_at);
  if(!Array.isArray(d.results)||!Number.isFinite(age)||age>90000||age< -15000)throw Error('Stale or invalid feed');
