@@ -70,6 +70,28 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
   let validUntil = 0;
   const positions = new Map();
   let previousQuotes = new Map();
+  const liveRows = new Map();
+  const bookQuotes = new Map();
+  const freshBook = (ticker, now) => {
+    const q = bookQuotes.get(ticker);
+    return q && q.expiresAt > now && now - q.receivedAt <= 1800 ? q : null;
+  };
+  function paintBid(ticker) {
+    const cell = liveRows.get(ticker);
+    if (!cell) return;
+    const now = Date.now();
+    const book = freshBook(ticker, now);
+    const listing = fastQuotes.get(cell.position.asset);
+    const fallback = listing?.ticker === ticker && listing.close > now && now - listing.received <= 5000 ? listing : null;
+    const quote = book || fallback;
+    const value = cell.position.direction > 0 ? quote?.yesBid : quote?.noBid;
+    const fresh = Number.isFinite(value);
+    const side = cell.position.direction > 0 ? 'UP' : 'DOWN';
+    const label = fresh ? 'LIVE '+side+' BID'+(book ? '' : ' · POLLING') : side+' BID · STALE';
+    const percent = fresh ? value.toFixed(2).replace(/0$/, '')+'%' : '—%';
+    if (cell.label.textContent !== label) cell.label.textContent = label;
+    if (cell.value.textContent !== percent) cell.value.textContent = percent;
+  }
 
   function spread(bid, ask) {
     return bid > 0 && ask < 100 && ask >= bid ? ask - bid : Infinity;
@@ -80,6 +102,7 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     call.className = 'signal ' + color;
     detail.textContent = reason;
     prices.hidden = !entries.length;
+    liveRows.clear();
     const rows = entries.map(({ position, action, exitBid, liveAsk }) => {
       const row = document.createElement('div');
       const heading = document.createElement('strong');
@@ -114,6 +137,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       liveValue.textContent = Number.isFinite(exitBid) ? exitBid.toFixed(1)+'%' : '—%';
       if (!Number.isFinite(exitBid)) live.title = 'Waiting for fresh Kalshi quotes';
       live.append(liveLabel, liveValue);
+      liveRows.set(position.ticker,{position,label:liveLabel,value:liveValue});
+      paintBid(position.ticker);
       context.textContent = 'Entry bid ' + position.bid.toFixed(1) + '% · Live ask ' + (Number.isFinite(liveAsk) ? liveAsk.toFixed(1) + '%' : '—');
       row.append(heading, quotes, live, context);
       return row;
@@ -202,7 +227,8 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const row = round.find(item => item.ticker === position.ticker);
       const opposite = round.filter(item => item.lean === -position.direction).length;
       if (round.length >= 5 && opposite >= Math.ceil(round.length * 0.75)) position.sell = true;
-      const bid = position.direction > 0 ? row?.yesBid : row?.noBid;
+      const exitQuote = freshBook(position.ticker, now) || row;
+      const bid = position.direction > 0 ? exitQuote?.yesBid : exitQuote?.noBid;
       const exitBid = bid > 0 && bid < 100 ? bid : undefined;
       if (position.sell && position.exitBid == null && Number.isFinite(exitBid)) position.exitBid = exitBid;
       const action = entered.has(position.ticker) ? 'BUY' :
@@ -232,9 +258,36 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
   }
 
   window.addEventListener('banktrades:premium-contracts', handleContracts);
+  if (typeof EventSource === 'function') {
+    const stream = new EventSource('https://bank-trades-production.up.railway.app/cross-coin-quotes');
+    stream.addEventListener('quote', event => {
+      let q;
+      try { q = JSON.parse(event.data); } catch { return; }
+      const now = Date.now();
+      if (!q || !/^KX(BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)15M-/.test(q.ticker) ||
+          !Number.isFinite(q.receivedAt) || q.receivedAt > now+2000 || now-q.receivedAt > 1800 ||
+          !Number.isFinite(q.expiresAt) || q.expiresAt <= now || q.expiresAt > now+900000 ||
+          ![q.yesBid,q.noBid].every(v => Number.isFinite(v) && v>0 && v<100) ||
+          q.yesBid+q.noBid>100 || q.receivedAt < (bookQuotes.get(q.ticker)?.receivedAt ?? 0)) return;
+      bookQuotes.set(q.ticker,q);
+      paintBid(q.ticker);
+    });
+    stream.addEventListener('unavailable', event => {
+      let q;
+      try { q = JSON.parse(event.data); } catch { return; }
+      if (q && bookQuotes.delete(q.ticker)) paintBid(q.ticker);
+    });
+    stream.addEventListener('error', () => {
+      bookQuotes.clear();
+      for (const ticker of liveRows.keys()) paintBid(ticker);
+    });
+  }
+
 
   setInterval(() => {
     const now = Date.now();
+    for (const [ticker,q] of bookQuotes) if (q.expiresAt <= now) bookQuotes.delete(ticker);
+    for (const ticker of liveRows.keys()) paintBid(ticker);
     if (!validUntil || now < validUntil) return;
     validUntil = 0;
     coins.textContent = '';
