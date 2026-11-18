@@ -104,3 +104,36 @@ test('silent quote stream reconnects automatically while REST refresh stays acti
  assert.equal(invalidations,2);
  assert.equal(refreshes,3);
 });
+
+test('BTC entry uses the exact-round depth ask and never falls back to the listing ask',async()=>{
+ const now=Date.now(),ticker='KXBTC15M-TEST',expiresAt=now+600000;
+ const market={ticker,close_time:new Date(expiresAt).toISOString(),no_ask_dollars:'0.55'};
+ const calls=[],statuses=[],snapshots=new Map();
+ let stream={ticker,expiresAt,receivedAt:now,yesBid:31,noBid:68};
+ let book=null;
+ const bestBid=source.slice(source.indexOf('function bestBid('),source.indexOf('// One-contract research estimate.'));
+ const check=runInNewContext(bestBid+'\n'+listener+'\ncheckBtcScalpEntry',{
+  Date:class extends Date {static now(){return now;}},AbortSignal,setInterval(){},
+  window:{addEventListener(){}},document:{hidden:false},selectionVersion:1,
+  positions:new Map(),scalpQuotes:snapshots,btcScalpBookMaxAge:1800,sharedV8:[],
+  get latestBtcStreamQuote(){return stream;},
+  async fetch(){return {ok:!!book,json:async()=>book};},
+  price:(m,k)=>Number((Number(m[k+'_dollars'])*100).toFixed(2)),
+  scalp:(...args)=>calls.push(args),showScalp:status=>statuses.push(status),scalpExitEvidence:()=>null
+ });
+ await check(market,'down',true);
+ assert.equal(calls[0][4].down.ask,69);
+ assert.equal(calls[0][4].down.bid,68);
+ assert.equal(calls[0][3],true);
+ stream={...stream,ticker:'KXBTC15M-OTHER'};
+ await check(market,'down',true);
+ stream={...stream,ticker,receivedAt:now-1801};
+ await check(market,'down',true);
+ assert.equal(calls.length,1);
+ assert.equal(statuses.length,2);
+ book={fetched_at:new Date(now).toISOString(),orderbook:{orderbook_fp:{
+  yes_dollars:[['0.30','2']],no_dollars:[['0.69','2']]
+ }}};
+ await check(market,'down',true);
+ assert.equal(calls[1][4].down.ask,70);
+});
