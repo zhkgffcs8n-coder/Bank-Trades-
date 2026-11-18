@@ -1022,8 +1022,10 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   if(!tracked.exit&&!entered){
     const reversal=confirmedScalpReversal(tracked,quotes,evidence,reversalReadings.get(selectedCoin));
     reversalReadings.set(selectedCoin,reversal.reading);
-    const takeProfit=selectedCoin==='BTC'&&quote.bid>=80&&move>0;
-    if(takeProfit||reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
+    if(selectedCoin==='BTC'){
+      const net=move/100-estimatedCost(tracked.entry/100)-estimatedCost(quote.bid/100);
+      if(net>0.000001&&(quote.bid>=80||reversal.confirmed))tracked.exit='TAKE PROFIT';
+    }else if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
   if(newExit)tracked.exitBid=quote.bid;
@@ -1127,6 +1129,8 @@ const price=(m,k)=>m?.[k+'_dollars']!=null?Number((Number(m[k+'_dollars'])*100).
 function waitForData(message){
   facts.textContent='';
   state.textContent='DATA WAIT · '+message;
+  const position=positions.get('BTC');
+  if(selectedCoin==='BTC'&&position&&scalpQuoteStatus(position,scalpQuotes.get('BTC')).fresh)return;
   showScalp(state.textContent);
 }
 async function evaluate(){
@@ -1205,16 +1209,44 @@ refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
 refreshPredatorReport();setInterval(refreshPredatorReport,2000);
 setInterval(()=>{if(!document.hidden){paintV8();paintSuperTracker();refreshSuperTracker();}},5000);
-const btcQuoteStream=new EventSource('https://bank-trades-production.up.railway.app/btc-quotes');
-btcQuoteStream.addEventListener('quote',event=>{
-  try{
-    latestBtcStreamQuote=JSON.parse(event.data);
-    applyBtcStreamQuote(latestBtcStreamQuote);
-  }catch{invalidateBtcStream();}
-});
-btcQuoteStream.addEventListener('unavailable',invalidateBtcStream);
-btcQuoteStream.addEventListener('error',invalidateBtcStream);
-setInterval(refreshBtcScalpBook,400);
+let btcQuoteStream,lastBtcStreamActivity;
+function connectBtcQuoteStream(){
+  btcQuoteStream?.close();
+  lastBtcStreamActivity=performance.now();
+  const stream=new EventSource('https://bank-trades-production.up.railway.app/btc-quotes');
+  btcQuoteStream=stream;
+  stream.addEventListener('quote',event=>{
+    if(stream!==btcQuoteStream)return;
+    try{
+      const quote=JSON.parse(event.data),now=Date.now();
+      if(Number.isFinite(quote.receivedAt)&&quote.receivedAt<=now+2000&&now-quote.receivedAt<=btcScalpBookMaxAge){
+        lastBtcStreamActivity=performance.now();
+      }
+      latestBtcStreamQuote=quote;
+      applyBtcStreamQuote(quote);
+    }catch{invalidateBtcStream();}
+  });
+  for(const name of ['unavailable','error']){
+    stream.addEventListener(name,()=>{
+      if(stream===btcQuoteStream){
+        invalidateBtcStream();
+        refreshBtcScalpBook();
+      }
+    });
+  }
+}
+function maintainBtcQuoteStream(){
+  if(document.hidden)return;
+  if(performance.now()-lastBtcStreamActivity>=4000){
+    invalidateBtcStream();
+    connectBtcQuoteStream();
+  }
+  refreshBtcScalpBook();
+}
+connectBtcQuoteStream();
+setInterval(maintainBtcQuoteStream,400);
+document.addEventListener('visibilitychange',maintainBtcQuoteStream);
+window.addEventListener('pageshow',maintainBtcQuoteStream);
 evaluate();setInterval(()=>{if(!document.hidden&&selectedCoin==='BTC')evaluate()},5000);
 setInterval(()=>{if(!document.hidden&&selectedCoin!=='BTC')evaluate()},30000);
 })();
