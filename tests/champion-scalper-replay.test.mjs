@@ -32,7 +32,8 @@ for(const side of ['up','down']){
     browser({ticker:tick.ticker},tick.secondsLeft,tick.side,tick.strong,tick.quotes,undefined,tick.reversalConfirmed);
     const result=replayChampionScalper(tick,previous);
     assert.equal(result.action,displayed);
-    assert.deepEqual(result.position,positions.has('BTC')?JSON.parse(JSON.stringify(positions.get('BTC'))):null);
+    const {expiresAt, ...browserSignal} = positions.get('BTC') ?? {};
+    assert.deepEqual(result.position, expiresAt == null ? null : browserSignal);
     previous=result.position;
    }
    if(exit!=='profit'&&!target){
