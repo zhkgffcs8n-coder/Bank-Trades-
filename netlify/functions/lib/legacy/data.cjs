@@ -67,7 +67,7 @@ exports.handler=async event=>{
     }
     if((q.mode||'markets')==='markets'){
       const results=await Promise.all(
-        Object.entries(SERIES).map(async([asset,series])=>{
+        Object.entries(SERIES).filter(([asset])=>!q.asset||q.asset===asset).map(async([asset,series])=>{
           try{
             const u=base+'/markets?'+new URLSearchParams({
               series_ticker:series,

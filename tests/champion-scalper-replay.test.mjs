@@ -5,7 +5,7 @@ import {runInNewContext} from 'node:vm';
 import {replayChampionScalper} from '../src/champion-scalper-replay.mjs';
 
 const source=readFileSync(new URL('../btc-lock-radar.js',import.meta.url),'utf8');
-const scalp=source.slice(source.indexOf('function scalp(market'),source.indexOf('const state=box.querySelector'));
+const scalp=source.slice(source.indexOf('function scalp(market'),source.indexOf('// Each coin quote is delivered'));
 for(const side of ['up','down']){
  for(const exit of ['profit','loss','clock','flip']){
   test(`shadow replay matches dashboard for ${side} / ${exit}`,()=>{

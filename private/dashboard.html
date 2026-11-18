@@ -119,7 +119,19 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     }
   }
 
-  window.addEventListener('banktrades:premium-contracts', ({ detail: snapshot }) => {
+  const fastQuotes = new Map();
+  window.addEventListener('banktrades:kalshi-quote', ({ detail: row }) => {
+    const now = Date.now(), received = Date.parse(row?.quote_received_at), m = row?.market;
+    if (!row?.available || !m || !Number.isFinite(received) || now-received>5000 || received>now+2000) return;
+    const price = key => m[key+'_dollars']!=null ? Number(m[key+'_dollars'])*100 : m[key]!=null ? Number(m[key]) : NaN;
+    const quote = {asset:row.asset,ticker:m.ticker,close:Date.parse(m.close_time),received,
+      yesAsk:price('yes_ask'),yesBid:price('yes_bid'),noAsk:price('no_ask'),noBid:price('no_bid')};
+    if (![quote.yesAsk,quote.yesBid,quote.noAsk,quote.noBid].every(v=>Number.isFinite(v)&&v>=0&&v<=100) || quote.yesAsk<quote.yesBid || quote.noAsk<quote.noBid || quote.close<=now || quote.close>now+900000) return;
+    if ((fastQuotes.get(row.asset)?.received??0)>=received) return;
+    fastQuotes.set(row.asset,quote);
+    handleContracts({detail:{contracts:[...fastQuotes.values()].filter(q=>now-q.received<=5000&&q.close>now),fetched:Math.max(now,lastSnapshot+1)}});
+  });
+  function handleContracts({ detail: snapshot }) {
     const now = Date.now();
     const { contracts, fetched } = snapshot;
     if (fetched <= lastSnapshot || now - fetched > 5000 || fetched > now + 2000) return;
@@ -205,7 +217,9 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       'Waiting for a 40%–80% buy ask aligned with the group';
     show('WATCH ' + side, agreement + '/' + aligned.length + ' contracts favor ' + side + ' · ' + wait,
       direction > 0 ? 'green' : 'red');
-  });
+  }
+
+  window.addEventListener('banktrades:premium-contracts', handleContracts);
 
   setInterval(() => {
     const now = Date.now();
@@ -711,7 +725,7 @@ const desk=document.getElementById('signalDesk'),grid=document.getElementById('l
 if(desk&&grid){desk.classList.add('terminal-analysis');grid.append(desk)}
 document.querySelectorAll('[data-open-tab]').forEach(link=>link.addEventListener('click',()=>{const button=document.querySelector('[data-protab="'+link.dataset.openTab+'"]');if(button)button.click()}));
 })();
-</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=radar-context-1"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=scalper-persistent-4"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
+</script><script defer src="/kaibot.js?v=paper-modes-5"></script><script defer src="/kaibot-command.js?v=kai-reconcile-fix"></script><script defer src="/paper-monitor.js?v=1"></script><script defer src="/arcade-crew.js?v=1"></script><script defer src="/premium.js?v=fast-quotes-5"></script><script defer src="/terminal-enhancements.js?v=1"></script><script defer src="/spot-timeframes.js?v=1"></script><script defer src="/btc-spot-chart.js?v=radar-context-1"></script><script defer src="/btc-lock-radar.js?v=fast-quotes-5"></script><script defer src="/command-layout.js?v=radar-context-3"></script><script defer src="/dashboard-session.js"></script><script defer src="/learning-lab.js"></script><script defer src="/upgrade-status.js?v=kai-reconcile-fix"></script><script defer src="/coinbase-direct.js?v=market-desk-3"></script><script>
 (()=>{'use strict';
 const tbody=document.getElementById('premiumRows'),strip=document.getElementById('premiumStrip'),badge=document.getElementById('premiumHealth');if(!tbody||!strip||!badge)return;
 const feedKey='banktrades:verified-alert-feed-v1';
