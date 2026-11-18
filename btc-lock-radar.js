@@ -1039,16 +1039,20 @@ window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
   if(!(expiresAt>now)||![up,down].every(value=>Number.isFinite(value)&&value>=0&&value<=100))return;
   const previous=scalpQuotes.get(coin);
   if(previous&&previous.at>=at)return;
-  scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down});
-  if(coin!==selectedCoin)return;
-  const position=positions.get(coin);
-  if(position?.ticker===market.ticker){
-    const quotes={up:{ask:price(market,'yes_ask'),bid:up},down:{ask:price(market,'no_ask'),bid:down}};
-    if(Object.values(quotes).every(q=>Number.isFinite(q.ask)&&q.ask>=q.bid&&q.ask<=100)){
-      scalp(market,(expiresAt-now)/1000,'mixed',false,quotes,undefined,scalpExitEvidence(coin,market.ticker));
-    }
-  }
+  scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down,market});
+  if(coin===selectedCoin)refreshScalpExit();
 });
+function refreshScalpExit(){
+  const coin=selectedCoin,snapshot=scalpQuotes.get(coin),position=positions.get(coin),now=Date.now();
+  if(!position||!snapshot?.market||snapshot.ticker!==position.ticker||now-snapshot.at>5000||snapshot.at>now+2000||snapshot.expiresAt<=now)return;
+  const market=snapshot.market;
+  const quotes={up:{ask:price(market,'yes_ask'),bid:snapshot.up},down:{ask:price(market,'no_ask'),bid:snapshot.down}};
+  if(Object.values(quotes).every(q=>Number.isFinite(q.ask)&&q.ask>=q.bid&&q.ask<=100)){
+    scalp(market,(snapshot.expiresAt-now)/1000,'mixed',false,quotes,undefined,scalpExitEvidence(coin,market.ticker));
+  }
+}
+// The shared-signal listener above updates sharedV8 before this listener runs.
+window.addEventListener('banktrades:shared-signals',refreshScalpExit);
 setInterval(()=>{
  const position=positions.get(selectedCoin);
  if(position&&!scalpQuoteStatus(position,scalpQuotes.get(selectedCoin)).fresh&&scalpLabel.textContent.includes('LIVE BID'))showScalp('QUOTES STALE · Waiting for Kalshi');
@@ -1095,7 +1099,7 @@ function assess(coin,market,e,visible){
   const quoteAt=Date.parse(market.quote_received_at),quoteExpiry=Date.parse(market.close_time||market.expires_at);
   const upBid=price(market,'yes_bid'),downBid=price(market,'no_bid');
   if(quoteAt>=(scalpQuotes.get(coin)?.at??0)&&Date.now()-quoteAt<=5000&&quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
-    scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid});
+    scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid,market});
   }
   if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||Date.now()-e.at>90000||Date.now()-e.candleAt>180000||e.at>Date.now()||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');
   const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
