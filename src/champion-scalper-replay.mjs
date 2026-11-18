@@ -10,8 +10,11 @@ export function replayChampionScalper({ticker,secondsLeft,side,strong,quotes,rev
  const move=bid-position.entry;
  if(!position.exit){
   if(exitPolicy==='confirmed-reversal'){
-   const takeProfit=ticker.startsWith('KXBTC15M-')&&bid>=80&&move>0;
-   if(held&&(takeProfit||reversalConfirmed))position.exit=move>0?'TAKE PROFIT':'SELL FAST';
+   if(held&&ticker.startsWith('KXBTC15M-')){
+    const cost=price=>Math.ceil(7*price*(1-price))/100+.01;
+    const net=move/100-cost(position.entry/100)-cost(bid/100);
+    if(net>0.000001&&(bid>=80||reversalConfirmed))position.exit='TAKE PROFIT';
+   }else if(held&&reversalConfirmed)position.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }else{
    if(secondsLeft<=90)position.exit='TIME EXIT';
    else if(move<=-5)position.exit='SELL FAST';
