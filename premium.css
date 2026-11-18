@@ -639,3 +639,12 @@ html.bt-market-scroll-stable { overflow-anchor: none; scroll-behavior: auto; }
  .bt-command-professional .bt-radar-chart { grid-area: spot; }
  .bt-command-professional #btRadarMarketContext { grid-column: 1 / -1; }
 }
+
+/* Official Pro Scalper prices share the entry/exit voice event values. */
+#btcProScalper .bt-scalp-prices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:14px 0;min-width:0}
+#btcProScalper .bt-scalp-prices>div{min-width:0;padding:12px 6px;border:2px solid #4ade80;border-radius:12px;background:#09271e;text-align:center;color:#86efac}
+#btcProScalper .bt-scalp-prices span{display:block;font-size:clamp(10px,1vw,13px);font-weight:900;letter-spacing:.04em;line-height:1.4}
+#btcProScalper .bt-scalp-prices strong{display:block;font-size:clamp(30px,4vw,58px);font-weight:950;line-height:1.2;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.04em;text-shadow:0 0 16px #4ade8044}
+#btcProScalper .bt-scalp-prices [data-price-cash]{border-color:#22d3ee;background:#082b38;color:#67e8f9}
+#btcProScalper .bt-scalp-prices[data-side="down"] [data-price-entry]{border-color:#fb7185;background:#350f21;color:#fda4af}
+#btcProScalper .bt-scalp-prices[data-closed="true"] [data-price-cash]{border-color:#facc15;background:#302609;color:#fef08a;box-shadow:0 0 15px #facc1533}

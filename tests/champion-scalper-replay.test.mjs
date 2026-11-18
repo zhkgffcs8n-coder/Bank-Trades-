@@ -12,7 +12,8 @@ for(const side of ['up','down']){
    const positions=new Map();
    let displayed;
    const voice=[];
-   const browser=runInNewContext(scalp+'\nscalp',{positions,selectedCoin:'BTC',window:{dispatchEvent:event=>voice.push(event.detail)},
+   const prices={};
+   const browser=runInNewContext(scalp+'\nscalp',{positions,selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
     CustomEvent:class {constructor(_type,{detail}){this.detail=detail;}},
     showScalp(message,exitSide){
      const label=message.split(' · ')[0].replace(' SETUP','');
@@ -33,6 +34,8 @@ for(const side of ['up','down']){
    assert.deepEqual(voice.map(call=>call.stage),['entry','exit']);
    assert.equal(voice[0].entry,60);
    assert.equal(voice[1].exitBid,last.quotes[side].bid);
+   assert.equal(prices.entry,voice[0].entry);
+   assert.equal(prices.cash,voice[1].exitBid);
   });
  }
 }
