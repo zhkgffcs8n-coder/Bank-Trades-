@@ -13,6 +13,7 @@ import {readSanitizedDemoProbe} from '../src/kaibot-demo-probe-telemetry.mjs';
 import {readSanitizedDemoLifecycle} from '../src/kaibot-demo-lifecycle-telemetry.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {openPredatorTape} from '../src/predator-stream.mjs';
+import {createBtcQuoteRelay} from '../src/btc-quote-relay.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
 import {parseDepthV8} from '../src/scalper-v8.mjs';
 import {verifiedFinalizedBinaryOutcome} from '../src/official-settlement.mjs';
@@ -25,6 +26,7 @@ const path=join(dir,'state.json');
 let state={positions:{},rounds:{},closed:[],rejections:{},totalClosed:0};
 let tape,ws,lastDepthAt=0,stopping=false,market,book,bookSource,gaps=0,nextConnect=0,lastPersist=0,dirty=false;
 const startedAt=Date.now();
+const btcQuoteRelay=createBtcQuoteRelay();
 const base='https://external-api.kalshi.com';
 if(Boolean(env.PREDATOR_NETLIFY_SITE_ID)!==Boolean(env.PREDATOR_NETLIFY_TOKEN))
  throw Error('PREDATOR_NETLIFY_SITE_ID and PREDATOR_NETLIFY_TOKEN must be configured together');
@@ -151,25 +153,27 @@ function connect(){
   if(socket!==ws||market?.ticker!==ticker)return;
   try{
    const frame=JSON.parse(bytes);
-   if(frame.type==='error'){socket.terminate();return;}
+   if(frame.type==='error'){btcQuoteRelay.reset();socket.terminate();return;}
    const update=depth.apply(frame,Date.now());
-   if(update.status==='GAP'){gaps++;book=null;socket.terminate();return;}
+   if(update.status==='GAP'){gaps++;book=null;btcQuoteRelay.reset();socket.terminate();return;}
    if(update.status==='INVALID_BOOK'){
     // Invalid frames must not extend the healthy-book watchdog indefinitely.
     counters.invalidBookFrames++;
+    btcQuoteRelay.reset();
     book=null;
     return;
    }
    if(update.status==='READY'){
     lastDepthAt=update.receivedAt;
     book=update;bookSource='KALSHI_WS';counters.events++;
+    btcQuoteRelay.publish(update,Date.parse(market.close_time));
     evaluate(tape.snapshot().tape,'KALSHI_WS',update.receivedAt);
    }
-  }catch{book=null;socket.terminate();}
+  }catch{book=null;btcQuoteRelay.reset();socket.terminate();}
  });
  socket.on('error',()=>{});
  socket.on('close',()=>{
-  if(ws===socket){ws=null;if(bookSource==='KALSHI_WS')book=null;}
+  if(ws===socket){btcQuoteRelay.reset();ws=null;if(bookSource==='KALSHI_WS')book=null;}
  });
 }
 async function discover(now){
@@ -180,7 +184,7 @@ async function discover(now){
   .sort((a,b)=>Date.parse(a.close_time)-Date.parse(b.close_time));
  const selected=eligible[0];
  marketDiscovery={status:selected?'MARKET_SELECTED':'NO_ELIGIBLE_MARKET',at:now,openMarkets:rows.length,eligibleMarkets:eligible.length,errorCode:null};
- if(selected?.ticker!==market?.ticker){ws?.terminate();ws=null;book=null;}
+ if(selected?.ticker!==market?.ticker){btcQuoteRelay.reset();ws?.terminate();ws=null;book=null;}
  market=selected;
  if(market&&!state.rounds[market.ticker]){
   state.rounds[market.ticker]={firstSeenAt:now,expiresAt:Date.parse(market.close_time)};
@@ -309,6 +313,7 @@ async function run(){
   }
   if(ws?.readyState===WebSocket.OPEN&&Date.now()-lastDepthAt>10000){
    counters.depthTimeouts++;
+   btcQuoteRelay.reset();
    book=null;
    ws.terminate();
   }
@@ -377,8 +382,10 @@ async function run(){
  }
 }
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopping=true;});
+btcQuoteRelay.server.on('error',error=>console.error(JSON.stringify({event:'BTC_QUOTE_RELAY_ERROR',code:error.code})));
+btcQuoteRelay.server.listen(8080,'0.0.0.0');
 try{await run();}
 finally{
- tape?.close();ws?.terminate();
+ btcQuoteRelay.close();tape?.close();ws?.terminate();
  if(dirty)await persist();
 }
