@@ -956,7 +956,28 @@ function showScalp(message,exitSide,ticker){
   }
   if(scalpDetail.textContent!==detail)scalpDetail.textContent=detail;
 }
-function scalp(market,left,side,strong,quotes,feed){
+const reversalReadings=new Map();
+const latestScalpEvidence=new Map();
+function confirmedScalpReversal(position,quotes,evidence,previous,now=Date.now()){
+  if(!evidence)return {confirmed:false,reading:previous};
+  const opposite=position.side==='up'?'down':'up';
+  const maximumAge=evidence.source==='tradingview'?20000:180000;
+  const fresh=evidence.ticker===position.ticker&&Number.isFinite(evidence.at)&&evidence.at<=now&&now-evidence.at<=maximumAge;
+  const aligned=quotes[opposite]?.bid>=50&&quotes[opposite]?.ask>quotes[position.side]?.ask;
+  if(!fresh||evidence.direction!==opposite||!aligned)return {confirmed:false,reading:null};
+  const same=previous?.ticker===position.ticker&&previous.source===evidence.source;
+  if(same&&evidence.at<=previous.at)return {confirmed:false,reading:previous};
+  const count=same&&evidence.at-previous.at>=1000&&evidence.at-previous.at<=maximumAge?previous.count+1:1;
+  return {confirmed:count>=2,reading:{ticker:position.ticker,source:evidence.source,at:evidence.at,count}};
+}
+function scalpExitEvidence(coin,ticker){
+ const feed=coin==='BTC'?sharedV8.find(row=>row.asset==='BTC')?.tradingView:null;
+ if(feed?.ticker===ticker&&feed.status==='FRESH'&&['UP','DOWN'].includes(feed.direction)&&Date.now()-feed.candleCloseAt<=20000){
+  return {ticker,direction:feed.direction.toLowerCase(),source:'tradingview',at:feed.candleCloseAt};
+ }
+ return latestScalpEvidence.get(coin);
+}
+function scalp(market,left,side,strong,quotes,feed,evidence){
   const ticker=market.ticker;
   let entered=false;
   let tracked=positions.get(selectedCoin);
@@ -986,6 +1007,7 @@ function scalp(market,left,side,strong,quotes,feed){
     }
     tracked={ticker,side:entrySide,entry:quotes[entrySide].ask,exit:null};
     positions.set(selectedCoin,tracked);
+    reversalReadings.delete(selectedCoin);
     entered=true;
   }
   const announce=(stage,action)=>window.dispatchEvent(new CustomEvent('banktrades:scalper-voice',{
@@ -993,11 +1015,10 @@ function scalp(market,left,side,strong,quotes,feed){
   }));
   const quote=quotes[tracked.side];
   const move=quote.bid-tracked.entry;
-  if(!tracked.exit){
-    if(left<=90)tracked.exit='TIME EXIT';
-    else if(move<=-5)tracked.exit='SELL FAST';
-    else if(move>=8)tracked.exit='TAKE PROFIT';
-    else if(!entered&&side!=='mixed'&&side!==tracked.side&&strong)tracked.exit='EXIT · MOMENTUM REVERSED';
+  if(!tracked.exit&&!entered){
+    const reversal=confirmedScalpReversal(tracked,quotes,evidence,reversalReadings.get(selectedCoin));
+    reversalReadings.set(selectedCoin,reversal.reading);
+    if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
   if(newExit)tracked.exitBid=quote.bid;
@@ -1024,7 +1045,7 @@ window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
   if(position?.ticker===market.ticker){
     const quotes={up:{ask:price(market,'yes_ask'),bid:up},down:{ask:price(market,'no_ask'),bid:down}};
     if(Object.values(quotes).every(q=>Number.isFinite(q.ask)&&q.ask>=q.bid&&q.ask<=100)){
-      scalp(market,(expiresAt-now)/1000,'mixed',false,quotes);
+      scalp(market,(expiresAt-now)/1000,'mixed',false,quotes,undefined,scalpExitEvidence(coin,market.ticker));
     }
   }
 });
@@ -1081,11 +1102,12 @@ function assess(coin,market,e,visible){
   if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb)return unavailable('Invalid '+coin+' market or quotes');
   const diff=e.bull-e.bear,side=diff>=3?'up':diff<=-3?'down':'mixed',ask=side==='up'?ya:na,bid=side==='up'?yb:nb,spread=Math.max(ya-yb,na-nb);
   const strong=side!=='mixed'&&e.direction===side&&Math.abs(diff)>=4&&spread<=3&&ask>=35&&ask<=80&&left>=180;
+  latestScalpEvidence.set(coin,{ticker:market.ticker,direction:Math.abs(diff)>=4&&e.direction===side?side:'mixed',source:'spot',at:e.candleAt});
   const closeLeft=(Date.parse(market.close_time)-Date.now())/1000;
   if(visible){
     if(closeLeft>0&&closeLeft<=900&&
     [ya,yb,na,nb].every(value=>value>0&&value<100)){
-      scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},coin==='BTC'?sharedV8.find(row=>row.asset==='BTC')?.tradingView:null);
+      scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},coin==='BTC'?sharedV8.find(row=>row.asset==='BTC')?.tradingView:null,scalpExitEvidence(coin,market.ticker));
     }else{
       showScalp('DATA WAIT · No open '+coin+' 15-minute contract with valid quotes');
     }

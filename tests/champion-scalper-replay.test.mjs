@@ -13,19 +13,19 @@ for(const side of ['up','down']){
    let displayed;
    const voice=[];
    const prices={};
-   const browser=runInNewContext(scalp+'\nscalp',{positions,persistScalpPosition(){},selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
+   const browser=runInNewContext(scalp+'\nscalp',{positions,reversalReadings:new Map(),confirmedScalpReversal:(_p,_q,e)=>({confirmed:!!e,reading:null}),persistScalpPosition(){},selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
     CustomEvent:class {constructor(_type,{detail}){this.detail=detail;}},
     showScalp(message,exitSide){
      const label=message.split(' · ')[0].replace(' SETUP','');
      displayed=exitSide?label+' '+exitSide.toUpperCase():label;
     }});
-   const base={ticker:'KXBTC15M-example',secondsLeft:200,side,strong:true,
+   const base={ticker:'KXBTC15M-example',secondsLeft:200,side,strong:true,exitPolicy:'confirmed-reversal',
     quotes:{up:{ask:60,bid:59},down:{ask:60,bid:59}}};
-   const last={...base,secondsLeft:exit==='clock'?90:150,side:exit==='flip'?(side==='up'?'down':'up'):side,
+   const last={...base,reversalConfirmed:true,secondsLeft:exit==='clock'?90:150,side:exit==='flip'?(side==='up'?'down':'up'):side,
     quotes:{...base.quotes,[side]:{ask:60,bid:exit==='profit'?74:exit==='loss'?55:59}}};
    let previous;
    for(const tick of [{...base,strong:false},base,{...base,strong:false},last,base]){
-    browser({ticker:tick.ticker},tick.secondsLeft,tick.side,tick.strong,tick.quotes);
+    browser({ticker:tick.ticker},tick.secondsLeft,tick.side,tick.strong,tick.quotes,undefined,tick.reversalConfirmed);
     const result=replayChampionScalper(tick,previous);
     assert.equal(result.action,displayed);
     assert.deepEqual(result.position,positions.has('BTC')?JSON.parse(JSON.stringify(positions.get('BTC'))):null);
