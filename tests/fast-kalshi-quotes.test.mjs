@@ -10,11 +10,11 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
  let receive,onEvidence;const calls=[],quotes=new Map();
  let now=100000;
  const ticker='KXBTC15M-TEST';
- const positions=new Map([['BTC',{ticker}]]);
+ const positions=new Map([['BTC',{ticker,expiresAt:now+60000}]]);
  const book=source.slice(source.indexOf('function bestBid('),source.indexOf('// One-contract research estimate.'));
  const refresh=runInNewContext(book+'\n'+listener+'\nrefreshBtcScalpBook',{
   window:{addEventListener:(name,fn)=>{if(name==='banktrades:kalshi-quote')receive=fn;if(name==='banktrades:shared-signals')onEvidence=fn;}},
-  Date:{parse:Date.parse,now:()=>now},Number,scalpQuotes:quotes,positions,selectedCoin:'BTC',
+  Date:class extends Date {static now(){return now;}},Number,scalpQuotes:quotes,positions,selectedCoin:'BTC',
   document:{hidden:false},AbortSignal,btcScalpBookMaxAge:1800,btcScalpBookPending:false,latestBtcStreamQuote:null,
   async fetch(url){
    assert.equal(url,'/api/data?mode=orderbook&live=1&ticker='+ticker);
@@ -38,6 +38,10 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
  await receive({detail:{...row,quote_received_at:new Date(now).toISOString()}});
  await refresh();
  assert.equal(quotes.get('BTC').up,71.25,'newer listings cannot replace depth');
+ now+=1;
+ quotes.set('BTC',{ticker:'KXBTC15M-NEXT',at:now+1});
+ await refresh();
+ assert.equal(quotes.get('BTC').ticker,ticker,'an active call recovers depth without a matching listing snapshot');
  now+=1801;
  const checks=calls.length;
  onEvidence();

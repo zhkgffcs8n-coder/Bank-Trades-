@@ -32,3 +32,12 @@ test('stale and different-round quotes never display as live',()=>{
   assert.equal(h.prices.at(-1).bid,undefined);
  }
 });
+
+test('round rollover clears the expired call and both price boxes without a quote',()=>{
+ const h=harness({ticker:'round',side:'down',entry:69,expiresAt:Date.now()-1},undefined);
+ h.show('ROUND CLOSED · Waiting for the next BTC call');
+ assert.equal(h.scalpLabel.textContent,'ROUND CLOSED');
+ assert.equal(h.prices.at(-1).p,null);
+ h.show('NO ENTRY · Waiting for aligned BTC momentum');
+ assert.equal(h.scalpLabel.textContent,'NO ENTRY');
+});
