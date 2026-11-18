@@ -13,6 +13,7 @@ import {readSanitizedDemoProbe} from '../src/kaibot-demo-probe-telemetry.mjs';
 import {readSanitizedDemoLifecycle} from '../src/kaibot-demo-lifecycle-telemetry.mjs';
 import {kalshiClient,signedHeaders} from '../netlify/functions/lib/kalshi-execution-client.mjs';
 import {openPredatorTape} from '../src/predator-stream.mjs';
+import {startCrossCoinDepth} from '../src/cross-coin-depth.mjs';
 import {createBtcQuoteRelay} from '../src/btc-quote-relay.mjs';
 import {createKalshiDepth} from '../src/kalshi-depth-stream.mjs';
 import {parseDepthV8} from '../src/scalper-v8.mjs';
@@ -384,8 +385,9 @@ async function run(){
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopping=true;});
 btcQuoteRelay.server.on('error',error=>console.error(JSON.stringify({event:'BTC_QUOTE_RELAY_ERROR',code:error.code})));
 btcQuoteRelay.server.listen(8080,'0.0.0.0');
+const stopCrossCoinDepth=startCrossCoinDepth(credentials,get,btcQuoteRelay);
 try{await run();}
 finally{
- btcQuoteRelay.close();tape?.close();ws?.terminate();
+ stopCrossCoinDepth();btcQuoteRelay.close();tape?.close();ws?.terminate();
  if(dirty)await persist();
 }
