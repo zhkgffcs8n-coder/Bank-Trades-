@@ -196,7 +196,7 @@ exports.handler=async event=>{
         return reply(400,{error:'Invalid ticker'});
 
       const d=await get(
-        base+'/markets/'+encodeURIComponent(ticker)+'/orderbook?depth=10'
+        base+'/markets/'+encodeURIComponent(ticker)+'/orderbook?depth='+(q.live==='1'?'1':'10'),q.live==='1'?1100:7000
       );
 
       return reply(200,{
