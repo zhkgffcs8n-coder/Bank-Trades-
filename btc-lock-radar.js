@@ -1024,7 +1024,7 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
     reversalReadings.set(selectedCoin,reversal.reading);
     if(selectedCoin==='BTC'){
       const net=move/100-estimatedCost(tracked.entry/100)-estimatedCost(quote.bid/100);
-      if(net>0.000001&&(quote.bid>=80||reversal.confirmed))tracked.exit='TAKE PROFIT';
+      if(net>0.000001&&(quote.bid>=80||move>=16||reversal.confirmed))tracked.exit='TAKE PROFIT';
     }else if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
