@@ -75,3 +75,28 @@ test('single asset endpoint does not wait for unrelated markets',async()=>{
   assert.ok(Date.now()-Date.parse(result.results[0].quote_received_at)<5000);
  }finally{globalThis.fetch=previous;}
 });
+test('silent quote stream reconnects automatically while REST refresh stays active',()=>{
+ const lifecycle=source.slice(source.indexOf('let btcQuoteStream,lastBtcStreamActivity;'),source.indexOf('connectBtcQuoteStream();\nsetInterval'));
+ const streams=[];
+ let now=0,invalidations=0,refreshes=0;
+ const {connect,maintain}=runInNewContext(lifecycle+'\n({connect:connectBtcQuoteStream,maintain:maintainBtcQuoteStream})',{
+  EventSource:class {
+   constructor(){this.handlers={};streams.push(this);}
+   addEventListener(name,callback){this.handlers[name]=callback;}
+   close(){this.closed=true;}
+  },
+  performance:{now:()=>now},Date,document:{hidden:false},
+  invalidateBtcStream:()=>invalidations++,refreshBtcScalpBook:()=>refreshes++
+ });
+ connect();
+ now=3999;maintain();
+ assert.equal(streams.length,1);
+ now=4000;maintain();
+ assert.equal(streams.length,2);
+ assert.equal(streams[0].closed,true);
+ streams[0].handlers.error();
+ assert.equal(invalidations,1,'events from a replaced connection are ignored');
+ streams[1].handlers.error();
+ assert.equal(invalidations,2);
+ assert.equal(refreshes,3);
+});
