@@ -8,7 +8,7 @@ const source=readFileSync(new URL('../btc-lock-radar.js',import.meta.url),'utf8'
 const cost=source.match(/function estimatedCost[^\n]+/)[0];
 const scalp=source.slice(source.indexOf('function scalp(market'),source.indexOf('// Each coin quote is delivered'));
 for(const side of ['up','down']){
- for(const exit of ['profit','loss','clock','flip','80% target','88% target','79% target','fees']){
+ for(const exit of ['profit','loss','clock','flip','80% target','88% target','79% target','20% return target','fees']){
   test(`shadow replay matches dashboard for ${side} / ${exit}`,()=>{
    const positions=new Map();
    let displayed;
@@ -21,13 +21,13 @@ for(const side of ['up','down']){
      displayed=exitSide?label+' '+exitSide.toUpperCase():label;
     }});
    const target=exit.endsWith('target');
-   const entry=exit==='79% target'?63:exit==='88% target'||exit==='fees'?78:target?67:60;
+   const entry=(exit==='79% target'||exit==='20% return target')?63:exit==='88% target'||exit==='fees'?78:target?67:60;
    const base={ticker:'KXBTC15M-example',secondsLeft:200,side,strong:true,exitPolicy:'confirmed-reversal',
     quotes:{up:{ask:entry,bid:entry-1},down:{ask:entry,bid:entry-1}}};
    const last={...base,reversalConfirmed:!target,secondsLeft:exit==='clock'?90:150,side:exit==='flip'?(side==='up'?'down':'up'):side,
-    quotes:{...base.quotes,[side]:{ask:target?81:74,bid:exit==='79% target'?79:exit==='88% target'?88:target||exit==='fees'?80:exit==='profit'?74:exit==='loss'?55:59}}};
+    quotes:{...base.quotes,[side]:{ask:target?81:74,bid:exit==='20% return target'?75.6:exit==='79% target'?79:exit==='88% target'?88:target||exit==='fees'?80:exit==='profit'?74:exit==='loss'?55:59}}};
    let previous;
-   const beforeTarget=target?{...last,quotes:{...last.quotes,[side]:{ask:80,bid:Math.min(79.99,entry+15.99)}}}:{...base,strong:false};
+   const beforeTarget=target?{...last,quotes:{...last.quotes,[side]:{ask:80,bid:Math.min(80,entry*1.2)-0.01}}}:{...base,strong:false};
    for(const tick of [{...base,strong:false},base,beforeTarget,last,base]){
     browser({ticker:tick.ticker},tick.secondsLeft,tick.side,tick.strong,tick.quotes,undefined,tick.reversalConfirmed);
     const result=replayChampionScalper(tick,previous);
@@ -49,3 +49,9 @@ for(const side of ['up','down']){
   });
  }
 }
+
+test('official dashboard scope can read fractional depth and estimate exit costs',()=>{
+ const helpers=runInNewContext(source.replace('const box=', 'return {bestBid,estimatedCost}; const box='));
+ assert.equal(helpers.bestBid({no_dollars:[['0.82','0.5']]},'no',0).price,.82);
+ assert.ok(.82-.63-helpers.estimatedCost(.63)-helpers.estimatedCost(.82)>0);
+});
