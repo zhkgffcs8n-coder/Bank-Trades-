@@ -884,7 +884,36 @@ if(!mountScalper()){
   observer.observe(document.body,{childList:true,subtree:true});
 }
 
-const positions=new Map();
+const scalpStorageKey='btOfficialScalpCallsV1';
+function restoreScalpPositions(storage,now=Date.now()){
+  const restored=new Map();
+  try{
+    const rows=JSON.parse(storage.getItem(scalpStorageKey)||'[]');
+    if(!Array.isArray(rows))return restored;
+    for(const row of rows.slice(0,8)){
+      const p=row?.position;
+      if(!/^(BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)$/.test(row?.coin)||
+         !p?.ticker?.startsWith('KX'+row.coin+'15M-')||!['up','down'].includes(p.side)||
+         !Number.isFinite(p.entry)||p.entry<=0||p.entry>=100||
+         !Number.isFinite(row.expiresAt)||row.expiresAt<=now||row.expiresAt>now+900000||
+         ![null,'TIME EXIT','SELL FAST','TAKE PROFIT','EXIT · MOMENTUM REVERSED'].includes(p.exit)||
+         (p.exit!=null&&(!Number.isFinite(p.exitBid)||p.exitBid<0||p.exitBid>100)))continue;
+      restored.set(row.coin,{ticker:p.ticker,side:p.side,entry:p.entry,exit:p.exit,...(p.exit!=null?{exitBid:p.exitBid}:{})});
+    }
+  }catch{}
+  return restored;
+}
+const positions=restoreScalpPositions(localStorage);
+function persistScalpPosition(coin,position,market,left){
+  const expiresAt=Date.parse(market.close_time)||Date.now()+left*1000;
+  try{
+    const previous=JSON.parse(localStorage.getItem(scalpStorageKey)||'[]');
+    const rows=Array.isArray(previous)?previous:[];
+    const saved=rows.filter(row=>row.coin!==coin&&row.expiresAt>Date.now());
+    saved.push({coin,position:{...position},expiresAt});
+    localStorage.setItem(scalpStorageKey,JSON.stringify(saved.slice(-8)));
+  }catch{}
+}
 const scalpQuotes=new Map();
 function scalpQuoteStatus(position,snapshot,now=Date.now()){
   const fresh=snapshot?.ticker===position.ticker&&now>=snapshot.at&&now-snapshot.at<=5000&&now<snapshot.expiresAt;
@@ -972,6 +1001,7 @@ function scalp(market,left,side,strong,quotes,feed){
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
   if(newExit)tracked.exitBid=quote.bid;
+  persistScalpPosition(selectedCoin,tracked,market,left);
   const liveMove=move.toFixed(1);
   const action=tracked.exit||(entered?'BUY ':'HOLD ')+tracked.side.toUpperCase()+(entered?' SETUP':'');
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
