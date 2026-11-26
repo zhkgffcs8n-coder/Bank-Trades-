@@ -63,8 +63,8 @@ export function reconcile(state,snapshot,now=Date.now()){
  const manualExitTickers=new Set(state.intents.filter(intent=>intent.manualExit===true&&intent.status==='RECONCILED').map(intent=>intent.ticker));
  for(const [ticker,qty] of quantities){if(settlementFor(snapshot,ticker,qty,{manualExit:manualExitTickers.has(ticker)}))quantities.set(ticker,0);}
  // An isolated account is required: unknown positions/orders block new trading.
- for(const [ticker,qty] of positions)if(Math.abs(qty-(quantities.get(ticker)||0))>1e-7)throw Error('POSITION_MISMATCH_'+ticker);
- for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Error('POSITION_MISSING_'+ticker);
+ for(const [ticker,qty] of positions)if(Math.abs(qty-(quantities.get(ticker)||0))>1e-7)throw Object.assign(Error('POSITION_MISMATCH_'+ticker),{positionMismatch:{ticker,botQuantity:quantities.get(ticker)||0,exchangeQuantity:qty}});
+ for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Object.assign(Error('POSITION_MISSING_'+ticker),{positionMismatch:{ticker,botQuantity:qty,exchangeQuantity:positions.get(ticker)||0}});
  if(snapshot.orders.some(o=>o.status==='resting'&&!state.intents.some(i=>i.id===o.client_order_id)))throw Error('UNMANAGED_RESTING_ORDER');
  const ids=new Set(state.intents.map(i=>i.id)),orderIds=new Set(state.intents.map(i=>i.orderId)),tickers=new Set(state.intents.map(i=>i.ticker));
  state.evidence=structuredClone({orders:[...orders.values()].filter(o=>(ids.has(o.client_order_id)||orderIds.has(o.order_id))&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))});
@@ -138,7 +138,7 @@ export async function emergencyStop({state,client,persist}){
 
 export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
  const {ticker,botQuantity,exchangeQuantity,invalidTime,invalidResult}=mismatch;
- if(exchangeQuantity!==0||!botQuantity||invalidTime||invalidResult)return false;
+ if(exchangeQuantity!==0||!botQuantity||invalidTime||invalidResult||snapshot.orders.some(order=>order.ticker===ticker&&order.status==='resting'))return false;
  const intents=state.intents.filter(intent=>intent.ticker===ticker&&intent.status!=='ABORTED');
  if(intents.some(intent=>intent.status!=='RECONCILED'))return false;
  const filledIntents=intents.filter(intent=>intent.filled!==0);
@@ -147,7 +147,7 @@ export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
  const side=botQuantity>0?'yes':'no';
  if(buy.side!==(side==='yes'?'up':'down'))return false;
  const settlement=snapshot.settlements.find(item=>item.ticker===ticker);
- const settledAt=Date.parse(settlement?.settled_time);
+ const settledAt=settlement?Date.parse(settlement.settled_time):now;
  const fills=snapshot.fills.filter(fill=>(fill.ticker||fill.market_ticker)===ticker);
  const entryFills=fills.filter(fill=>fill.order_id===buy.orderId);
  const exitFills=fills.filter(fill=>fill.order_id!==buy.orderId);
@@ -174,7 +174,10 @@ export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
  const repaired=structuredClone(state),evidence=structuredClone(snapshot);
  repaired.intents.push({id:'manual-exit:'+orderId,orderId,ticker,side:buy.side,action:'sell',
   qty:quantity,status:'AWAITING_RECONCILIATION',manualExit:true,at:Math.min(...exitFills.map(fill=>Date.parse(fill.created_time)))});
- reconcile(repaired,evidence,now);
+ try{reconcile(repaired,evidence,now);}catch(error){
+  const next=error.settlementMismatch||error.positionMismatch;
+  if(!next||next.ticker===ticker||!reconcileManualExit(repaired,evidence,next,now))throw error;
+ }
  accountRisk(repaired,evidence,now);
  Object.assign(state,repaired);
  Object.assign(snapshot,evidence);

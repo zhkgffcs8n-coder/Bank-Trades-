@@ -67,7 +67,8 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
     });
    }
    try{reconcile(state,snapshot);}catch(e){
-    const repaired=e.settlementMismatch&&await live.repo.stopped()&&reconcileManualExit(state,snapshot,e.settlementMismatch);
+    const mismatchDetails=e.settlementMismatch||e.positionMismatch;
+    const repaired=mismatchDetails&&await live.repo.stopped()&&reconcileManualExit(state,snapshot,mismatchDetails);
     if(!repaired){
      if(e.settlementMismatch){
       const {ticker,botQuantity,exchangeQuantity,invalidResult,invalidTime}=e.settlementMismatch;
@@ -97,6 +98,10 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
  }finally{await session.release();}
 }catch(e){
+ if(e.positionMismatch){
+  const {ticker,botQuantity,exchangeQuantity}=e.positionMismatch;
+  return json({enabled:false,error:`Position mismatch for ${ticker}. KaiBot recorded ${botQuantity} contracts. Kalshi reports ${exchangeQuantity} contracts.`},409);
+ }
  if(e.settlementRevenueMismatch){
   const {ticker,revenue,expectedRevenue,yes,no,result}=e.settlementRevenueMismatch;
   return json({enabled:false,error:`Settlement revenue mismatch for ${ticker}. Kalshi reported ${revenue} cents. Expected ${expectedRevenue} cents for ${yes} YES and ${no} NO with result ${result}.`},409);
