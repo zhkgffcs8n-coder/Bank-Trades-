@@ -41,7 +41,7 @@
   <div><dt>EXECUTION INTAKE</dt><dd data-intake>—</dd></div>
   <div><dt>DEMO LIFECYCLE</dt><dd data-demo>—</dd></div>
  </dl>
- <section class="kai-activity"><h2>Activity</h2><p>Champion shadow signals and server events. These are separate from confirmed fills.</p><ol data-activity aria-label="Recent KaiBot events"></ol></section>
+ <section class="kai-activity"><h2>Live trade history</h2><p data-trade-status role="status"></p><ol data-trades aria-label="Confirmed KaiBot fills"></ol></section>\n <section class="kai-activity"><h2>Activity</h2><p>Champion shadow signals and server events. These are separate from confirmed fills.</p><ol data-activity aria-label="Recent KaiBot events"></ol></section>
  <div data-controls></div>`;
  document.body.append(panel);
  const field=name=>panel.querySelector('[data-'+name+']');
@@ -111,10 +111,21 @@
   pending=controller;
   const timeout=setTimeout(()=>controller.abort(),8000);
   try{
-   const [report,demo]=await Promise.allSettled([
-    read('predator-report?mode=worker',controller.signal),read('kalshi-demo-status',controller.signal)
+   const [report,demo,live]=await Promise.allSettled([
+    read('predator-report?mode=worker',controller.signal),read('kalshi-demo-status',controller.signal),read('kalshi-live-control',controller.signal)
    ]);
    if(!panel.open||controller.signal.aborted)return;
+   const trades=live.value?.trades;
+   update('trade-status',!Array.isArray(trades)?'Trade history unavailable':trades.length?'':'No confirmed live fills yet');
+   if(Array.isArray(trades))field('trades').replaceChildren(...trades.map(trade=>{
+    const row=document.createElement('li'),result=document.createElement('strong');
+    const coin=/^KX([A-Z]+)15M-/.exec(trade.ticker)?.[1]||trade.ticker;
+    row.textContent=coin+' · BUY '+trade.side.toUpperCase()+' · '+trade.entryPct.toFixed(1)+'% · ';
+    result.textContent=trade.result;
+    if(trade.result==='WIN')result.style.color='#86efac';
+    if(trade.result==='LOSS')result.style.color='#fca5a5';
+    row.append(result);return row;
+   }));
    const worker=report.value?.worker,champion=worker?.fresh?worker.championShadow:null;
    const action=champion?.action||'AWAITING SIGNAL';
    update('decision',action);
