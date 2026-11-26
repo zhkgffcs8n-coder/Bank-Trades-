@@ -211,9 +211,8 @@ test('unlimited budget mode ignores inactive daily spend and loss fields',()=>{
 test('settled manual exit matches exchange fills before clearing reconciliation',async()=>{
  const {repo}=await started(),client=exchange();
  await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
- const state=(await repo.read()).state,snapshot=await client.snapshot(),now=Date.now();
+ const state=(await repo.read()).state,snapshot=await client.snapshot(),now=Date.parse(snapshot.fills[0].created_time)+3000;
  snapshot.at=now;snapshot.positions=[];
- snapshot.fills[0].created_time=new Date(now-3000).toISOString();
  snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
  snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',action:'sell',
   side:'yes',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
