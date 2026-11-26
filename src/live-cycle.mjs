@@ -34,7 +34,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
    const decision=decisions?.find(signal=>signal.ticker===p.ticker&&
     Number.isFinite(signal.at)&&Date.now()-signal.at>=0&&Date.now()-signal.at<=10000&&signal.action.endsWith(' '+side));
    const bid=quote[p.side+'Bid'];
-   const netPositive=bid-p.entryCents>10;
+   const netPositive=decision?.exitReference!=null?bid>=decision.exitReference:bid-p.entryCents>10;
    const championExit=decision&&(['SELL FAST','TIME EXIT','EXIT'].some(action=>decision.action===action+' '+side)||
     decision.action==='TAKE PROFIT '+side&&netPositive)?decision.action:null;
    const reason=championMode?championExit:exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct,trailPct:state.limits.trailPct,trailActivationPct:state.limits.trailActivationPct});
