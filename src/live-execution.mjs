@@ -66,7 +66,7 @@ export function reconcile(state,snapshot,now=Date.now()){
  for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Error('POSITION_MISSING_'+ticker);
  if(snapshot.orders.some(o=>o.status==='resting'&&!state.intents.some(i=>i.id===o.client_order_id)))throw Error('UNMANAGED_RESTING_ORDER');
  const ids=new Set(state.intents.map(i=>i.id)),orderIds=new Set(state.intents.map(i=>i.orderId)),tickers=new Set(state.intents.map(i=>i.ticker));
- state.evidence=structuredClone({orders:[...orders.values()].filter(o=>ids.has(o.client_order_id)&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))});
+ state.evidence=structuredClone({orders:[...orders.values()].filter(o=>(ids.has(o.client_order_id)||orderIds.has(o.order_id))&&['executed','canceled'].includes(o.status)),fills:[...fills.values()].filter(f=>orderIds.has(f.order_id)),settlements:(snapshot.settlements||[]).filter(s=>tickers.has(s.ticker))});
  return {positions,orders,fills};
 }
 export function exitAction({entryCents,bidCents,peakCents=entryCents,profitPct,stopPct,trailPct=4,trailActivationPct=5}){
@@ -139,8 +139,10 @@ export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
  const {ticker,botQuantity,exchangeQuantity,invalidTime,invalidResult}=mismatch;
  if(exchangeQuantity!==0||!botQuantity||invalidTime||invalidResult)return false;
  const intents=state.intents.filter(intent=>intent.ticker===ticker&&intent.status!=='ABORTED');
- const [buy]=intents;
- if(intents.length!==1||buy.action!=='buy'||buy.status!=='RECONCILED'||buy.filled!==Math.abs(botQuantity))return false;
+ if(intents.some(intent=>intent.status!=='RECONCILED'))return false;
+ const filledIntents=intents.filter(intent=>intent.filled!==0);
+ const [buy]=filledIntents;
+ if(filledIntents.length!==1||buy.action!=='buy'||buy.filled!==Math.abs(botQuantity))return false;
  const side=botQuantity>0?'yes':'no';
  if(buy.side!==(side==='yes'?'up':'down'))return false;
  const settlement=snapshot.settlements.find(item=>item.ticker===ticker);
