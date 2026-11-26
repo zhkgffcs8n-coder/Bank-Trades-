@@ -5,9 +5,11 @@ import {ENTRY_MODES,validateLimits,reconcile,emergencyStop} from '../../src/live
 import {accountRisk,confirmedTradeHistory} from '../../src/live-accounting.mjs';
 const liveTrialCaps={orderCents:100,dailyCents:500,lossCents:300,maxPositions:1};
 function effectiveLiveLimits(limits){
+ if(limits.unlimitedBudgets===true)return limits;
  return {...limits,...Object.fromEntries(Object.entries(liveTrialCaps).map(([key,cap])=>[key,Math.min(limits[key],cap)]))};
 }
 function exceedsLiveCaps(limits){
+ if(limits.unlimitedBudgets===true)return limits.orderCents>20000||limits.maxPositions!==1;
  return Object.entries(liveTrialCaps).some(([key,cap])=>limits[key]>cap);
 }
 export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus,getCommit=liveBuildCommit}={}){return async req=>{try{
@@ -45,6 +47,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   }
   if(action==='start'){
    if(process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
+   if(state.failure==='SETTLEMENT_MISMATCH')fail(409,'Verify account and fills before restarting after a settlement mismatch');
    validateLimits(state.limits);
    state.limits=effectiveLiveLimits(state.limits);
    state.scalperArmedAt=Date.now();state.scalperEvents={};
@@ -69,7 +72,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    return json({...getRelease(),accountReadVerified:true,reconciled:false,positions,
     error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
   }
-  state.risk=accountRisk(state,snapshot);state.lastReconciledAt=Date.now();await session.persist(state);
+  state.risk=accountRisk(state,snapshot);state.failure=null;state.lastReconciledAt=Date.now();await session.persist(state);
   return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
  }finally{await session.release();}
 }catch(e){if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
