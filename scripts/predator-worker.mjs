@@ -376,7 +376,10 @@ async function run(){
    if(remote)try{await remote.setJSON('predator-v13/health',health);publishError=false;
    }catch(error){
     publishError=true;counters.heartbeatFailures++;
-    console.error(JSON.stringify({event:'PREDATOR_HEARTBEAT_WRITE_FAILED',errorType:error?.name??'Error'}));
+    const statusMatch=error?.name==='BlobsInternalError'?
+     /\b([1-5]\d{2}) status code\b/.exec(error.message):null;
+    console.error(JSON.stringify({event:'PREDATOR_HEARTBEAT_WRITE_FAILED',errorType:error?.name??'Error',
+     httpStatus:statusMatch?Number(statusMatch[1]):null}));
    }
   }
   await new Promise(resolve=>setTimeout(resolve,100));
