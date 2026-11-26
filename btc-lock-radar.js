@@ -1033,14 +1033,21 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const deliverToKaiBot=(stage,action)=>{
     if(selectedCoin!=='BTC')return;
     const signal={ticker,side:tracked.side,stage,action,entry:tracked.entry,exitBid:tracked.exitBid,at:Date.now()};
+    const showOutcome=outcome=>window.dispatchEvent(new CustomEvent('banktrades:kaibot-delivery',{
+      detail:{ticker,stage,outcome,signalAt:signal.at}
+    }));
     const deliver=async()=>{
       try{
         const response=await fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
           headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})});
-        if(response.status===503&&(await response.json()).error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500)
-          setTimeout(deliver,250);
+        const result=await response.json();
+        if(response.status===503&&result.error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500){
+          setTimeout(deliver,250);return;
+        }
+        showOutcome(result.reason||result.error||result.status||'HTTP '+response.status);
       }catch{
         if(Date.now()-signal.at<8500)setTimeout(deliver,500);
+        else showOutcome('DELIVERY_RESPONSE_UNAVAILABLE');
       }
     };
     void deliver();
