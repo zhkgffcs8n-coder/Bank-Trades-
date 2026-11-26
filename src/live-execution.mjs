@@ -38,7 +38,7 @@ export function reconcile(state,snapshot,now=Date.now()){
    field==='orders'?['client_order_id','ticker','fill_count_fp','fill_count','status']:
    ['ticker','market_result','yes_count_fp','no_count_fp','revenue','fee_cost','settled_time'];
   const previous=new Map((cached[field]||[]).map(x=>[key(x),x]));
-  for(const item of incoming){const old=previous.get(key(item));if(old&&facts.some(k=>old[k]!==item[k]))throw Error('CONFLICTING_CACHED_'+field.toUpperCase());}
+  for(const item of incoming){const old=previous.get(key(item));if(old&&(facts.some(k=>old[k]!==item[k])||field==='fills'&&old.outcome_side!=null&&item.outcome_side!=null&&old.outcome_side!==item.outcome_side))throw Error('CONFLICTING_CACHED_'+field.toUpperCase());}
 
   snapshot[field]=[...incoming,...(cached[field]||[]).filter(x=>!seen.has(key(x)))];
  }
@@ -158,7 +158,14 @@ export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
  if(!exitOrder||!['executed','canceled'].includes(exitOrder.status))return false;
  if(!exitFills.every(fill=>{
   const at=Date.parse(fill.created_time),qty=Number(fill.count_fp??fill.count);
-  return fill.order_id===orderId&&fill.action==='sell'&&fill.side===side&&
+  const closingOutcome=side==='yes'?'no':'yes';
+  const closingBookSide=side==='yes'?'ask':'bid';
+  const hasDirection=fill.outcome_side!=null||fill.book_side!=null;
+  const closesPosition=hasDirection
+   ?(fill.outcome_side==null||fill.outcome_side===closingOutcome)&&
+    (fill.book_side==null||fill.book_side===closingBookSide)
+   :fill.action==='sell'&&fill.side===side;
+  return fill.order_id===orderId&&closesPosition&&
    Number.isFinite(qty)&&qty>0&&at>entryAt&&at<=settledAt&&at<=now;
  }))return false;
  const quantity=exitFills.reduce((sum,fill)=>sum+Number(fill.count_fp??fill.count),0);

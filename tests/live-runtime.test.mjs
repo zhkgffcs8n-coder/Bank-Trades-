@@ -216,13 +216,13 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  state.intents.push({id:'unfilled-exit',orderId:'unfilled-exit-order',ticker:'BTC-ROUND',side:'up',action:'sell',qty:1,status:'RECONCILED',filled:0,at:now-2500});
  snapshot.orders.push({order_id:'unfilled-exit-order',client_order_id:'unfilled-exit',ticker:'BTC-ROUND',status:'canceled',fill_count_fp:'0.00'});
  snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
- snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',action:'sell',
-  side:'yes',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
+ snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',outcome_side:'no',
+  book_side:'ask',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
  snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'0.00',no_count_fp:'0.00',market_result:'yes',revenue:0,
   fee_cost:'0.00',settled_time:new Date(now-1000).toISOString()}];
  let mismatch;
  assert.throws(()=>reconcile(state,snapshot,now),error=>{mismatch=error.settlementMismatch;return error.message==='SETTLEMENT_MISMATCH';});
- const wrong=structuredClone(snapshot);wrong.fills[1].side='no';
+ const wrong=structuredClone(snapshot);wrong.fills[1].book_side='bid';
  assert.equal(reconcileManualExit(state,wrong,mismatch,now),false);
  assert.equal(state.intents.length,2);
  assert.equal(reconcileManualExit(state,snapshot,mismatch,now),true);
