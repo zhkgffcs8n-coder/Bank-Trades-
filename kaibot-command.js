@@ -90,10 +90,10 @@
   const state=liveStart?.dataset.liveState||'unavailable';
   panel.dataset.liveState=state;
   const armed=state==='armed'||state==='waiting';
-  field('start').textContent=armed?'LIVE MONEY ARMED':state==='starting'?'ARMING…':'START LIVE';
+  field('start').textContent=armed?'LIVE MONEY ARMED':state==='starting'?'ARMING…':state==='blocked'?'VERIFY ACCOUNT FIRST':'START LIVE';
   update('live-feedback',document.getElementById('liveReleaseStatus')?.textContent||'');
   update('live-mode',state==='waiting'?'REAL MONEY · ARMED — WAITING':armed?'REAL MONEY · ARMED':
-   state==='starting'?'REAL MONEY · ARMING…':state==='ready'?'REAL MONEY · OFF — READY TO START':'REAL MONEY · START UNAVAILABLE');
+   state==='blocked'?'REAL MONEY · OFF — SETTLEMENT BLOCKED':state==='starting'?'REAL MONEY · ARMING…':state==='ready'?'REAL MONEY · OFF — READY TO START':'REAL MONEY · START UNAVAILABLE');
  };
  const actionObserver=new MutationObserver(syncActions);
  for(const button of [liveStart,liveStop,liveReconcile])if(button)actionObserver.observe(button,{attributes:true,attributeFilter:['disabled','data-live-state']});
