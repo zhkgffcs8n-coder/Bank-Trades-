@@ -218,7 +218,7 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
  snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',outcome_side:'no',
   book_side:'ask',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
- snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'0.00',no_count_fp:'0.00',market_result:'yes',revenue:60,
+ snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'1.00',no_count_fp:'1.00',market_result:'no',revenue:0,
   fee_cost:'0.00',settled_time:new Date(now-1000).toISOString()}];
  let mismatch;
  assert.throws(()=>reconcile(state,snapshot,now),error=>{mismatch=error.settlementMismatch;return error.message==='SETTLEMENT_MISMATCH';});

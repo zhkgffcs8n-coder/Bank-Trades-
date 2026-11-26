@@ -11,7 +11,7 @@ export function settlementFor(snapshot,ticker,qty,{manualExit=false}={}){
  });
  const revenue=numeric(s.revenue,'SETTLEMENT_REVENUE');
  // A verified flat manual exit is accounted for from its fills. Retain the exchange receipt.
- if(manualExit&&yes===0&&no===0)return s;
+ if(manualExit&&yes===no&&(yes===0||revenue===0))return s;
  const expectedRevenue=(s.market_result==='yes'?yes:no)*100;
  if(Math.abs(revenue-expectedRevenue)>1e-7)throw Object.assign(Error('SETTLEMENT_REVENUE_MISMATCH'),{
   settlementRevenueMismatch:{ticker,revenue,expectedRevenue,yes,no,result:s.market_result}
