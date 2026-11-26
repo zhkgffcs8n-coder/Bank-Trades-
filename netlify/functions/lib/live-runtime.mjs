@@ -30,18 +30,20 @@ export async function runtime(userId){
  }
  const live={db,repo,client,async acceptScalperEvent(signal){
   const now=Date.now(),{ticker,side,stage,action,entry,exitBid,at}=signal??{};
-  if(typeof ticker!=='string'||!/^KXBTC15M-[A-Z0-9-]{1,48}$/.test(ticker)||!['up','down'].includes(side)||
+  const cross=signal?.source==='cross-coin',source=cross?'cross-coin':'pro-scalper';
+  if(typeof ticker!=='string'||!(cross?/^KX(?:BTC|ETH|SOL|XRP|DOGE|BNB|HYPE|ZEC)15M-[A-Z0-9-]{1,48}$/:/^KXBTC15M-[A-Z0-9-]{1,48}$/).test(ticker)||!['up','down'].includes(side)||
    !Number.isFinite(at)||at>now||now-at>10000||!(Number.isFinite(entry)&&entry>0&&entry<100)||
-   !(stage==='entry'&&action==='BUY'||stage==='exit'&&['TAKE PROFIT','SELL FAST'].includes(action)&&Number.isFinite(exitBid)&&exitBid>0&&exitBid<=100))
+   !(stage==='entry'&&action==='BUY'&&(!cross||entry>=40&&entry<=80)||stage==='exit'&&['TAKE PROFIT','SELL FAST'].includes(action)&&Number.isFinite(exitBid)&&exitBid>0&&exitBid<=100))
    return {status:'REJECTED_INVALID_OR_STALE_SCALPER_EVENT'};
   const session=await repo.acquire();
   try{
    const state=session.state;
    if(!state.enabled||!state.scalperArmedAt||at<state.scalperArmedAt||await repo.stopped())return {status:'LIVE_OFF_OR_EVENT_BEFORE_ARM'};
    state.scalperEvents??={};
-   const prior=state.scalperEvents[stage];
+   const slot=cross?'cross-'+stage:stage;
+   const prior=state.scalperEvents[slot];
    if(prior?.ticker===ticker||prior?.at>=at)return {status:'DUPLICATE_OR_OLDER_SCALPER_EVENT'};
-   state.scalperEvents[stage]={ticker,action:action+' '+side.toUpperCase(),at,receivedAt:now,entryReference:entry,exitReference:exitBid};
+   state.scalperEvents[slot]={ticker,source,action:action+' '+side.toUpperCase(),at,receivedAt:now,entryReference:entry,exitReference:exitBid};
    await session.persist(state);
   }finally{await session.release();}
   return live.tick();
@@ -64,8 +66,8 @@ export async function runtime(userId){
    signals:async state=>{
     const at=Date.now(),events=Object.values(state.scalperEvents??{}).filter(event=>at>=event.at&&at-event.at<=10000);
     intakeStatus=events.length?'OFFICIAL_SCALPER_EVENT':'WAITING_FOR_FRESH_OFFICIAL_SCALPER_EVENT';
-    const exit=events.find(event=>!event.action.startsWith('BUY '));
-    return events.filter(event=>!event.action.startsWith('BUY ')||exit?.ticker!==event.ticker);
+    return events.filter(event=>!event.action.startsWith('BUY ')||!events.some(exit=>
+     !exit.action.startsWith('BUY ')&&exit.ticker===event.ticker&&exit.source===event.source));
    },
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
