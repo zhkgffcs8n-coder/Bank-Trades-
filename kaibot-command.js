@@ -11,7 +11,7 @@
   <button type="button" data-back autofocus>← BACK TO DASHBOARD</button>
  </header>
  <div class="kai-command-modes"><strong data-live-mode>REAL MONEY · LOCKED</strong><span>DEMO · SIMULATED FUNDS</span><span>PAPER · VIRTUAL LEDGER</span></div>
- <div class="kai-command-actions"><button type="button" data-start disabled>START AUTO TRADE</button><button type="button" data-stop disabled>STOP AUTO TRADE</button><button type="button" data-reconcile disabled>VERIFY ACCOUNT &amp; FILLS</button></div>
+ <div class="kai-command-actions"><button type="button" data-start disabled>START LIVE</button><button type="button" data-stop disabled>STOP AUTO TRADE</button><button type="button" data-reconcile disabled>VERIFY ACCOUNT &amp; FILLS</button></div>
  <section class="kai-coins" aria-labelledby="kai-coins-title">
   <h2 id="kai-coins-title">COINS</h2>
   <div data-coins role="group" aria-label="Auto Trade coin selection"></div>
@@ -87,10 +87,15 @@
   field('start').disabled=!liveStart||liveStart.disabled;
   field('reconcile').disabled=!liveReconcile||liveReconcile.disabled;
   field('stop').disabled=!liveStop||liveStop.disabled;
-  update('live-mode',field('start').disabled?'REAL MONEY · START UNAVAILABLE':'REAL MONEY · START AVAILABLE');
+  const state=liveStart?.dataset.liveState||'unavailable';
+  panel.dataset.liveState=state;
+  const armed=state==='armed'||state==='waiting';
+  field('start').textContent=armed?'LIVE MONEY ARMED':'START LIVE';
+  update('live-mode',state==='waiting'?'REAL MONEY · ARMED — WAITING':armed?'REAL MONEY · ARMED':
+   state==='ready'?'REAL MONEY · OFF — READY TO START':'REAL MONEY · START UNAVAILABLE');
  };
  const actionObserver=new MutationObserver(syncActions);
- for(const button of [liveStart,liveStop,liveReconcile])if(button)actionObserver.observe(button,{attributes:true,attributeFilter:['disabled']});
+ for(const button of [liveStart,liveStop,liveReconcile])if(button)actionObserver.observe(button,{attributes:true,attributeFilter:['disabled','data-live-state']});
  field('start').addEventListener('click',()=>liveStart?.click());
  field('reconcile').addEventListener('click',()=>liveReconcile?.click());
  field('stop').addEventListener('click',()=>liveStop?.click());
