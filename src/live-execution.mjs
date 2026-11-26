@@ -60,7 +60,8 @@ export function reconcile(state,snapshot,now=Date.now()){
   intent.status='RECONCILED';intent.filled=count;intent.orderId=o.order_id;
   quantities.set(intent.ticker,(quantities.get(intent.ticker)||0)+count*(intent.side==='up'?1:-1)*(intent.action==='buy'?1:-1));
  }
- for(const [ticker,qty] of quantities){if(settlementFor(snapshot,ticker,qty))quantities.set(ticker,0);}
+ const manualExitTickers=new Set(state.intents.filter(intent=>intent.manualExit===true&&intent.status==='RECONCILED').map(intent=>intent.ticker));
+ for(const [ticker,qty] of quantities){if(settlementFor(snapshot,ticker,qty,{manualExit:manualExitTickers.has(ticker)}))quantities.set(ticker,0);}
  // An isolated account is required: unknown positions/orders block new trading.
  for(const [ticker,qty] of positions)if(Math.abs(qty-(quantities.get(ticker)||0))>1e-7)throw Error('POSITION_MISMATCH_'+ticker);
  for(const [ticker,qty] of quantities)if(Math.abs(qty-(positions.get(ticker)||0))>1e-7)throw Error('POSITION_MISSING_'+ticker);
