@@ -1051,4 +1051,22 @@ $('liveAccountRefresh').addEventListener('click',async()=>{const button=$('liveA
 $('liveSaveLimits').addEventListener('click',()=>action('configure',{entryMode:$('liveEntryMode').value,limits:{orderCents:Math.round(Number($('liveOrderLimit').value)*100),dailyCents:Math.round(Number($('liveDailyLimit').value)*100),lossCents:Math.round(Number($('liveLossLimit').value)*100),maxPositions:1,profitPct:Number($('liveProfitPct').value),stopPct:Number($('liveStopPct').value),trailPct:Number($('liveTrailPct').value),trailActivationPct:Number($('liveTrailActivationPct').value)}}));
 setInterval(async()=>{if(document.hidden||busy)return;const d=await refresh();if(d?.enabled)await action('tick');},5000);refresh();
 })();
-</script></body></html>
+</script><script>
+if(location.hostname==='deploy-preview-214--neon-gecko-046bff.netlify.app'){
+ const button=document.createElement('button'),status=document.createElement('p');
+ button.type='button';button.textContent='Run KaiBot START and STOP in Kalshi Demo';
+ status.setAttribute('role','status');
+ button.addEventListener('click',async()=>{
+  button.disabled=true;status.textContent='Running one post-only order in Kalshi Demo…';
+  try{
+   const response=await fetch('/.netlify/functions/kalshi-manual-start-demo',{method:'POST',credentials:'same-origin',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmation:'RUN_DEMO_CANCEL_TEST'})});
+   const result=await response.json();
+   status.textContent=response.ok&&result.verified?'Verified: START, waiting, STOP and exchange cancellation.':result.error||'Demo verification incomplete.';
+  }catch{status.textContent='Demo verification response unavailable.';}
+  finally{button.disabled=false;}
+ });
+ document.body.prepend(button,status);
+}
+</script>
+</body></html>
