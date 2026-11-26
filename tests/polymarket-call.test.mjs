@@ -45,3 +45,21 @@ test('Polymarket buys and flips require a 40–80% entry ask', () => {
     assert.equal(flip.side, eligible ? 'down' : 'up');
   }
 });
+
+test('live Polymarket BTC uses fresh TradingView direction and Polymarket execution prices', () => {
+  const end = 900000;
+  const at = 5000;
+  const quotes = { up: { bid: 58, ask: 60 }, down: { bid: 39, ask: 41 } };
+  const live = { coin: 'BTC', feeRate: .05, tradingView: { status: 'FRESH', direction: 'UP', candleCloseAt: at } };
+  const input = { ticker: 'btc-updown-15m-0', end, at, now: at, quotes, decision: 'DOWN', live };
+  assert.equal(advancePolymarketCall(null, { ...input, now: 26000, at: 26000 }), null);
+  const bought = advancePolymarketCall(null, input);
+  assert.equal(bought.side, 'up');
+  assert.equal(bought.entry, 60);
+  assert.equal(advancePolymarketCall(bought, {
+    ...input, quotes: { up: { bid: 50, ask: 51 }, down: { bid: 49, ask: 50 } },
+  }).exit, null);
+  assert.equal(advancePolymarketCall(bought, {
+    ...input, quotes: { up: { bid: 73, ask: 74 }, down: { bid: 26, ask: 27 } },
+  }).exit, 'TAKE PROFIT');
+});

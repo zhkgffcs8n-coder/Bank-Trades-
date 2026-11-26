@@ -1,3 +1,5 @@
+import { getStore } from '@netlify/blobs';
+import { assessAlert, feedKey, feedStore } from './lib/tradingview-btc.mjs';
 import { member, errorResponse } from './lib/access.mjs';
 
 const coins = ['btc', 'eth', 'sol', 'xrp'];
@@ -52,13 +54,16 @@ export default async function handler(req) {
     await member();
     const start = Math.floor(Date.now() / roundMs) * roundMs;
     const end = start + roundMs;
-    const results = await Promise.allSettled(coins.map(coin => loadMarket(coin, start)));
+    const [results, alert] = await Promise.all([
+      Promise.allSettled(coins.map(coin => loadMarket(coin, start))),
+      getStore({ name: feedStore, consistency: 'strong' }).get(feedKey, { type: 'json' }).catch(() => null),
+    ]);
     const observedAt = Date.now();
     const markets = results.map((result, index) => ({
       coin: coins[index].toUpperCase(),
       market: observedAt < end && result.status === 'fulfilled' ? result.value : null,
     }));
-    return Response.json({ end, observedAt, markets }, { headers: { 'Cache-Control': 'private, no-store' } });
+    return Response.json({ start, end, observedAt, markets, tradingView: assessAlert(alert, start, end, observedAt) }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     return errorResponse(error);
   }
