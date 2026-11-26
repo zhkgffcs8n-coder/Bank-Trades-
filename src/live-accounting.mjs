@@ -1,6 +1,6 @@
 const dayOf=at=>new Date(at).toISOString().slice(0,10);
 const numeric=(value,label)=>{if(value===null||value===undefined||value==='')throw Error('MISSING_'+label);const n=Number(value);if(!Number.isFinite(n)||n<0)throw Error('INVALID_'+label);return n;};
-export function settlementFor(snapshot,ticker,qty){
+export function settlementFor(snapshot,ticker,qty,{manualExit=false}={}){
  const matches=(snapshot.settlements||[]).filter(x=>x.ticker===ticker);
  if(!matches.length)return null;
  if(matches.length!==1)throw Error('DUPLICATE_SETTLEMENT');const s=matches[0];
@@ -10,6 +10,8 @@ export function settlementFor(snapshot,ticker,qty){
    invalidResult:!['yes','no'].includes(s.market_result),invalidTime:!Number.isFinite(Date.parse(s.settled_time))}
  });
  const revenue=numeric(s.revenue,'SETTLEMENT_REVENUE');
+ // A verified flat manual exit is accounted for from its fills. Retain the exchange receipt.
+ if(manualExit&&yes===0&&no===0)return s;
  if(Math.abs(revenue-(s.market_result==='yes'?yes:no)*100)>1e-7)throw Error('SETTLEMENT_REVENUE_MISMATCH');return s;
 }
 // Gains never replenish this conservative daily risk budget. Open cost is reserved in full.
@@ -20,6 +22,7 @@ function calculateAccount(state,snapshot,now,history){
   if(i.status==='ABORTED')continue;
   if(i.status!=='RECONCILED')throw Error('UNRECONCILED_RISK');
   let t=trades.get(i.ticker);if(!t){t={ticker:i.ticker,side:i.side,qty:0,cost:0,bought:0,entryValue:0,net:0,lastAt:0};trades.set(i.ticker,t);}
+  if(i.manualExit===true)t.manualExit=true;
   if(t.side!==i.side)throw Error('UNEXPECTED_SIDE_CHANGE');
   const fs=[...unique.values()].filter(f=>f.order_id===i.orderId).sort((a,b)=>Date.parse(a.created_time)-Date.parse(b.created_time));
   for(const f of fs){
@@ -34,8 +37,8 @@ function calculateAccount(state,snapshot,now,history){
   }
  }
  for(const t of trades.values()){
-  const settlement=settlementFor(snapshot,t.ticker,t.side==='up'?t.qty:-t.qty);
-  if(settlement){const pnl=Number(settlement.revenue)-t.cost-numeric(settlement.fee_cost,'SETTLEMENT_FEES')*100;t.net+=pnl;t.lastAt=Date.parse(settlement.settled_time);if(dayOf(t.lastAt)===today)dailyLossCents+=Math.max(0,-pnl);t.qty=0;t.cost=0;}
+  const settlement=settlementFor(snapshot,t.ticker,t.side==='up'?t.qty:-t.qty,{manualExit:t.manualExit});
+  if(settlement){const pnl=(t.manualExit&&Number(settlement.yes_count_fp)===0&&Number(settlement.no_count_fp)===0?0:Number(settlement.revenue))-t.cost-numeric(settlement.fee_cost,'SETTLEMENT_FEES')*100;t.net+=pnl;t.lastAt=Date.parse(settlement.settled_time);if(dayOf(t.lastAt)===today)dailyLossCents+=Math.max(0,-pnl);t.qty=0;t.cost=0;}
  }
  if(history)return [...trades.values()].filter(t=>t.bought>0).sort((a,b)=>b.lastAt-a.lastAt).slice(0,8)
   .map(t=>({ticker:t.ticker,side:t.side,entryPct:t.entryValue/t.bought,at:t.lastAt,
