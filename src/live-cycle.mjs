@@ -6,17 +6,23 @@ const temporaryQuoteError=e=>/^KALSHI_HTTP_(429|500|502|503|504)$/.test(e?.messa
 async function safeQuote(quoteFor,ticker){
  try{return await quoteFor(ticker)}catch(e){if(temporaryQuoteError(e))return null;throw e}
 }
-export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,championMode=false,now=Date.now()}){
+export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,championMode=false,waitForDependencies=false,signalStatus=()=>null,now=Date.now()}){
  const session=await repo.acquire(),state=session.state,persist=session.persist;
  try{
   // A stop blocks entries immediately, but does not claim cancellation while an order is unknown.
-  if(await repo.stopped()||state.stopped||!canTrade){
+  if(await repo.stopped()||state.stopped||!(typeof canTrade==='function'?canTrade(state):canTrade)){
    state.enabled=false;state.stopped=true;await persist(state);
    if(!state.intents.length)return {status:'STOPPED',cancelled:true};
    try{reconcile(state,await client.snapshot());await persist(state);}catch{}
    return {status:'STOPPED',...await emergencyStop({state,client,persist})};
   }
-  const snap=await client.snapshot();reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
+  let snap;
+  try{snap=await client.snapshot();}catch(error){
+   if(!waitForDependencies||!(temporaryQuoteError(error)||/^KALSHI_HTTP_(401|403)$/.test(error.message)||error instanceof TypeError))throw error;
+   return {status:'ARMED_WAITING',reason:/^KALSHI_HTTP_/.test(error.message)?error.message:'KALSHI_SNAPSHOT_UNAVAILABLE'};
+  }
+  if(waitForDependencies&&!snap.complete)return {status:'ARMED_WAITING',reason:'KALSHI_SNAPSHOT_INCOMPLETE'};
+  reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
   const decisions=championMode?await signals():null;
   for(const p of risk.open){
    const quote=await safeQuote(quoteFor,p.ticker);
@@ -39,14 +45,17 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   }
   if(risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity))return {status:'RISK_LIMIT',risk};
   if(championMode&&risk.open.length)return {status:'MONITORING',risk};
+  if(waitForDependencies&&snap.orders.some(order=>order.status==='resting'))return {status:'ARMED_WAITING',reason:'RESTING_ORDERS_PRESENT'};
+  let waitingReason=signalStatus();
+  if(!waitingReason||waitingReason==='SHADOW_PARITY_MATCH')waitingReason='NO_NEW_PRO_SCALPER_ENTRY';
   for(const signal of decisions??await signals()){
    if(!['BUY UP','BUY DOWN'].includes(signal.action)||state.intents.some(i=>i.ticker===signal.ticker&&i.action==='buy'))continue;
-   const quote=await safeQuote(quoteFor,signal.ticker);if(!quote)continue;
-   if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference))continue;
+   const quote=await safeQuote(quoteFor,signal.ticker);if(!quote){waitingReason='ENTRY_QUOTE_UNAVAILABLE';continue;}
+   if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference)){waitingReason='ENTRY_PRICE_ABOVE_SIGNAL';continue;}
    const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
    reconcile(state,await client.snapshot());await persist(state);return {status:'ENTRY_SUBMITTED',id:intent.id};
   }
-  return {status:'MONITORING',risk};
+  return waitForDependencies?{status:'ARMED_WAITING',reason:waitingReason,risk}:{status:'MONITORING',risk};
  }catch(e){state.enabled=false;state.stopped=true;state.failure=e.message;await repo.stop();await persist(state);throw e;}
  finally{
   // STOP arriving during the exchange request is drained before releasing the lock.
