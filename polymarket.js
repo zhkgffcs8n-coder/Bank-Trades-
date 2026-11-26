@@ -16,6 +16,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const calls = document.querySelector('#poly-signal-calls');
   const samples = new Map();
   const engines = { A: 'NOVA', B: 'VOLT', C: 'KITSUNE' };
+  const engineName = (coin, key) => coin === 'BTC' && key === 'A' ? 'TRADINGVIEW 1s' : engines[key];
   const tracker = document.querySelector('#poly-tracker-positions');
   const trackerEmpty = document.querySelector('#poly-tracker-empty');
   const livePanel = document.querySelector('#poly-live-panel');
@@ -123,15 +124,20 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       up: { bid: up.bid * 100, ask: up.ask * 100 },
       down: { bid: down.bid * 100, ask: down.ask * 100 },
     };
-    for (const [key, engine] of Object.entries(engines)) {
+    for (const key of Object.keys(engines)) {
+      const engine = engineName(coin, key);
+      // One official BTC call follows TradingView. The remaining engines keep
+      // displaying any already-open calls until those contracts end.
       const position = state.positions[key];
+      if (coin === 'BTC' && key !== 'A' && !position) continue;
       const next = advancePolymarketCall(position, {
         ticker: market.slug, end: data.end, at: market.quoteAt, now: Date.now(),
         quotes, decision: assessment?.engines[key]?.decision,
+        live: { coin, feeRate: market.feeRate, tradingView: data.tradingView },
       });
       if (!next || next === position) continue;
       state.positions[key] = next;
-      if (position?.exit && next.exit) continue;
+      if (position && Boolean(position.exit) === Boolean(next.exit)) continue;
       const side = next.side.toUpperCase();
       const action = next.exit ? `${next.exit.split(' · ')[0]} ${side}`
         : position ? `FLIP · BUY ${side}` : `BUY ${side}`;
@@ -171,7 +177,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       call.hidden = prices.hidden = !toggle.checked;
       if (!toggle.checked) continue;
       const market = freshMarket(coin);
-      const engineCalls = Object.entries(engines).map(([key, name]) => currentCall(coin, market, key, name));
+      const engineCalls = Object.keys(engines).map(key => currentCall(coin, market, key, engineName(coin, key)));
       // Keep the displayed entry consistent by preferring the first active engine.
       const active = engineCalls.find(item => item.position && !item.position.exit);
       const displayed = active ?? engineCalls.filter(item => item.position)
@@ -218,11 +224,16 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const assessment = market && sample?.quote.ticker === market.slug ? sample.assessment : null;
     const late = market && snapshot.end - Date.now() < 120000;
     signalStatus.textContent = !market ? feedError || 'Waiting for live Polymarket quotes'
+      : selected === 'BTC'
+        ? snapshot.tradingView?.status === 'FRESH' && Date.now() - snapshot.tradingView.candleCloseAt <= 20000
+          ? 'TradingView BTC 1s · ' + snapshot.tradingView.direction
+          : 'Waiting for a fresh TradingView BTC 1s alert'
       : late ? 'Entry window closed · next round in under 2 minutes'
       : market.feeRate === null ? 'Waiting for verified Polymarket fees'
       : assessment?.radar ?? 'Collecting usable quotes for this round';
     const trackedCards = [];
-    const rows = Object.entries(engines).map(([key, name]) => {
+    const rows = Object.keys(engines).map(key => {
+      const name = engineName(selected, key);
       const row = document.createElement('tr');
       const { position, side, action } = currentCall(selected, market, key, name);
       row.insertCell().textContent = name;
