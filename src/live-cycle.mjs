@@ -23,7 +23,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   }
   if(waitForDependencies&&!snap.complete)return {status:'ARMED_WAITING',reason:'KALSHI_SNAPSHOT_INCOMPLETE'};
   reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
-  const decisions=championMode?await signals():null;
+  const decisions=championMode?await signals(state):null;
   for(const p of risk.open){
    const quote=await safeQuote(quoteFor,p.ticker,waitForDependencies);
    // Missing executable exit liquidity is a degraded monitoring state, not an
@@ -47,7 +47,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   if(championMode&&risk.open.length)return {status:'MONITORING',risk};
   if(waitForDependencies&&snap.orders.some(order=>order.status==='resting'))return {status:'ARMED_WAITING',reason:'RESTING_ORDERS_PRESENT'};
   let waitingReason=signalStatus();
-  if(!waitingReason||waitingReason==='SHADOW_PARITY_MATCH')waitingReason='NO_NEW_PRO_SCALPER_ENTRY';
+  if(!waitingReason||['SHADOW_PARITY_MATCH','OFFICIAL_SCALPER_EVENT'].includes(waitingReason))waitingReason='NO_NEW_PRO_SCALPER_ENTRY';
   for(const signal of decisions??await signals()){
    if(!['BUY UP','BUY DOWN'].includes(signal.action)||state.intents.some(i=>i.ticker===signal.ticker&&i.action==='buy'))continue;
    const quote=await safeQuote(quoteFor,signal.ticker,waitForDependencies);if(!quote){waitingReason='ENTRY_QUOTE_UNAVAILABLE';continue;}
