@@ -167,6 +167,22 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     fastQuotes.set(row.asset,quote);
     handleContracts({detail:{contracts:[...fastQuotes.values()].filter(q=>now-q.received<=5000&&q.close>now),fetched:Math.max(now,lastSnapshot+1)}});
   });
+  let stableGroup=null,lastCrossRound=null;
+  const forwardCrossCoin=(position,stage,exitBid)=>{
+    const signal={source:'cross-coin',ticker:position.ticker,side:position.direction>0?'up':'down',
+      stage,action:stage==='entry'?'BUY':'SELL FAST',entry:position.ask,exitBid,at:Date.now()};
+    const send=async()=>{
+      try{
+        const response=await fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})});
+        const result=await response.json();
+        if(result.error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500){setTimeout(send,250);return;}
+        window.dispatchEvent(new CustomEvent('banktrades:kaibot-delivery',{detail:{ticker:signal.ticker,stage,
+          outcome:result.reason||result.error||result.status,signalAt:signal.at}}));
+      }catch{if(Date.now()-signal.at<8500)setTimeout(send,500);}
+    };
+    void send();
+  };
   function handleContracts({ detail: snapshot }) {
     const now = Date.now();
     const { contracts, fetched } = snapshot;
@@ -197,6 +213,12 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
     const side = direction > 0 ? 'UP' : 'DOWN';
     const hasMajority = aligned.length >= 5 && agreement > aligned.length / 2;
     const remaining = aligned.length ? aligned[0].close - now : 0;
+    const groupKey=aligned.length>=5&&aligned.every(row=>Number.isFinite(row.received)&&now>=row.received&&now-row.received<=5000)&&agreement>=Math.ceil(aligned.length*.75)?aligned[0].close+'|'+direction:null;
+    if(!groupKey)stableGroup=null;
+    else if(stableGroup?.key!==groupKey||now-stableGroup.lastAt>5000)stableGroup={key:groupKey,since:now,lastAt:now};
+    else stableGroup.lastAt=now;
+    const confirmedGroup=stableGroup&&now-stableGroup.since>=1000;
+    const liveCandidates=[];
     const entered = new Set();
     if (hasMajority && remaining >= 60000 && remaining <= 360000) {
       for (const row of aligned) {
@@ -217,10 +239,25 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
           if (followingSide < Math.ceil(peers.length * 0.75) ||
               !(askMove >= 3 && bidMove >= 2)) continue;
         }
-        positions.set(row.ticker, { ...row, bid, ask, direction, sell: false });
+        positions.set(row.ticker, { ...row, bid, ask, direction, sell: false,openedAt:now });
         entered.add(row.ticker);
+
       }
     }
+    if(confirmedGroup&&remaining>=60000&&remaining<=360000&&lastCrossRound!==aligned[0].close){
+      for(const row of aligned){
+        const position=positions.get(row.ticker),prior=recent.get(row.ticker);
+        if(!position||position.direction!==direction||row.lean!==direction||position.sell||
+          now-position.openedAt>5000||!Number.isFinite(prior?.received)||row.received<=prior.received||now-prior.received>5000)continue;
+        const ask=direction>0?row.yesAsk:row.noAsk,bid=direction>0?row.yesBid:row.noBid;
+        const priorAsk=direction>0?prior.yesAsk:prior.noAsk,priorBid=direction>0?prior.yesBid:prior.noBid;
+        if(ask<40||ask>80||ask>position.ask||spread(bid,ask)>4||ask<priorAsk||bid<priorBid)continue;
+        liveCandidates.push(position);
+      }
+    }
+    liveCandidates.sort((a,b)=>(a.ask-a.bid)-(b.ask-b.bid)||Number(b.asset==='BTC')-Number(a.asset==='BTC')||b.bid-a.bid);
+    const best=liveCandidates[0];
+    if(best){lastCrossRound=best.close;best.forwarded=true;forwardCrossCoin(best,'entry');}
     const entries = [...positions.values()].map(position => {
       validUntil = Math.min(validUntil, position.close);
       const round = rounds.get(position.close) ?? [];
@@ -230,7 +267,10 @@ pre{white-space:pre-wrap;word-break:break-word;color:#d5e4ff;font-size:12px}
       const exitQuote = freshBook(position.ticker, now) || row;
       const bid = position.direction > 0 ? exitQuote?.yesBid : exitQuote?.noBid;
       const exitBid = bid > 0 && bid < 100 ? bid : undefined;
-      if (position.sell && position.exitBid == null && Number.isFinite(exitBid)) position.exitBid = exitBid;
+      if (position.sell && position.exitBid == null && Number.isFinite(exitBid)) {
+        position.exitBid = exitBid;
+        if(position.forwarded)forwardCrossCoin(position,'exit',exitBid);
+      }
       const action = entered.has(position.ticker) ? 'BUY' :
         position.sell ? (exitBid === undefined ? 'SELL WATCH' : 'SELL') :
         exitBid === undefined ? 'QUOTE UNAVAILABLE' : 'HOLD';

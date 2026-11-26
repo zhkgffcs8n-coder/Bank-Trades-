@@ -50,7 +50,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    if(state.failure==='SETTLEMENT_MISMATCH')fail(409,'Verify account and fills before restarting after a settlement mismatch');
    validateLimits(state.limits);
    state.limits=effectiveLiveLimits(state.limits);
-   state.scalperArmedAt=Date.now();state.scalperEvents={};
+   state.scalperArmedAt=Date.now();state.scalperEvents={};state.crossCoinArmed=true;
    state.manualArmVersion=1;state.enabled=true;state.stopped=false;state.failure=null;
    await session.persist(state);await live.repo.startFence(startFence);
    return json({enabled:true,stopped:false,status:'ARMED_WAITING',reason:'AWAITING_EXECUTION_CHECKS'});

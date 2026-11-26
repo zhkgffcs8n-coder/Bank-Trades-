@@ -99,18 +99,18 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  const risk=accountRisk(state,snapshot,now);
  if(action==='buy'&&!expanded&&risk.dailyLossCents+risk.openCostCents+reserve>Math.min(state.limits.lossCents,HARD_RISK_CAPS.lossCents))throw Error('DAILY_LOSS_LIMIT');
  if(action==='buy'&&!expanded&&risk.openCostCents+reserve>HARD_RISK_CAPS.exposureCents)throw Error('EXPOSURE_LIMIT');
- if(action==='buy'&&quote.expiresAt-now<75000)throw Error('LATE_ENTRY');
+ if(action==='buy'&&quote.expiresAt-now<(signal.source==='cross-coin'?60000:75000))throw Error('LATE_ENTRY');
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
  if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
  if(action==='buy'&&(reserve>orderCap||(!expanded&&reserve+(state.spent[day]||0)>dailyLimit)||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
  // Conservative budget includes a 10-cent per-contract fee reserve and is never released on retries.
- const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};
+ const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,source:signal.source,status:'PREPARED',at:now};
  state.intents.push(intent);state.spent[day]=(state.spent[day]||0)+reserve;await persist(state);
  if(await checkStopped()){intent.status='ABORTED';await persist(state);throw Error('STOPPED_BEFORE_SUBMISSION');}
  intent.status='SUBMITTING';await persist(state);
  const stopped=await checkStopped(),submitAt=clock();
  if(stopped||!fresh(quote.at,submitAt)||!fresh(signal.at,submitAt)||!fresh(snapshot.at,submitAt)||quote.expiresAt<=submitAt||
-   (action==='buy'&&(quote.expiresAt-submitAt<75000||new Date(submitAt).toISOString().slice(0,10)!==day))){
+   (action==='buy'&&(quote.expiresAt-submitAt<(signal.source==='cross-coin'?60000:75000)||new Date(submitAt).toISOString().slice(0,10)!==day))){
   intent.status='ABORTED';await persist(state);
   throw Error(stopped?'STOPPED_BEFORE_SUBMISSION':'STALE_BEFORE_SUBMISSION');
  }
