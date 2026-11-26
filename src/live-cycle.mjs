@@ -3,8 +3,8 @@ import {accountRisk} from './live-accounting.mjs';
 // Retry temporary quote-service failures without allowing additional exposure.
 // Authentication and data-integrity failures still trip the execution stop.
 const temporaryQuoteError=e=>/^KALSHI_HTTP_(429|500|502|503|504)$/.test(e?.message||'')||['AbortError','TimeoutError'].includes(e?.name);
-async function safeQuote(quoteFor,ticker){
- try{return await quoteFor(ticker)}catch(e){if(temporaryQuoteError(e))return null;throw e}
+async function safeQuote(quoteFor,ticker,waitForDependencies){
+ try{return await quoteFor(ticker)}catch(e){if(temporaryQuoteError(e)||waitForDependencies&&e instanceof TypeError)return null;throw e}
 }
 export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,championMode=false,waitForDependencies=false,signalStatus=()=>null,now=Date.now()}){
  const session=await repo.acquire(),state=session.state,persist=session.persist;
@@ -25,7 +25,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   reconcile(state,snap);const risk=accountRisk(state,snap);state.lastReconciledAt=Date.now();state.risk=risk;await persist(state);
   const decisions=championMode?await signals():null;
   for(const p of risk.open){
-   const quote=await safeQuote(quoteFor,p.ticker);
+   const quote=await safeQuote(quoteFor,p.ticker,waitForDependencies);
    // Missing executable exit liquidity is a degraded monitoring state, not an
    // exchange/order failure. Do not open new exposure or disable future checks.
    if(!quote||quote.ticker!==p.ticker||!Number.isFinite(quote.at)||Date.now()-quote.at<0||Date.now()-quote.at>10000||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
@@ -50,7 +50,7 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   if(!waitingReason||waitingReason==='SHADOW_PARITY_MATCH')waitingReason='NO_NEW_PRO_SCALPER_ENTRY';
   for(const signal of decisions??await signals()){
    if(!['BUY UP','BUY DOWN'].includes(signal.action)||state.intents.some(i=>i.ticker===signal.ticker&&i.action==='buy'))continue;
-   const quote=await safeQuote(quoteFor,signal.ticker);if(!quote){waitingReason='ENTRY_QUOTE_UNAVAILABLE';continue;}
+   const quote=await safeQuote(quoteFor,signal.ticker,waitForDependencies);if(!quote){waitingReason='ENTRY_QUOTE_UNAVAILABLE';continue;}
    if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference)){waitingReason='ENTRY_PRICE_ABOVE_SIGNAL';continue;}
    const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
    reconcile(state,await client.snapshot());await persist(state);return {status:'ENTRY_SUBMITTED',id:intent.id};
