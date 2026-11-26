@@ -12,7 +12,7 @@ function exceedsLiveCaps(limits){
 }
 export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus,getCommit=liveBuildCommit}={}){return async req=>{try{
  const user=await getOwner(),live=await getRuntime(user.id);
- if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.manualArmVersion===1&&state.enabled&&!await live.repo.stopped(),canArm:process.env.KALSHI_LIVE_OWNER_ID===user.id,stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
+ if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.manualArmVersion===1&&state.enabled&&!!state.scalperArmedAt&&!await live.repo.stopped(),canArm:process.env.KALSHI_LIVE_OWNER_ID===user.id,stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
  if(req.method!=='POST')fail(405,'Method not allowed');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
