@@ -1033,8 +1033,17 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const deliverToKaiBot=(stage,action)=>{
     if(selectedCoin!=='BTC')return;
     const signal={ticker,side:tracked.side,stage,action,entry:tracked.entry,exitBid:tracked.exitBid,at:Date.now()};
-    fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
-      headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})}).catch(()=>{});
+    const deliver=async()=>{
+      try{
+        const response=await fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})});
+        if(response.status===503&&(await response.json()).error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500)
+          setTimeout(deliver,250);
+      }catch{
+        if(Date.now()-signal.at<8500)setTimeout(deliver,500);
+      }
+    };
+    void deliver();
   };
   const quote=quotes[tracked.side];
   const move=quote.bid-tracked.entry;
