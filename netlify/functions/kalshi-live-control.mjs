@@ -12,16 +12,16 @@ function exceedsLiveCaps(limits){
 }
 export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus,getCommit=liveBuildCommit}={}){return async req=>{try{
  const user=await getOwner(),live=await getRuntime(user.id);
- if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.enabled&&!await live.repo.stopped(),stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
+ if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.manualArmVersion===1&&state.enabled&&!await live.repo.stopped(),canArm:process.env.KALSHI_LIVE_OWNER_ID===user.id,stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
  if(req.method!=='POST')fail(405,'Method not allowed');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const body=await req.json(),action=body?.action;
  if(!['start','stop','emergency-stop','configure','reconcile','tick'].includes(action))fail(400,'Invalid action');
- if(action==='start'&&!getRelease().canTrade)return json({...getRelease(),error:'Release verification required'},409);
  if(action==='start'&&body.confirmation!=='START_REAL_MONEY_WITH_LIMITS')fail(409,'EXPLICIT_LIVE_CONFIRMATION_REQUIRED');
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
+ const startFence=action==='start'?await live.repo.fence():null;
  let session;try{session=await live.repo.acquire();}catch(e){if(e.message==='EXECUTION_BUSY')return json({enabled:false,stopRequested:action==='stop'||action==='emergency-stop',cancelled:false,error:'Worker busy; cancellation pending, not verified'},202);throw e;}
  try{
   const state=session.state;
@@ -39,8 +39,15 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    const client=await live.client();try{reconcile(state,await client.snapshot());await session.persist(state);}catch{}
    return json(await emergencyStop({state,client,persist:session.persist}));
   }
-  if(action==='start'&&process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
-  const fence=await live.repo.fence(),client=await live.client();
+  if(action==='start'){
+   if(process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
+   validateLimits(state.limits);
+   state.limits=effectiveLiveLimits(state.limits);
+   state.manualArmVersion=1;state.enabled=true;state.stopped=false;state.failure=null;
+   await session.persist(state);await live.repo.startFence(startFence);
+   return json({enabled:true,stopped:false,status:'ARMED_WAITING',reason:'AWAITING_EXECUTION_CHECKS'});
+  }
+  const client=await live.client();
   const snapshot=await client.snapshot();
   const commit=getCommit();
   if(action==='reconcile'&&commit&&snapshot.complete){
@@ -58,12 +65,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
     error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
   }
   state.risk=accountRisk(state,snapshot);state.lastReconciledAt=Date.now();await session.persist(state);
-  if(action==='reconcile')return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
-  if(state.risk.open.length||snapshot.orders.some(o=>o.status==='resting'))fail(409,'Start requires a reconciled flat account without resting orders');
-  validateLimits(state.limits);
-  state.limits=effectiveLiveLimits(state.limits);
-  state.enabled=true;state.stopped=false;state.failure=null;await session.persist(state);await live.repo.startFence(fence);
-  return json({enabled:true,stopped:false});
+  return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
  }finally{await session.release();}
 }catch(e){if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
 export default createLiveControl();
