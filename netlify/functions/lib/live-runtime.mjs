@@ -4,7 +4,6 @@ import {liveRepository} from './live-state.mjs';
 import {openKalshiCredentials} from './kalshi-credential-envelope.mjs';
 import {kalshiClient} from './kalshi-execution-client.mjs';
 import {liveBuildCommit} from './kalshi-release-gate.mjs';
-import {championExecutionSignals,inspectChampionIntake} from '../../../src/champion-kaibot-intake.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
 import {parseCollectorPrice,validCollectorQuote} from '../../../src/collector-quote.mjs';
 export function parseLiveQuote(m,ticker,at,receivedAt){
@@ -29,9 +28,26 @@ export async function runtime(userId){
   const credentials=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
   return kalshiClient(credentials,{allowWrites,allowCancellation:true});
  }
- return {db,repo,client,async tick(){
+ const live={db,repo,client,async acceptScalperEvent(signal){
+  const now=Date.now(),{ticker,side,stage,action,entry,exitBid,at}=signal??{};
+  if(typeof ticker!=='string'||!/^KXBTC15M-[A-Z0-9-]{1,48}$/.test(ticker)||!['up','down'].includes(side)||
+   !Number.isFinite(at)||at>now||now-at>10000||!(Number.isFinite(entry)&&entry>0&&entry<100)||
+   !(stage==='entry'&&action==='BUY'||stage==='exit'&&['TAKE PROFIT','SELL FAST'].includes(action)&&Number.isFinite(exitBid)&&exitBid>0&&exitBid<=100))
+   return {status:'REJECTED_INVALID_OR_STALE_SCALPER_EVENT'};
+  const session=await repo.acquire();
+  try{
+   const state=session.state;
+   if(!state.enabled||!state.scalperArmedAt||at<state.scalperArmedAt||await repo.stopped())return {status:'LIVE_OFF_OR_EVENT_BEFORE_ARM'};
+   state.scalperEvents??={};
+   const prior=state.scalperEvents[stage];
+   if(prior?.ticker===ticker||prior?.at>=at)return {status:'DUPLICATE_OR_OLDER_SCALPER_EVENT'};
+   state.scalperEvents[stage]={ticker,action:action+' '+side.toUpperCase(),at,receivedAt:now,entryReference:entry,exitReference:exitBid};
+   await session.persist(state);
+  }finally{await session.release();}
+  return live.tick();
+ },async tick(){
   const record=await repo.read();
-  const armed=record.state.manualArmVersion===1&&record.state.enabled&&!await repo.stopped();
+  const armed=record.state.manualArmVersion===1&&record.state.enabled&&!!record.state.scalperArmedAt&&!await repo.stopped();
   const report=async result=>{
    await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:liveBuildCommit()});
    return result;
@@ -43,14 +59,13 @@ export async function runtime(userId){
    return report({status:'ARMED_WAITING',reason:/^[A-Z0-9_]+$/.test(error.message)?error.message:'KALSHI_CLIENT_UNAVAILABLE'});
   }
   let intakeStatus='NO_SIGNAL';
-  const result=await runLiveCycle({repo,client:exchange,canTrade:state=>state.manualArmVersion===1&&state.enabled,
+  const result=await runLiveCycle({repo,client:exchange,canTrade:state=>state.manualArmVersion===1&&state.enabled&&!!state.scalperArmedAt,
    championMode:true,waitForDependencies:true,signalStatus:()=>intakeStatus,
-   signals:async()=>{
-    try{
-     const worker=await getStore({name:'bank-trades-market-history',consistency:'strong'}).get('predator-v13/health',{type:'json'});
-     intakeStatus=inspectChampionIntake(worker).status;
-     return championExecutionSignals(worker);
-    }catch{intakeStatus='PRO_SCALPER_FEED_UNAVAILABLE';return [];}
+   signals:async state=>{
+    const at=Date.now(),events=Object.values(state.scalperEvents??{}).filter(event=>at>=event.at&&at-event.at<=10000);
+    intakeStatus=events.length?'OFFICIAL_SCALPER_EVENT':'WAITING_FOR_FRESH_OFFICIAL_SCALPER_EVENT';
+    const exit=events.find(event=>!event.action.startsWith('BUY '));
+    return events.filter(event=>!event.action.startsWith('BUY ')||exit?.ticker!==event.ticker);
    },
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
@@ -58,4 +73,5 @@ export async function runtime(userId){
    }});
   return report(result);
  }};
+ return live;
 }

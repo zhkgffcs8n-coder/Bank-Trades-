@@ -1030,6 +1030,21 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const announce=(stage,action)=>window.dispatchEvent(new CustomEvent('banktrades:scalper-voice',{
     detail:{stage,action,asset:selectedCoin,ticker,side:tracked.side,entry:tracked.entry,exitBid:tracked.exitBid}
   }));
+  const deliverToKaiBot=(stage,action)=>{
+    if(selectedCoin!=='BTC')return;
+    const signal={ticker,side:tracked.side,stage,action,entry:tracked.entry,exitBid:tracked.exitBid,at:Date.now()};
+    const deliver=async()=>{
+      try{
+        const response=await fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})});
+        if(response.status===503&&(await response.json()).error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500)
+          setTimeout(deliver,250);
+      }catch{
+        if(Date.now()-signal.at<8500)setTimeout(deliver,500);
+      }
+    };
+    void deliver();
+  };
   const quote=quotes[tracked.side];
   const move=quote.bid-tracked.entry;
   const showingEntry=showingScalpEntry(tracked);
@@ -1049,9 +1064,9 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
   showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
   paintScalpPrices(tracked,quote.bid);
-  if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
+  if(newExit){announce('exit',tracked.exit.replace(' · ',' because '));deliverToKaiBot('exit',tracked.exit);}
   else if(entered){
-    announce('entry','BUY');
+    announce('entry','BUY');deliverToKaiBot('entry','BUY');
     const coin=selectedCoin;
     setTimeout(()=>{
       if(selectedCoin===coin&&positions.get(coin)===tracked)refreshScalpExit();
