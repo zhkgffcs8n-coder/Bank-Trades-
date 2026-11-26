@@ -81,3 +81,7 @@ dialog [data-stop], #liveStop, #liveEmergency {
 @media (prefers-reduced-motion: reduce) {
   #liveReleaseStatus, dialog [data-live-mode] { animation: none !important; }
 }
+
+#kai-command [data-live-feedback] { margin: .5rem 0; color: #e2e8f0; font-weight: 700; }
+#kai-command:is([data-live-state="armed"],[data-live-state="waiting"]) [data-live-feedback] { color: #86efac; }
+#kai-command[data-live-state="starting"] [data-live-feedback] { color: #fde68a; }
