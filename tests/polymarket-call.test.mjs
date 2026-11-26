@@ -28,3 +28,20 @@ test('Polymarket call retains entry across reload and SKIP, rejects stale stops,
   assert.equal(advancePolymarketCall(watch, { ...opposite, at: 5000, now: 5000 }).side, 'down');
   assert.equal(advancePolymarketCall(exited, { ...input, ticker: 'new-round', decision: 'SKIP' }), null);
 });
+
+test('Polymarket buys and flips require a 40–80% entry ask', () => {
+  const ticker = 'btc-updown-15m-123';
+  const exited = { ticker, side: 'up', entry: 60, exit: 'TAKE PROFIT', updatedAt: 1000 };
+  for (const ask of [1, 10, 39.99, 40, 80, 80.01, 90]) {
+    const input = {
+      ticker, at: 2000, now: 2000, end: 900000, decision: 'DOWN',
+      quotes: { up: { bid: 100 - ask, ask: 100 - ask + .1 }, down: { bid: ask - .1, ask } },
+    };
+    const eligible = ask >= 40 && ask <= 80;
+    assert.equal(advancePolymarketCall(null, input)?.entry, eligible ? ask : undefined);
+    const watch = advancePolymarketCall(exited, input);
+    assert.equal(watch.flipWatchAt, eligible ? 2000 : undefined);
+    const flip = advancePolymarketCall(watch, { ...input, at: 3000, now: 3000 });
+    assert.equal(flip.side, eligible ? 'down' : 'up');
+  }
+});

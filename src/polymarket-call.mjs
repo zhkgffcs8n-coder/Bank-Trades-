@@ -14,7 +14,8 @@ export function advancePolymarketCall(previous, { ticker, end, at, now, quotes, 
     return next.position.exit ? { ...next.position, updatedAt: at } : held;
   }
   if (secondsLeft < 120 || held?.updatedAt >= at) return held;
-  if (!side || held?.side === side) {
+  const entry = side ? quotes[side].ask : null;
+  if (entry === null || entry < 40 || entry > 80 || held?.side === side) {
     return held?.flipWatchAt ? { ...held, flipWatchAt: null } : held;
   }
   if (held) {
@@ -23,5 +24,5 @@ export function advancePolymarketCall(previous, { ticker, end, at, now, quotes, 
       return { ...held, flipWatchAt: at };
     }
   }
-  return { ticker, side, entry: quotes[side].ask, exit: null, updatedAt: at };
+  return { ticker, side, entry, exit: null, updatedAt: at };
 }
