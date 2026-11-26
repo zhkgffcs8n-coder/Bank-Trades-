@@ -50,9 +50,37 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    const client=await live.client();try{reconcile(state,await client.snapshot());await session.persist(state);}catch{}
    return json(await emergencyStop({state,client,persist:session.persist}));
   }
+  if(action==='start'&&process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
+  if(action==='reconcile'||state.failure==='SETTLEMENT_MISMATCH'){
+   const client=await live.client();
+   const snapshot=await client.snapshot();
+   const commit=getCommit();
+   if(action==='reconcile'&&commit&&snapshot.complete){
+    await live.db.setJSON('release-receipts/'+user.id+'/'+commit+'/authentication',{
+     commit,at:Date.now(),test:'production-authenticated-account-snapshot',verified:true
+    });
+   }
+   try{reconcile(state,snapshot);}catch(e){
+    const repaired=e.settlementMismatch&&await live.repo.stopped()&&reconcileManualExit(state,snapshot,e.settlementMismatch);
+    if(!repaired){
+     if(e.settlementMismatch){
+      const {ticker,botQuantity,exchangeQuantity,invalidResult,invalidTime}=e.settlementMismatch;
+      const reason=invalidResult||invalidTime?'Kalshi settlement result or timestamp could not be verified.':
+       'KaiBot signed quantity '+botQuantity+' differs from Kalshi settlement quantity '+exchangeQuantity+'.';
+      return json({error:'Settlement mismatch for '+ticker+'. '+reason},409);
+     }
+     const mismatch=/^POSITION_MISMATCH_(.+)$/.exec(e.message);
+     if(action!=='reconcile'||!mismatch||state.intents.some(intent=>intent.ticker===mismatch[1]&&intent.status!=='ABORTED'))throw e;
+     const positions=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0&&
+      !state.intents.some(intent=>intent.ticker===p.ticker&&intent.status!=='ABORTED'))
+      .map(p=>({ticker:p.ticker,quantity:p.position_fp??p.position}));
+     return json({...getRelease(),accountReadVerified:true,reconciled:false,positions,
+      error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
+    }
+   }
+   state.risk=accountRisk(state,snapshot);state.failure=null;state.lastReconciledAt=Date.now();await session.persist(state);
+  }
   if(action==='start'){
-   if(process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
-   if(state.failure==='SETTLEMENT_MISMATCH')fail(409,'Verify account and fills before restarting after a settlement mismatch');
    validateLimits(state.limits);
    state.limits=effectiveLiveLimits(state.limits);
    state.scalperArmedAt=Date.now();state.scalperEvents={};state.crossCoinArmed=true;
@@ -60,33 +88,6 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    await session.persist(state);await live.repo.startFence(startFence);
    return json({enabled:true,stopped:false,status:'ARMED_WAITING',reason:'AWAITING_EXECUTION_CHECKS'});
   }
-  const client=await live.client();
-  const snapshot=await client.snapshot();
-  const commit=getCommit();
-  if(action==='reconcile'&&commit&&snapshot.complete){
-   await live.db.setJSON('release-receipts/'+user.id+'/'+commit+'/authentication',{
-    commit,at:Date.now(),test:'production-authenticated-account-snapshot',verified:true
-   });
-  }
-  try{reconcile(state,snapshot);}catch(e){
-   const repaired=e.settlementMismatch&&await live.repo.stopped()&&reconcileManualExit(state,snapshot,e.settlementMismatch);
-   if(!repaired){
-   if(e.settlementMismatch){
-    const {ticker,botQuantity,exchangeQuantity,invalidResult,invalidTime}=e.settlementMismatch;
-    const reason=invalidResult||invalidTime?'Kalshi settlement result or timestamp could not be verified.':
-     'KaiBot signed quantity '+botQuantity+' differs from Kalshi settlement quantity '+exchangeQuantity+'.';
-    return json({error:'Settlement mismatch for '+ticker+'. '+reason},409);
-   }
-   const mismatch=/^POSITION_MISMATCH_(.+)$/.exec(e.message);
-   if(action!=='reconcile'||!mismatch||state.intents.some(intent=>intent.ticker===mismatch[1]&&intent.status!=='ABORTED'))throw e;
-   const positions=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0&&
-    !state.intents.some(intent=>intent.ticker===p.ticker&&intent.status!=='ABORTED'))
-    .map(p=>({ticker:p.ticker,quantity:p.position_fp??p.position}));
-   return json({...getRelease(),accountReadVerified:true,reconciled:false,positions,
-    error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
-   }
-  }
-  state.risk=accountRisk(state,snapshot);state.failure=null;state.lastReconciledAt=Date.now();await session.persist(state);
   return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
  }finally{await session.release();}
 }catch(e){if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
