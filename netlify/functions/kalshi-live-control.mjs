@@ -18,7 +18,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const body=await req.json(),action=body?.action;
  if(!['start','stop','emergency-stop','configure','reconcile','tick'].includes(action))fail(400,'Invalid action');
- if(action==='start'&&body.confirmation!=='START_REAL_MONEY_WITH_LIMITS')fail(409,'EXPLICIT_LIVE_CONFIRMATION_REQUIRED');
+ if(action==='start'&&body.confirmation!=='START_REAL_MONEY_WITH_LIMITS')return json({enabled:false,error:'EXPLICIT_LIVE_CONFIRMATION_REQUIRED'},409);
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
  const startFence=action==='start'?await live.repo.fence():null;
