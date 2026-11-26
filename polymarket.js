@@ -62,14 +62,14 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const call = document.createElement('span');
     const prices = document.createElement('span');
     prices.className = 'poly-tile-prices';
-    const metrics = ['entry', 'bid'].map(kind => {
+    const metrics = ['entry', 'bid', 'exit'].map(kind => {
       const box = document.createElement('span');
       box.className = 'poly-tile-price ' + kind;
       const label = document.createElement('small');
       const value = document.createElement('b');
       box.append(label, value);
       prices.append(box);
-      return { label, value };
+      return { box, label, value };
     });
     button.append(name, call, prices);
     button.addEventListener('click', () => {
@@ -183,18 +183,18 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const displayed = active ?? engineCalls.filter(item => item.position)
         .sort((a, b) => b.position.updatedAt - a.position.updatedAt)[0];
       let action = displayed?.action ?? 'NO QUOTE';
-      let entryLabel = 'UP ASK';
-      let bidLabel = 'DOWN ASK';
-      let entry = market?.quotes[0]?.ask;
-      let bid = market?.quotes[1]?.ask;
+      let entryLabel = 'UP BID';
+      let bidLabel = 'DOWN BID';
+      let entry = market?.quotes[0]?.bid;
+      let bid = market?.quotes[1]?.bid;
+      let exit;
       if (displayed) {
         const { position } = displayed;
         entryLabel = 'ENTRY';
         entry = position.entry / 100;
-        bidLabel = position.exit ? 'EXIT' : market ? 'LIVE BID' : 'BID STALE';
-        bid = position.exit
-          ? Number.isFinite(position.exitBid) ? position.exitBid / 100 : null
-          : market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
+        bid = market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
+        bidLabel = market ? 'LIVE BID' : 'BID STALE';
+        if (Number.isFinite(position.exitBid)) exit = position.exitBid / 100;
       } else if (market) {
         const [up, down] = market.quotes;
         if ([up.bid, up.ask, down.bid, down.ask].every(Number.isFinite)) {
@@ -206,8 +206,10 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       }
       if (call.textContent !== action) call.replaceChildren(actionBadge(action));
       button.dataset.direction = displayed?.side?.toLowerCase() ?? '';
-      const labels = [entryLabel, bidLabel];
-      const values = [entry, bid];
+      prices.classList.toggle('has-exit', exit !== undefined);
+      metrics[2].box.hidden = exit === undefined;
+      const labels = [entryLabel, bidLabel, 'EXIT'];
+      const values = [entry, bid, exit];
       metrics.forEach(({ label, value }, index) => {
         const formatted = Number.isFinite(values[index]) ? formatPrice(values[index]) : '—';
         if (label.textContent !== labels[index]) label.textContent = labels[index];
