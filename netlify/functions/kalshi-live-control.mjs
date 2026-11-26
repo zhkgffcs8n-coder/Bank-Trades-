@@ -28,10 +28,16 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
  const startFence=action==='start'?await live.repo.fence():null;
- let session;try{session=await live.repo.acquire();}catch(e){if(e.message==='EXECUTION_BUSY'){
+ const attempts=action==='start'||action==='reconcile'?13:1;
+ let session;
+ for(let attempt=1;attempt<=attempts;attempt++){
+  try{session=await live.repo.acquire();break;}catch(e){
+   if(e.message!=='EXECUTION_BUSY')throw e;
+   if(attempt<attempts){await new Promise(resolve=>setTimeout(resolve,250));continue;}
   if(action==='stop'||action==='emergency-stop')return json({enabled:false,stopRequested:true,cancelled:false,error:'Worker busy; cancellation pending, not verified'},202);
   return json({error:'Worker busy. This action was not completed. Try again when the worker is idle.'},409);
- }throw e;}
+  }
+ }
  try{
   const state=session.state;
   if(action==='configure'){
