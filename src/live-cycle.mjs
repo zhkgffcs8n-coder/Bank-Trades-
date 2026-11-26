@@ -58,7 +58,14 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
     if(remaining<60000||remaining>360000||ask<40||ask>80||ask-bid>4){waitingReason='CROSS_COIN_QUOTE_OUTSIDE_LIMITS';continue;}
    }
    if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference)){waitingReason='ENTRY_PRICE_ABOVE_SIGNAL';continue;}
-   const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
+   let intent;
+   try{
+    intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
+   }catch(error){
+    if(!waitForDependencies||!['POSITION_LIMIT','DAILY_LOSS_LIMIT','EXPOSURE_LIMIT','SPENDING_LIMIT',
+     'LATE_ENTRY','INVALID_SPREAD','STALE_OR_WRONG_MARKET','STALE_BEFORE_SUBMISSION'].includes(error.message))throw error;
+    return {status:'ARMED_WAITING',reason:error.message,ticker:signal.ticker,risk};
+   }
    reconcile(state,await client.snapshot());await persist(state);return {status:'ENTRY_SUBMITTED',id:intent.id};
   }
   return waitForDependencies?{status:'ARMED_WAITING',reason:waitingReason,risk}:{status:'MONITORING',risk};
