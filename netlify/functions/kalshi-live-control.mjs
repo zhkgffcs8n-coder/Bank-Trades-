@@ -2,7 +2,7 @@ import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {runtime} from './lib/live-runtime.mjs';
 import {liveBuildCommit,releaseStatus} from './lib/kalshi-release-gate.mjs';
 import {ENTRY_MODES,validateLimits,reconcile,emergencyStop} from '../../src/live-execution.mjs';
-import {accountRisk} from '../../src/live-accounting.mjs';
+import {accountRisk,confirmedTradeHistory} from '../../src/live-accounting.mjs';
 const liveTrialCaps={orderCents:100,dailyCents:500,lossCents:300,maxPositions:1};
 function effectiveLiveLimits(limits){
  return {...limits,...Object.fromEntries(Object.entries(liveTrialCaps).map(([key,cap])=>[key,Math.min(limits[key],cap)]))};
@@ -12,7 +12,7 @@ function exceedsLiveCaps(limits){
 }
 export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=releaseStatus,getCommit=liveBuildCommit}={}){return async req=>{try{
  const user=await getOwner(),live=await getRuntime(user.id);
- if(req.method==='GET'){const {state,lock}=await live.repo.read();return json({...getRelease(),enabled:state.manualArmVersion===1&&state.enabled&&!!state.scalperArmedAt&&!await live.repo.stopped(),canArm:process.env.KALSHI_LIVE_OWNER_ID===user.id,stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
+ if(req.method==='GET'){const {state,lock}=await live.repo.read();let trades=null;try{trades=confirmedTradeHistory(state);}catch{}return json({...getRelease(),trades,enabled:state.manualArmVersion===1&&state.enabled&&!!state.scalperArmedAt&&!await live.repo.stopped(),canArm:process.env.KALSHI_LIVE_OWNER_ID===user.id,stopped:await live.repo.stopped(),busy:!!lock,entryMode:state.entryMode??'balanced',limits:effectiveLiveLimits(state.limits),risk:state.risk||null,failure:state.failure||null,lastReconciledAt:state.lastReconciledAt||null,heartbeat:await live.db.get('heartbeat/'+user.id,{type:'json'})});}
  if(req.method!=='POST')fail(405,'Method not allowed');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
