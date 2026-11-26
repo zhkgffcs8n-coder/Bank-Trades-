@@ -17,7 +17,9 @@ export function initialState(){return {enabled:false,stopped:true,intents:[],lim
 export function validateLimits(l){
  for(const key of ['orderCents','dailyCents','lossCents','maxPositions','profitPct','stopPct'])if(!Number.isSafeInteger(l?.[key])||l[key]<=0)throw Error('INVALID_LIMIT_'+key);
  for(const key of ['trailPct','trailActivationPct'])if(l[key]!==undefined&&(!Number.isSafeInteger(l[key])||l[key]<1||l[key]>100))throw Error('INVALID_LIMIT_'+key);
- if(l.orderCents>l.dailyCents||l.dailyCents>10000||l.lossCents>l.dailyCents||l.maxPositions>8||l.profitPct>100||l.stopPct>100)throw Error('LIMIT_OUT_OF_RANGE');return l;
+ if(l.unlimitedBudgets!==undefined&&typeof l.unlimitedBudgets!=='boolean')throw Error('INVALID_BUDGET_MODE');
+ if(l.unlimitedBudgets&&(l.orderCents<100||l.orderCents>20000||l.maxPositions!==1))throw Error('LIMIT_OUT_OF_RANGE');
+ if((!l.unlimitedBudgets&&l.orderCents>l.dailyCents)||l.dailyCents>10000||l.lossCents>l.dailyCents||l.maxPositions>8||l.profitPct>100||l.stopPct>100)throw Error('LIMIT_OUT_OF_RANGE');return l;
 }
 export function makeOrder({ticker,side,action,qty,priceCents,id=randomUUID()}){
  if(!/^[A-Z0-9-]{4,100}$/.test(ticker)||!['up','down'].includes(side)||!['buy','sell'].includes(action)||!Number.isFinite(qty)||qty<.01||Math.abs(qty*100-Math.round(qty*100))>1e-7||!Number.isSafeInteger(priceCents)||priceCents<1||priceCents>99)throw Error('INVALID_ORDER');
@@ -81,7 +83,10 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  if(!fresh(quote?.at,now)||quote.ticker!==signal?.ticker||!fresh(signal?.at,now)||(!Number.isFinite(quote.expiresAt)||quote.expiresAt<=now))throw Error('STALE_OR_WRONG_MARKET');
  const side=action==='sell'?position?.side:signal.action==='BUY UP'?'up':signal.action==='BUY DOWN'?'down':null;
  const price=action==='buy'?quote[side+'Ask']:quote[side+'Bid'];
- const qty=action==='sell'?position?.qty:1;
+ const expanded=state.limits.unlimitedBudgets===true;
+ const orderCap=expanded?state.limits.orderCents:Math.min(state.limits.orderCents,HARD_RISK_CAPS.orderCents);
+ const qty=action==='sell'?position?.qty:expanded?Math.floor(Math.min(orderCap,snapshot.balanceCents)/(price+10)):1;
+ if(action==='buy'&&expanded&&!(qty>=1))throw Error('SPENDING_LIMIT');
  const order=makeOrder({ticker:quote.ticker,side,action,qty,priceCents:price});
  if(action==='buy'&&state.intents.some(i=>i.ticker===quote.ticker&&i.action==='buy'))throw Error('ROUND_ALREADY_ENTERED');
  const open=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0);
@@ -92,12 +97,12 @@ export async function submitIntent({state,client,persist,checkStopped,snapshot,s
  const day=new Date(now).toISOString().slice(0,10),reserve=action==='buy'?Math.ceil(qty*price+qty*10):0;
  const dailyLimit=Math.min(state.limits.dailyCents,HARD_RISK_CAPS.dailyCents);
  const risk=accountRisk(state,snapshot,now);
- if(action==='buy'&&risk.dailyLossCents+risk.openCostCents+reserve>Math.min(state.limits.lossCents,HARD_RISK_CAPS.lossCents))throw Error('DAILY_LOSS_LIMIT');
- if(action==='buy'&&risk.openCostCents+reserve>HARD_RISK_CAPS.exposureCents)throw Error('EXPOSURE_LIMIT');
+ if(action==='buy'&&!expanded&&risk.dailyLossCents+risk.openCostCents+reserve>Math.min(state.limits.lossCents,HARD_RISK_CAPS.lossCents))throw Error('DAILY_LOSS_LIMIT');
+ if(action==='buy'&&!expanded&&risk.openCostCents+reserve>HARD_RISK_CAPS.exposureCents)throw Error('EXPOSURE_LIMIT');
  if(action==='buy'&&quote.expiresAt-now<75000)throw Error('LATE_ENTRY');
  const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
  if(action==='buy'&&(!Number.isFinite(ask)||!Number.isFinite(bid)||bid<0||ask>100||ask<bid||ask-bid>5))throw Error('INVALID_SPREAD');
- if(action==='buy'&&(reserve>Math.min(state.limits.orderCents,HARD_RISK_CAPS.orderCents)||reserve+(state.spent[day]||0)>dailyLimit||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
+ if(action==='buy'&&(reserve>orderCap||(!expanded&&reserve+(state.spent[day]||0)>dailyLimit)||reserve>snapshot.balanceCents))throw Error('SPENDING_LIMIT');
  // Conservative budget includes a 10-cent per-contract fee reserve and is never released on retries.
  const intent={id:order.client_order_id,ticker:quote.ticker,side,action,qty,priceCents:price,reserve,day,status:'PREPARED',at:now};
  state.intents.push(intent);state.spent[day]=(state.spent[day]||0)+reserve;await persist(state);
