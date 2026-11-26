@@ -17,8 +17,12 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json'))fail(415,'JSON required');
  const body=await req.json(),action=body?.action;
- if(!['start','stop','emergency-stop','configure','reconcile','tick'].includes(action))fail(400,'Invalid action');
+ if(!['start','stop','emergency-stop','configure','reconcile','tick','scalper-event'].includes(action))fail(400,'Invalid action');
  if(action==='start'&&body.confirmation!=='START_REAL_MONEY_WITH_LIMITS')return json({enabled:false,error:'EXPLICIT_LIVE_CONFIRMATION_REQUIRED'},409);
+ if(action==='scalper-event'){
+  if(process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(403,'Configured owner required');
+  return json(await live.acceptScalperEvent(body.signal));
+ }
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
  const startFence=action==='start'?await live.repo.fence():null;
@@ -43,6 +47,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    if(process.env.KALSHI_LIVE_OWNER_ID!==user.id)fail(409,'Scheduled worker owner is not configured for this account');
    validateLimits(state.limits);
    state.limits=effectiveLiveLimits(state.limits);
+   state.scalperArmedAt=Date.now();state.scalperEvents={};
    state.manualArmVersion=1;state.enabled=true;state.stopped=false;state.failure=null;
    await session.persist(state);await live.repo.startFence(startFence);
    return json({enabled:true,stopped:false,status:'ARMED_WAITING',reason:'AWAITING_EXECUTION_CHECKS'});
