@@ -213,6 +213,8 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
  const state=(await repo.read()).state,snapshot=await client.snapshot(),now=Date.parse(snapshot.fills[0].created_time)+3000;
  snapshot.at=now;snapshot.positions=[];
+ state.intents.push({id:'unfilled-exit',orderId:'unfilled-exit-order',ticker:'BTC-ROUND',side:'up',action:'sell',qty:1,status:'RECONCILED',filled:0,at:now-2500});
+ snapshot.orders.push({order_id:'unfilled-exit-order',client_order_id:'unfilled-exit',ticker:'BTC-ROUND',status:'canceled',fill_count_fp:'0.00'});
  snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
  snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',action:'sell',
   side:'yes',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
@@ -222,9 +224,13 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  assert.throws(()=>reconcile(state,snapshot,now),error=>{mismatch=error.settlementMismatch;return error.message==='SETTLEMENT_MISMATCH';});
  const wrong=structuredClone(snapshot);wrong.fills[1].side='no';
  assert.equal(reconcileManualExit(state,wrong,mismatch,now),false);
- assert.equal(state.intents.length,1);
+ assert.equal(state.intents.length,2);
  assert.equal(reconcileManualExit(state,snapshot,mismatch,now),true);
- assert.equal(state.intents[1].manualExit,true);
- assert.equal(state.intents[1].status,'RECONCILED');
+ assert.equal(state.intents[2].manualExit,true);
+ assert.equal(state.intents[2].status,'RECONCILED');
  assert.equal(accountRisk(state,snapshot,now).open.length,0);
+ const later={...snapshot,at:now+1000,orders:snapshot.orders.filter(order=>order.order_id!=='external'),
+  fills:snapshot.fills.filter(fill=>fill.order_id!=='external')};
+ reconcile(state,later,now+1000);
+ assert.equal(accountRisk(state,later,now+1000).open.length,0);
 });
