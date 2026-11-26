@@ -38,12 +38,12 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
    const championExit=decision&&(['SELL FAST','TIME EXIT','EXIT'].some(action=>decision.action===action+' '+side)||
     decision.action==='TAKE PROFIT '+side&&netPositive)?decision.action:null;
    const reason=championMode?championExit:exitAction({...p,bidCents:quote[p.side+'Bid'],peakCents:state.peaks[p.ticker],profitPct:state.limits.profitPct,stopPct:state.limits.stopPct,trailPct:state.limits.trailPct,trailActivationPct:state.limits.trailActivationPct});
-   if(reason||risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity)||quote.expiresAt-Date.now()<30000){
+   if(reason||!state.limits.unlimitedBudgets&&risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity)||quote.expiresAt-Date.now()<30000){
     const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal:{ticker:p.ticker,at:Date.now()},quote,action:'sell',position:p});
     reconcile(state,await client.snapshot());await persist(state);return {status:'EXIT_SUBMITTED',reason:reason||'RISK_OR_EXPIRY',id:intent.id};
    }
   }
-  if(risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity))return {status:'RISK_LIMIT',risk};
+  if(!state.limits.unlimitedBudgets&&risk.dailyLossCents+risk.openCostCents>=Math.min(state.limits.lossCents,championMode?300:Infinity))return {status:'RISK_LIMIT',risk};
   if(championMode&&risk.open.length)return {status:'MONITORING',risk};
   if(waitForDependencies&&snap.orders.some(order=>order.status==='resting'))return {status:'ARMED_WAITING',reason:'RESTING_ORDERS_PRESENT'};
   let waitingReason=signalStatus();
