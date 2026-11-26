@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {liveRepository} from '../netlify/functions/lib/live-state.mjs';
 import {initialState,reconcile,reconcileManualExit,submitIntent,validateLimits} from '../src/live-execution.mjs';
-import {accountRisk} from '../src/live-accounting.mjs';
+import {accountRisk,confirmedTradeHistory} from '../src/live-accounting.mjs';
 import {runLiveCycle} from '../src/live-cycle.mjs';
 import {createLiveControl} from '../netlify/functions/kalshi-live-control.mjs';
 function database(){const values=new Map();let version=0;return {async get(k){return structuredClone(values.get(k)?.data??null);},async getWithMetadata(k){return structuredClone(values.get(k)||null);},async setJSON(k,v,o={}){const old=values.get(k);if(o.onlyIfNew&&old||o.onlyIfMatch&&o.onlyIfMatch!==old?.etag)return {modified:false};const etag=String(++version);values.set(k,{data:structuredClone(v),etag});return {modified:true,etag};}};}
@@ -218,7 +218,7 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
  snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',outcome_side:'no',
   book_side:'ask',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
- snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'0.00',no_count_fp:'0.00',market_result:'yes',revenue:0,
+ snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'0.00',no_count_fp:'0.00',market_result:'yes',revenue:60,
   fee_cost:'0.00',settled_time:new Date(now-1000).toISOString()}];
  let mismatch;
  assert.throws(()=>reconcile(state,snapshot,now),error=>{mismatch=error.settlementMismatch;return error.message==='SETTLEMENT_MISMATCH';});
@@ -228,6 +228,7 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  assert.equal(reconcileManualExit(state,snapshot,mismatch,now),true);
  assert.equal(state.intents[2].manualExit,true);
  assert.equal(state.intents[2].status,'RECONCILED');
+ assert.ok(Math.abs(confirmedTradeHistory(state,now)[0].netCents-8)<1e-7);
  assert.equal(accountRisk(state,snapshot,now).open.length,0);
  const later={...snapshot,at:now+1000,orders:snapshot.orders.filter(order=>order.order_id!=='external'),
   fills:snapshot.fills.filter(fill=>fill.order_id!=='external')};
