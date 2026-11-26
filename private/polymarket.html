@@ -15,8 +15,8 @@
     <a href="/dashboard">Kalshi</a>
     <a href="/dashboard?venue=polymarket" aria-current="page">Polymarket</a>
   </nav>
-  <h1>15-minute crypto markets</h1>
-  <nav id="poly-coins" aria-label="Market"></nav>
+  <h1>Polymarket Pro Scalper</h1>
+  <nav id="poly-coins" aria-label="Live Pro Scalper calls by coin"></nav>
   <section class="venue-card poly-scalper-panel" aria-labelledby="poly-title">
     <h2 id="poly-title">BTC Up or Down</h2>
     <p id="poly-clock"></p>
@@ -28,21 +28,15 @@
       <details open><summary>Individual engine calls</summary>
       <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Saved entry</th><th scope="col">Bid</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
       </details>
-      <p>Uses the V8 scalper rules with Polymarket quotes. Entry and exit bids are research references. History is stored in this browser.</p>
+
     </section>
   </section>
   <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
-    <h2 id="poly-live-title">Live Market Signals</h2>
-    <p id="poly-feed-state" role="status">Loading quotes…</p>
-    <table class="poly-market-table">
-      <thead><tr><th scope="col">Market</th><th scope="col">UP ask</th><th scope="col">DOWN ask</th><th scope="col">Signal</th></tr></thead>
-      <tbody id="poly-live-rows"></tbody>
-    </table>
-      <section class="poly-tracker" aria-labelledby="poly-tracker-title">
-        <h3 id="poly-tracker-title">Live Position Tracker</h3>
+    <h2 id="poly-live-title">Live Position Tracker</h2>
+    <div class="poly-tracker">
         <p id="poly-tracker-empty">Waiting for a BUY call.</p>
         <div id="poly-tracker-positions"></div>
-      </section>
+      </div>
   </aside>
   <section class="venue-card poly-history-panel" aria-labelledby="poly-history-title">
       <h2 id="poly-history-title">Live Call &amp; Flip History</h2>

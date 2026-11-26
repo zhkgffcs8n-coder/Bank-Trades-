@@ -19,8 +19,6 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const tracker = document.querySelector('#poly-tracker-positions');
   const trackerEmpty = document.querySelector('#poly-tracker-empty');
   const livePanel = document.querySelector('#poly-live-panel');
-  const feedState = document.querySelector('#poly-feed-state');
-  const liveRows = document.querySelector('#poly-live-rows');
   const historyEmpty = document.querySelector('#poly-history-empty');
   const historyList = document.querySelector('#poly-call-history');
   const storageKey = 'banktrades:polymarket-calls:v1';
@@ -36,6 +34,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   });
   let selected = 'BTC';
   let snapshot;
+  let feedError = '';
 
   const formatPrice = price => price === null ? '—' : `${Number((price * 100).toFixed(2))}%`;
   function actionBadge(action) {
@@ -55,23 +54,24 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   const buttons = coins.map(coin => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = coin;
+    const name = document.createElement('strong');
+    name.textContent = coin;
+    const call = document.createElement('span');
+    const prices = document.createElement('small');
+    button.append(name, call, prices);
     button.addEventListener('click', () => {
       selected = coin;
       render();
     });
     picker.append(button);
-    return button;
+    return { button, coin, call, prices };
   });
 
   toggle.addEventListener('change', render);
 
   function recordSamples(data) {
     for (const { coin, market } of data.markets) {
-      if (!market) {
-        samples.delete(coin);
-        continue;
-      }
+      if (!market) continue;
       const [up, down] = market.quotes;
       const quote = {
         ticker: market.slug, observedAt: market.quoteAt, expiresAt: data.end,
@@ -79,7 +79,6 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       };
       if (![up.bid, up.ask, down.bid, down.ask].every(Number.isFinite)
           || up.bid > up.ask || down.bid > down.ask) {
-        samples.delete(coin);
         continue;
       }
       const previous = samples.get(coin);
@@ -87,13 +86,13 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const assessment = Number.isFinite(market.feeRate)
         ? evaluateScalperV8(quote, history, null, price => market.feeRate * price * (1 - price))
         : null;
-      const t = Math.floor(data.observedAt / 60000) * 60000;
-      if (history.at(-1)?.t !== t) {
+      const t = Math.floor(market.quoteAt / 2000) * 2000;
+      if (!history.length || history.at(-1).t < t) {
         history.push({
           ticker: market.slug, t, observedAt: market.quoteAt,
-          yesMid: (up.bid + up.ask) / 2,
+          yesMid: (up.bid + up.ask + 2 - down.bid - down.ask) / 4,
         });
-        if (history.length > 5) history.shift();
+        if (history.length > 120) history.shift();
       }
       samples.set(coin, { quote, history, assessment });
       trackCalls(coin, market, data, assessment);
@@ -141,8 +140,8 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const position = state && (!market || state.ticker === market.slug)
       && Date.now() < state.end ? state.positions[key] : null;
     const side = position?.side.toUpperCase();
-    const justEntered = position && state.events.some(event => event.engine === name
-      && event.action.endsWith(`BUY ${side}`) && Date.now() - event.at < 8000);
+    const justEntered = position && state.events.some(event => event.ticker === position.ticker
+      && event.engine === name && event.action.endsWith(`BUY ${side}`) && Date.now() - event.at < 8000);
     const action = position?.exit ? `${position.exit.split(' · ')[0]} ${side}`
       : position ? `${justEntered ? 'BUY' : 'HOLD'} ${side}`
       : (market && snapshot.end - Date.now() < 120000) || signal ? 'SKIP' : 'WAIT';
@@ -154,37 +153,38 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     return market && Date.now() < snapshot.end && Date.now() - market.quoteAt < 15000 ? market : null;
   }
 
-  function renderLiveSignals() {
-    let liveCount = 0;
-    const rows = coins.map(coin => {
+  function renderCoinCalls() {
+    for (const { button, coin, call, prices } of buttons) {
+      button.setAttribute('aria-pressed', String(coin === selected));
+      call.hidden = prices.hidden = !toggle.checked;
+      if (!toggle.checked) continue;
       const market = freshMarket(coin);
-      if (market) liveCount += 1;
-      const calls = Object.entries(engines).map(([key, name]) => currentCall(coin, market, key, name));
-      const active = calls.filter(call => call.position && !call.position.exit);
-      const sides = new Set(active.map(call => call.side));
-      const entries = active.filter(call => call.action.startsWith('BUY'));
-      let action = calls.some(call => call.action === 'WAIT') ? 'WAIT' : 'NO ENTRY';
-      if (!market) action = 'NO QUOTE';
-      else if (sides.size > 1) action = 'DISAGREE';
-      else if (entries.length >= 2) action = `BUY ${entries[0].side}`;
-      else if (active.length >= 2) action = `HOLD ${active[0].side}`;
-      else if (active.length) action = `ONE ${active[0].side} CALL`;
-
-      const row = document.createElement('tr');
-      const marketLabel = document.createElement('th');
-      marketLabel.scope = 'row';
-      marketLabel.textContent = coin;
-      row.append(marketLabel);
-      for (const outcome of ['Up', 'Down']) {
-        const ask = market?.quotes.find(quote => quote.label === outcome)?.ask;
-        row.insertCell().textContent = Number.isFinite(ask) ? formatPrice(ask) : '—';
+      const engineCalls = Object.entries(engines).map(([key, name]) => currentCall(coin, market, key, name));
+      // Keep the displayed entry consistent by preferring the first active engine.
+      const active = engineCalls.find(item => item.position && !item.position.exit);
+      const displayed = active ?? engineCalls.filter(item => item.position)
+        .sort((a, b) => b.position.updatedAt - a.position.updatedAt)[0];
+      let action = displayed?.action ?? 'NO QUOTE';
+      let detail = '';
+      if (displayed) {
+        const { position } = displayed;
+        const bid = market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
+        detail = 'Entry ' + formatPrice(position.entry / 100);
+        if (Number.isFinite(position.exitBid)) detail += ' · Exit ' + formatPrice(position.exitBid / 100);
+        else if (Number.isFinite(bid)) detail += ' · Bid ' + formatPrice(bid);
+        else if (!market && !position.exit) detail += ' · Bid stale';
+      } else if (market) {
+        const [up, down] = market.quotes;
+        if ([up.bid, up.ask, down.bid, down.ask].every(Number.isFinite)) {
+          const lean = up.bid + up.ask - down.bid - down.ask;
+          action = Math.abs(lean) < .000001 ? 'EVEN BOOK' : lean > 0 ? 'UP WATCH' : 'DOWN WATCH';
+        } else {
+          action = 'THIN BOOK';
+        }
       }
-      row.insertCell().append(actionBadge(action));
-      return row;
-    });
-    const nextStatus = liveCount ? `Live quotes · ${liveCount}/${coins.length} markets` : 'Waiting for fresh Polymarket quotes';
-    if (feedState.textContent !== nextStatus) feedState.textContent = nextStatus;
-    liveRows.replaceChildren(...rows);
+      if (call.textContent !== action) call.replaceChildren(actionBadge(action));
+      prices.textContent = detail;
+    }
   }
 
   function renderSignals(market) {
@@ -194,7 +194,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const sample = samples.get(selected);
     const assessment = market && sample?.quote.ticker === market.slug ? sample.assessment : null;
     const late = market && snapshot.end - Date.now() < 120000;
-    signalStatus.textContent = !market ? 'Waiting for live Polymarket quotes'
+    signalStatus.textContent = !market ? feedError || 'Waiting for live Polymarket quotes'
       : late ? 'Entry window closed · next round in under 2 minutes'
       : market.feeRate === null ? 'Waiting for verified Polymarket fees'
       : assessment?.radar ?? 'Collecting usable quotes for this round';
@@ -265,16 +265,15 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const remaining = Math.ceil((snapshot?.end - Date.now()) / 1000);
     const fresh = remaining > 0 && Date.now() - snapshot.observedAt < 15000;
     const market = freshMarket(selected);
-    buttons.forEach(button => button.setAttribute('aria-pressed', String(button.textContent === selected)));
+    renderCoinCalls();
     title.textContent = `${selected} Up or Down`;
     clock.textContent = fresh ? `Round ends in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '';
     table.hidden = !market;
     link.hidden = !market;
-    const nextStatus = market ? '' : 'Waiting for live Polymarket quotes';
+    const nextStatus = market ? '' : feedError || 'Waiting for live Polymarket quotes';
     if (status.textContent !== nextStatus) status.textContent = nextStatus;
     renderSignals(market);
     livePanel.hidden = !toggle.checked;
-    if (toggle.checked) renderLiveSignals();
     if (!market) return;
     link.href = `https://polymarket.com/event/${market.slug}`;
     const rows = market.quotes.map(({ label, bid, ask }) => {
@@ -290,14 +289,20 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   async function refresh() {
     try {
       const response = await fetch('/.netlify/functions/polymarket-15m', { cache: 'no-store' });
-      if (!response.ok) throw new Error('Market data unavailable');
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) snapshot = undefined;
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || 'Polymarket quote service unavailable');
+      }
       snapshot = await response.json();
-      recordSamples(snapshot);
-    } catch {
-      snapshot = undefined;
+      feedError = '';
+      if (toggle.checked) recordSamples(snapshot);
+    } catch (error) {
+      feedError = error.message;
     }
     render();
-    setTimeout(refresh, 4000);
+    const untilClose = snapshot ? snapshot.end - Date.now() : Infinity;
+    setTimeout(refresh, untilClose > 0 ? Math.min(1500, untilClose + 100) : 1500);
   }
 
   render();
