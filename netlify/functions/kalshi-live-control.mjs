@@ -28,7 +28,10 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
  if(action==='tick')return json(await live.tick());
  if(action==='stop'||action==='emergency-stop')await live.repo.stop();
  const startFence=action==='start'?await live.repo.fence():null;
- let session;try{session=await live.repo.acquire();}catch(e){if(e.message==='EXECUTION_BUSY')return json({enabled:false,stopRequested:action==='stop'||action==='emergency-stop',cancelled:false,error:'Worker busy; cancellation pending, not verified'},202);throw e;}
+ let session;try{session=await live.repo.acquire();}catch(e){if(e.message==='EXECUTION_BUSY'){
+  if(action==='stop'||action==='emergency-stop')return json({enabled:false,stopRequested:true,cancelled:false,error:'Worker busy; cancellation pending, not verified'},202);
+  return json({error:'Worker busy. This action was not completed. Try again when the worker is idle.'},409);
+ }throw e;}
  try{
   const state=session.state;
   if(action==='configure'){
@@ -37,7 +40,9 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    if(exceedsLiveCaps(body.limits))fail(400,'Live limits exceed the approved trial caps');
    if(body.entryMode!==undefined&&!Object.hasOwn(ENTRY_MODES,body.entryMode))fail(400,'Invalid live entry mode');
    state.entryMode=body.entryMode??state.entryMode??'balanced';
-   state.limits=body.limits;await session.persist(state);return json({ok:true,limits:state.limits,...getRelease()});
+   state.limits=body.limits.unlimitedBudgets===true?
+    {...body.limits,dailyCents:state.limits.dailyCents,lossCents:state.limits.lossCents}:body.limits;
+   await session.persist(state);return json({ok:true,limits:state.limits,...getRelease()});
   }
   if(action==='stop'||action==='emergency-stop'){
    state.enabled=false;state.stopped=true;await session.persist(state);

@@ -15,11 +15,11 @@ export function qualifiesLiveEntry(signal,mode='balanced'){
 }
 export function initialState(){return {enabled:false,stopped:true,intents:[],limits:{orderCents:100,dailyCents:500,lossCents:200,maxPositions:1,profitPct:15,stopPct:8,trailPct:4,trailActivationPct:5},spent:{}};}
 export function validateLimits(l){
- for(const key of ['orderCents','dailyCents','lossCents','maxPositions','profitPct','stopPct'])if(!Number.isSafeInteger(l?.[key])||l[key]<=0)throw Error('INVALID_LIMIT_'+key);
+ for(const key of ['orderCents','maxPositions','profitPct','stopPct',...(l?.unlimitedBudgets===true?[]:['dailyCents','lossCents'])])if(!Number.isSafeInteger(l?.[key])||l[key]<=0)throw Error('INVALID_LIMIT_'+key);
  for(const key of ['trailPct','trailActivationPct'])if(l[key]!==undefined&&(!Number.isSafeInteger(l[key])||l[key]<1||l[key]>100))throw Error('INVALID_LIMIT_'+key);
  if(l.unlimitedBudgets!==undefined&&typeof l.unlimitedBudgets!=='boolean')throw Error('INVALID_BUDGET_MODE');
  if(l.unlimitedBudgets&&(l.orderCents<100||l.orderCents>20000||l.maxPositions!==1))throw Error('LIMIT_OUT_OF_RANGE');
- if((!l.unlimitedBudgets&&l.orderCents>l.dailyCents)||l.dailyCents>10000||l.lossCents>l.dailyCents||l.maxPositions>8||l.profitPct>100||l.stopPct>100)throw Error('LIMIT_OUT_OF_RANGE');return l;
+ if((!l.unlimitedBudgets&&(l.orderCents>l.dailyCents||l.dailyCents>10000||l.lossCents>l.dailyCents))||l.maxPositions>8||l.profitPct>100||l.stopPct>100)throw Error('LIMIT_OUT_OF_RANGE');return l;
 }
 export function makeOrder({ticker,side,action,qty,priceCents,id=randomUUID()}){
  if(!/^[A-Z0-9-]{4,100}$/.test(ticker)||!['up','down'].includes(side)||!['buy','sell'].includes(action)||!Number.isFinite(qty)||qty<.01||Math.abs(qty*100-Math.round(qty*100))>1e-7||!Number.isSafeInteger(priceCents)||priceCents<1||priceCents>99)throw Error('INVALID_ORDER');

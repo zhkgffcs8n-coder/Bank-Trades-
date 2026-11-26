@@ -201,3 +201,9 @@ test('expanded live order sizing respects the selected maximum and available bal
  assert.equal(intent.reserve,960);
  assert.throws(()=>validateLimits({...state.limits,orderCents:20001}),/LIMIT_OUT_OF_RANGE/);
 });
+
+test('unlimited budget mode ignores inactive daily spend and loss fields',()=>{
+ const limits={...initialState().limits,orderCents:500,dailyCents:500,lossCents:1000,unlimitedBudgets:true};
+ assert.equal(validateLimits(limits).orderCents,500);
+ assert.throws(()=>validateLimits({...limits,unlimitedBudgets:false}),/LIMIT_OUT_OF_RANGE/);
+});
