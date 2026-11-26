@@ -234,3 +234,34 @@ test('settled manual exit matches exchange fills before clearing reconciliation'
  reconcile(state,later,now+1000);
  assert.equal(accountRisk(state,later,now+1000).open.length,0);
 });
+
+test('Start Live reconciles a previous settlement failure before arming',async()=>{
+ const {repo}=await started();
+ await repo.stop();
+ const session=await repo.acquire();
+ session.state.enabled=false;session.state.stopped=true;session.state.failure='SETTLEMENT_MISMATCH';
+ await session.persist(session.state);await session.release();
+ const prior=process.env.KALSHI_LIVE_OWNER_ID;
+ process.env.KALSHI_LIVE_OWNER_ID=id;
+ try{
+  let safe=false;
+  const control=createLiveControl({getOwner:async()=>({id}),getCommit:()=>null,
+   getRuntime:async()=>({repo,client:async()=>({snapshot:async()=>({complete:safe,at:Date.now(),
+    balanceCents:1000,orders:[],fills:[],positions:[],settlements:[]})})})});
+  const start=()=>control(new Request('https://example.com/live',{method:'POST',
+   headers:{origin:'https://example.com','content-type':'application/json'},
+   body:JSON.stringify({action:'start',confirmation:'START_REAL_MONEY_WITH_LIMITS'})}));
+  assert.equal((await start()).status,503);
+  assert.equal(await repo.stopped(),true);
+  assert.equal((await repo.read()).state.failure,'SETTLEMENT_MISMATCH');
+  safe=true;
+  const result=await start();
+  assert.equal(result.status,200);
+  assert.equal((await result.json()).enabled,true);
+  assert.equal(await repo.stopped(),false);
+  assert.equal((await repo.read()).state.failure,null);
+ }finally{
+  if(prior===undefined)delete process.env.KALSHI_LIVE_OWNER_ID;
+  else process.env.KALSHI_LIVE_OWNER_ID=prior;
+ }
+});
