@@ -39,6 +39,7 @@ export async function runtime(userId){
   try{
    const state=session.state;
    if(!state.enabled||!state.scalperArmedAt||at<state.scalperArmedAt||await repo.stopped())return {status:'LIVE_OFF_OR_EVENT_BEFORE_ARM'};
+   if(cross&&state.crossCoinArmed!==true)return {status:'START_REQUIRED_FOR_CROSS_COIN'};
    state.scalperEvents??={};
    const slot=cross?'cross-'+stage:stage;
    const prior=state.scalperEvents[slot];
