@@ -144,6 +144,8 @@
   font-variant-numeric: tabular-nums;
 }
 #poly-coins [data-direction="down"] .entry { border-color: #fb7185; background: #350f21; color: #fda4af; }
+.poly-tile-prices.has-exit { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.poly-tile-price.exit { border-color: #a78bfa; background: #261d43; color: #e2d9ff; }
 .poly-tile-price.bid { border-color: #22d3ee; background: #082b38; color: #67e8f9; }
 #poly-coins .poly-tile-price small {
   color: inherit;
@@ -165,4 +167,6 @@
 .poly-workspace .poly-tracker { margin-block: 0; }
 @media (max-width: 600px) {
   .venue-desk #poly-coins { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #poly-coins .has-exit small { white-space: normal; }
+  .has-exit .poly-tile-price b { font-size: .8rem; }
 }
