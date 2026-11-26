@@ -1,6 +1,7 @@
 import {randomUUID} from 'node:crypto';
 import {getStore} from '@netlify/blobs';
-import {owner,json,errorResponse,fail} from './lib/access.mjs';
+import {getUser} from '@netlify/identity';
+import {json,errorResponse,fail} from './lib/access.mjs';
 import {createLiveControl} from './kalshi-live-control.mjs';
 import {liveRepository} from './lib/live-state.mjs';
 import {kalshiClient} from './lib/kalshi-execution-client.mjs';
@@ -10,11 +11,22 @@ import {runLiveCycle} from '../../src/live-cycle.mjs';
 
 export default async req=>{try{
  if(process.env.CONTEXT!=='deploy-preview')return new Response(null,{status:404});
+ if(req.method==='GET'){
+  const user=await getUser();
+  if(!user||!user.roles?.includes('owner')||user.id!==process.env.KALSHI_LIVE_OWNER_ID)fail(403,'Configured owner required');
+  return new Response(`<!doctype html><meta name="viewport" content="width=device-width"><title>KaiBot Demo verification</title><h1>KaiBot Demo verification</h1><button type="button">Run START and STOP in Kalshi Demo</button><pre role="status"></pre><script>
+  const button=document.querySelector('button'),result=document.querySelector('pre');
+  button.onclick=async()=>{button.disabled=true;result.textContent='Running Demo verification…';try{
+   const response=await fetch(location.pathname,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({confirmation:'RUN_DEMO_CANCEL_TEST'})});
+   result.textContent=JSON.stringify(await response.json(),null,2);
+  }catch{result.textContent='Demo verification response unavailable.';}finally{button.disabled=false;}};
+  </script>`,{headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'private, no-store'}});
+ }
  if(req.method!=='POST')fail(405,'Method not allowed');
  if(req.headers.get('origin')!==new URL(req.url).origin)fail(403,'Origin mismatch');
  if(!req.headers.get('content-type')?.startsWith('application/json')||(await req.json())?.confirmation!=='RUN_DEMO_CANCEL_TEST')fail(400,'Explicit Demo test confirmation required');
- const user=await owner();
- if(user.id!==process.env.KALSHI_LIVE_OWNER_ID)fail(403,'Configured owner required');
+ const user=await getUser();
+ if(!user||!user.roles?.includes('owner')||user.id!==process.env.KALSHI_LIVE_OWNER_ID)fail(403,'Configured owner required');
  const db=getStore({name:'bank-trades-kalshi-demo',consistency:'strong'});
  const saved=await db.get('uploaded-connection',{type:'json'});
  if(saved?.status!=='DEMO_AUTHENTICATED')fail(409,'Authenticated Demo credentials required');
