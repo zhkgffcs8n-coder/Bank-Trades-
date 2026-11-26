@@ -15,13 +15,6 @@
 .venue-card th, .venue-card td { padding: 8px; }
 .venue-card a { color: #67e8f9; }
 .venue-desk #poly-coins { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.venue-desk #poly-coins button {
-  display: flex; flex-direction: column; justify-content: center; gap: 4px;
-  width: auto; min-height: 70px; margin: 0; padding: 5px 2px; text-align: center;
-}
-#poly-coins .poly-action { font-size: clamp(.55rem, 2vw, .82rem); }
-#poly-coins small { color: #dbeafe; font-size: clamp(.55rem, 1.8vw, .75rem); font-variant-numeric: tabular-nums; }
-#poly-coins small:empty { display: none; }
 .venue-card label { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
 .venue-card #poly-signal-toggle { appearance: auto; width: 20px; height: 20px; margin: 0; accent-color: #67e8f9; }
 .venue-card caption { text-align: left; color: #a5bbd4; padding: 8px; }
@@ -38,15 +31,12 @@
 .poly-tracker article p { margin-block: 6px; }
 .venue-desk.poly-workspace { display: grid; width: min(100% - 32px, 1200px); gap: 12px 20px; align-items: start; }
 .poly-workspace > nav, .poly-workspace > h1 { grid-column: 1 / -1; }
-.poly-live-panel { grid-row: 4; }
 .poly-workspace > .venue-card { min-width: 0; margin-top: 0; }
-.poly-history-panel { grid-row: 6; }
 .poly-history-panel #poly-call-history { max-height: 24rem; }
 .poly-history-panel #poly-call-history li { border-bottom: 1px solid #385475; padding-block: 8px; }
 .poly-workspace h2 { font-size: 1.1rem; }
 .poly-live-panel article { border-top: 1px solid #385475; padding-block: 10px; }
 .poly-live-panel article p { margin: 4px 0 0; }
-.poly-agreement-buy { color: #50e6b4; font-weight: 700; }
 #poly-signals summary { cursor: pointer; margin-block: 12px; }
 @media (min-width: 960px) {
   .venue-desk.poly-workspace { grid-template-columns: minmax(0, 1.25fr) minmax(0, .95fr) minmax(0, 1.15fr); }
@@ -73,3 +63,106 @@
 .poly-action-watch { color: #b5c8e8; background: #1b2a43; }
 #poly-call-history li > div { margin-bottom: 4px; }
 .poly-tracker article small { display: block; color: #ffe18b; margin-bottom: 4px; }
+
+/* Polymarket workspace uses the same arcade skin as the main dashboard. */
+.venue-desk.poly-workspace {
+  width: min(100% - 24px, 1200px);
+  margin: 14px auto;
+  padding: 0 0 36px;
+  gap: 12px;
+}
+.poly-workspace > .poly-header,
+.poly-workspace > .poly-callboard { grid-column: 1 / -1; }
+.poly-header {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px 2px 12px;
+  margin: 0;
+  border: 0;
+  gap: 8px 16px;
+}
+.poly-header .brand { font-weight: 950; }
+.poly-header .tag { margin: 2px 0 0; color: #b8c8ee; letter-spacing: .09em; font-size: 10px; }
+#poly-clock {
+  padding: 6px 10px;
+  border: 1px solid #495d9d;
+  border-radius: 8px;
+  color: var(--arc-cyan);
+  background: #10182d;
+  font-size: .8rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.poly-callboard { padding: 12px; }
+.poly-callboard h1 {
+  margin: 0 0 10px;
+  font-size: clamp(1.05rem, 3vw, 1.45rem);
+  font-weight: 850;
+}
+.venue-desk #poly-coins { gap: 8px; }
+.venue-desk #poly-coins button {
+  min-width: 0;
+  width: auto;
+  margin: 0;
+  text-align: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid #495d9d;
+  border-radius: 12px;
+  background: linear-gradient(155deg, #222853, #0d142c 72%);
+}
+.venue-desk #poly-coins button[aria-pressed="true"] {
+  border-color: var(--arc-cyan);
+  box-shadow: inset 0 0 13px #38d9ff24, 0 0 12px #38d9ff20;
+}
+#poly-coins button > strong {
+  color: #fff;
+  font-size: 1.15rem;
+  line-height: 1.1;
+  text-shadow: 0 0 12px #95cdff7d;
+}
+#poly-coins .poly-action { font-size: .75rem; }
+.poly-action-watch-up { color: #a5e5c9; background: #13332a; }
+.poly-action-watch-down { color: #ffbcc6; background: #371b2e; }
+.poly-tile-prices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+  gap: 5px;
+}
+.poly-tile-price {
+  display: grid;
+  min-width: 0;
+  border: 1px solid #4ade80;
+  border-radius: 6px;
+  padding: 3px 1px;
+  background: #09271e;
+  color: #86efac;
+  font-variant-numeric: tabular-nums;
+}
+#poly-coins [data-direction="down"] .entry { border-color: #fb7185; background: #350f21; color: #fda4af; }
+.poly-tile-price.bid { border-color: #22d3ee; background: #082b38; color: #67e8f9; }
+#poly-coins .poly-tile-price small {
+  color: inherit;
+  font-size: .58rem;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.poly-tile-price b { font-size: clamp(.9rem, 2vw, 1.22rem); line-height: 1.2; }
+.poly-workspace > .venue-card { padding: 14px; }
+.poly-workspace .venue-card :is(h2, h3, p) { margin-block: 0 8px; }
+.poly-workspace .venue-card p { font-size: .84rem; color: #c7d5ef; }
+.poly-workspace .venue-card label { margin: 0 0 4px; }
+.poly-workspace #poly-signal-toggle { min-height: 0; padding: 0; }
+.poly-workspace .venue-card :is(th, td) { padding: 7px 4px; }
+.poly-workspace .venue-card table { font-size: .84rem; }
+.poly-workspace .venue-card tbody tr { border-top: 1px solid #495d9d; }
+.poly-workspace .venue-card table { border-collapse: collapse; }
+.poly-workspace .poly-tracker { margin-block: 0; }
+@media (max-width: 600px) {
+  .venue-desk #poly-coins { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
