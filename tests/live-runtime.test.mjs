@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {liveRepository} from '../netlify/functions/lib/live-state.mjs';
-import {initialState,reconcile,submitIntent,validateLimits} from '../src/live-execution.mjs';
+import {initialState,reconcile,reconcileManualExit,submitIntent,validateLimits} from '../src/live-execution.mjs';
 import {accountRisk} from '../src/live-accounting.mjs';
 import {runLiveCycle} from '../src/live-cycle.mjs';
 import {createLiveControl} from '../netlify/functions/kalshi-live-control.mjs';
@@ -206,4 +206,25 @@ test('unlimited budget mode ignores inactive daily spend and loss fields',()=>{
  const limits={...initialState().limits,orderCents:500,dailyCents:500,lossCents:1000,unlimitedBudgets:true};
  assert.equal(validateLimits(limits).orderCents,500);
  assert.throws(()=>validateLimits({...limits,unlimitedBudgets:false}),/LIMIT_OUT_OF_RANGE/);
+});
+
+test('settled manual exit matches exchange fills before clearing reconciliation',async()=>{
+ const {repo}=await started(),client=exchange();
+ await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});
+ const state=(await repo.read()).state,snapshot=await client.snapshot(),now=Date.parse(snapshot.fills[0].created_time)+3000;
+ snapshot.at=now;snapshot.positions=[];
+ snapshot.orders.push({order_id:'external',ticker:'BTC-ROUND',status:'executed',fill_count_fp:'1.00'});
+ snapshot.fills.push({fill_id:'external-fill',order_id:'external',ticker:'BTC-ROUND',count_fp:'1.00',action:'sell',
+  side:'yes',yes_price_dollars:'0.60',fee_cost:'0.01',created_time:new Date(now-2000).toISOString()});
+ snapshot.settlements=[{ticker:'BTC-ROUND',yes_count_fp:'0.00',no_count_fp:'0.00',market_result:'yes',revenue:0,
+  fee_cost:'0.00',settled_time:new Date(now-1000).toISOString()}];
+ let mismatch;
+ assert.throws(()=>reconcile(state,snapshot,now),error=>{mismatch=error.settlementMismatch;return error.message==='SETTLEMENT_MISMATCH';});
+ const wrong=structuredClone(snapshot);wrong.fills[1].side='no';
+ assert.equal(reconcileManualExit(state,wrong,mismatch,now),false);
+ assert.equal(state.intents.length,1);
+ assert.equal(reconcileManualExit(state,snapshot,mismatch,now),true);
+ assert.equal(state.intents[1].manualExit,true);
+ assert.equal(state.intents[1].status,'RECONCILED');
+ assert.equal(accountRisk(state,snapshot,now).open.length,0);
 });

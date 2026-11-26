@@ -49,7 +49,7 @@ export function reconcile(state,snapshot,now=Date.now()){
  const quantities=new Map();
  for(const intent of state.intents){
   if(intent.status==='ABORTED')continue;
-  const matches=[...orders.values()].filter(o=>o.client_order_id===intent.id);
+  const matches=[...orders.values()].filter(o=>intent.manualExit===true?o.order_id===intent.orderId:o.client_order_id===intent.id);
   if(matches.length!==1){if(intent.status!=='PREPARED')throw Error('UNRESOLVED_ORDER_'+intent.id);continue;}
   const o=matches[0];if(o.ticker!==intent.ticker)throw Error('ORDER_TICKER_MISMATCH');
   const ownFills=[...fills.values()].filter(f=>f.order_id===o.order_id);
@@ -133,4 +133,40 @@ export async function emergencyStop({state,client,persist}){
   await persist(state);
  }
  return {stopped:true,cancelled:true,positionsClosed:false};
+}
+
+export function reconcileManualExit(state,snapshot,mismatch,now=Date.now()){
+ const {ticker,botQuantity,exchangeQuantity,invalidTime,invalidResult}=mismatch;
+ if(exchangeQuantity!==0||!botQuantity||invalidTime||invalidResult)return false;
+ const intents=state.intents.filter(intent=>intent.ticker===ticker&&intent.status!=='ABORTED');
+ const [buy]=intents;
+ if(intents.length!==1||buy.action!=='buy'||buy.status!=='RECONCILED'||buy.filled!==Math.abs(botQuantity))return false;
+ const side=botQuantity>0?'yes':'no';
+ if(buy.side!==(side==='yes'?'up':'down'))return false;
+ const settlement=snapshot.settlements.find(item=>item.ticker===ticker);
+ const settledAt=Date.parse(settlement?.settled_time);
+ const fills=snapshot.fills.filter(fill=>(fill.ticker||fill.market_ticker)===ticker);
+ const entryFills=fills.filter(fill=>fill.order_id===buy.orderId);
+ const exitFills=fills.filter(fill=>fill.order_id!==buy.orderId);
+ if(!entryFills.length||!exitFills.length)return false;
+ const entryAt=Math.max(...entryFills.map(fill=>Date.parse(fill.created_time)));
+ const orderId=exitFills[0].order_id;
+ if(!orderId||state.intents.some(intent=>intent.orderId===orderId))return false;
+ const exitOrder=snapshot.orders.find(order=>order.order_id===orderId&&order.ticker===ticker);
+ if(!exitOrder||!['executed','canceled'].includes(exitOrder.status))return false;
+ if(!exitFills.every(fill=>{
+  const at=Date.parse(fill.created_time),qty=Number(fill.count_fp??fill.count);
+  return fill.order_id===orderId&&fill.action==='sell'&&fill.side===side&&
+   Number.isFinite(qty)&&qty>0&&at>entryAt&&at<=settledAt&&at<=now;
+ }))return false;
+ const quantity=exitFills.reduce((sum,fill)=>sum+Number(fill.count_fp??fill.count),0);
+ if(Math.abs(quantity-buy.filled)>1e-7)return false;
+ const repaired=structuredClone(state),evidence=structuredClone(snapshot);
+ repaired.intents.push({id:'manual-exit:'+orderId,orderId,ticker,side:buy.side,action:'sell',
+  qty:quantity,status:'AWAITING_RECONCILIATION',manualExit:true,at:Math.min(...exitFills.map(fill=>Date.parse(fill.created_time)))});
+ reconcile(repaired,evidence,now);
+ accountRisk(repaired,evidence,now);
+ Object.assign(state,repaired);
+ Object.assign(snapshot,evidence);
+ return true;
 }

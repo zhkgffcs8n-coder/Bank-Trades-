@@ -1,7 +1,7 @@
 import {owner,json,errorResponse,fail} from './lib/access.mjs';
 import {runtime} from './lib/live-runtime.mjs';
 import {liveBuildCommit,releaseStatus} from './lib/kalshi-release-gate.mjs';
-import {ENTRY_MODES,validateLimits,reconcile,emergencyStop} from '../../src/live-execution.mjs';
+import {ENTRY_MODES,validateLimits,reconcile,reconcileManualExit,emergencyStop} from '../../src/live-execution.mjs';
 import {accountRisk,confirmedTradeHistory} from '../../src/live-accounting.mjs';
 const liveTrialCaps={orderCents:100,dailyCents:500,lossCents:300,maxPositions:1};
 function effectiveLiveLimits(limits){
@@ -69,6 +69,8 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    });
   }
   try{reconcile(state,snapshot);}catch(e){
+   const repaired=e.settlementMismatch&&await live.repo.stopped()&&reconcileManualExit(state,snapshot,e.settlementMismatch);
+   if(!repaired){
    if(e.settlementMismatch){
     const {ticker,botQuantity,exchangeQuantity,invalidResult,invalidTime}=e.settlementMismatch;
     const reason=invalidResult||invalidTime?'Kalshi settlement result or timestamp could not be verified.':
@@ -82,6 +84,7 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
     .map(p=>({ticker:p.ticker,quantity:p.position_fp??p.position}));
    return json({...getRelease(),accountReadVerified:true,reconciled:false,positions,
     error:'Kalshi account read passed. Open positions outside this bot block reconciliation: '+positions.map(p=>p.ticker+' ('+p.quantity+' contracts)').join(', ')+'.'},409);
+   }
   }
   state.risk=accountRisk(state,snapshot);state.failure=null;state.lastReconciledAt=Date.now();await session.persist(state);
   return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
