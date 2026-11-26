@@ -41,3 +41,43 @@
 #kai-command [data-coins] button{padding:6px;background:#131a32;border:1px solid #53618a;color:#e5efff}
 #kai-command [data-coins] button[aria-pressed=true]{background:#574900;border:2px solid #ffd400;color:#fff7a8}
 #kai-command [data-coin-status]{color:#9eadce;font-size:.8rem}
+
+/* Keep live status readable across the dashboard and command center. */
+#primalLiveStart[data-live-state="ready"] {
+  background: #0b3a2a;
+  border: 2px solid #34d399;
+  color: #d1fae5;
+  font-weight: 800;
+}
+#primalLiveStart:is([data-live-state="armed"], [data-live-state="waiting"]),
+#liveReleaseStatus:is([data-live-state="armed"], [data-live-state="waiting"]),
+dialog:is([data-live-state="armed"], [data-live-state="waiting"]) :is([data-live-mode], [data-start]) {
+  background: #0b3a2a;
+  color: #d1fae5;
+  border: 2px solid #4ade80;
+  border-radius: 8px;
+  padding: .45em .7em;
+  opacity: 1;
+  font-weight: 800;
+  box-shadow: 0 0 12px #22c55e55;
+}
+#liveReleaseStatus:is([data-live-state="armed"], [data-live-state="waiting"]),
+dialog:is([data-live-state="armed"], [data-live-state="waiting"]) [data-live-mode] {
+  animation: kai-live-pulse 2s ease-in-out infinite;
+}
+dialog[data-live-state="ready"] [data-start] {
+  background: #0b3a2a;
+  border: 2px solid #34d399;
+  color: #d1fae5;
+  font-weight: 800;
+}
+dialog [data-stop], #liveStop, #liveEmergency {
+  border-color: #f87171;
+  color: #fecaca;
+}
+@keyframes kai-live-pulse {
+  50% { box-shadow: 0 0 21px #22c55ecc; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #liveReleaseStatus, dialog [data-live-mode] { animation: none !important; }
+}
