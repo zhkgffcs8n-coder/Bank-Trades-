@@ -20,7 +20,23 @@ test('settlement closes only matching exposure and accounts for loss',async()=>{
 test('missing fees prevents an invented net P/L',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const s=(await repo.read()).state,snap=await client.snapshot();delete snap.fills[0].fee_cost;assert.throws(()=>accountRisk(s,snap),/MISSING_FILL_FEES/);});
 test('daily loss budget reserves open cost and blocks entry before network',async()=>{const state=initialState();state.enabled=true;state.stopped=false;state.limits.lossCents=50;let called=false;await assert.rejects(submitIntent({state,client:{create:async()=>{called=true}},persist:async()=>{},checkStopped:async()=>false,snapshot:await exchange().snapshot(),signal:(await signals())[0],quote:quote(49)}),/DAILY_LOSS_LIMIT/);assert.equal(called,false);});
 test('owner authorization and same-origin checks precede control mutations',async()=>{let runtimeCalls=0;const denied=createLiveControl({getOwner:async()=>{throw Object.assign(Error('Owner access required'),{status:403})},getRuntime:async()=>{runtimeCalls++}});assert.equal((await denied(new Request('https://site.test/control'))).status,403);assert.equal(runtimeCalls,0);const {repo}=await started();const allowed=createLiveControl({getOwner:async()=>({id}),getRuntime:async()=>({repo})});const res=await allowed(new Request('https://site.test/control',{method:'POST',headers:{origin:'https://evil.test','content-type':'application/json'},body:JSON.stringify({action:'stop'})}));assert.equal(res.status,403);assert.equal(await repo.stopped(),false);});
-test('START remains blocked regardless of browser payload',async()=>{const {repo}=await started();const handler=createLiveControl({getOwner:async()=>({id}),getRuntime:async()=>({repo})});const r=await handler(new Request('https://site.test/control',{method:'POST',headers:{origin:'https://site.test','content-type':'application/json'},body:JSON.stringify({action:'start',canTrade:true,checks:{all:true}})}));assert.equal(r.status,409);assert.equal((await r.json()).canTrade,false);});
+test('manual START requires confirmation but does not require release evidence',async t=>{
+ const previous=process.env.KALSHI_LIVE_OWNER_ID;
+ t.after(()=>{if(previous===undefined)delete process.env.KALSHI_LIVE_OWNER_ID;else process.env.KALSHI_LIVE_OWNER_ID=previous;});
+ process.env.KALSHI_LIVE_OWNER_ID=id;
+ const db=database(),repo=liveRepository(db,id);
+ const handler=createLiveControl({getOwner:async()=>({id}),getRuntime:async()=>({repo,db}),getRelease:()=>{throw Error('Release evidence must not be read for START');}});
+ const call=body=>handler(new Request('https://site.test/control',{method:'POST',headers:{origin:'https://site.test','content-type':'application/json'},body:JSON.stringify(body)}));
+ assert.equal((await call({action:'start',canTrade:true})).status,409);
+ assert.equal(await repo.stopped(),true);
+ const armed=await call({action:'start',confirmation:'START_REAL_MONEY_WITH_LIMITS'});
+ assert.equal(armed.status,200);assert.equal((await armed.json()).status,'ARMED_WAITING');
+ const result=await runLiveCycle({repo,client:{snapshot:async()=>{throw Error('KALSHI_HTTP_401');}},canTrade:true,waitForDependencies:true});
+ assert.deepEqual(result,{status:'ARMED_WAITING',reason:'KALSHI_HTTP_401'});
+ assert.equal(await repo.stopped(),false);
+ assert.equal((await (await call({action:'stop'})).json()).cancelled,true);
+ assert.equal(await repo.stopped(),true);
+});
 test('owner ledgers and stop fences are isolated',async()=>{const db=database(),a=liveRepository(db,'owner1234'),b=liveRepository(db,'owner5678');const sa=await a.acquire();sa.state.spent.today=100;await sa.persist(sa.state);await a.stop();assert.deepEqual((await b.read()).state.spent,{});const sb=await b.acquire();await sb.release();await sa.release();});
 test('failed durable reservation never calls the exchange',async()=>{const state=initialState();state.enabled=true;state.stopped=false;let called=false;await assert.rejects(submitIntent({state,client:{create:async()=>{called=true}},persist:async()=>{throw Error('STORAGE_FAILED')},checkStopped:async()=>false,snapshot:await exchange().snapshot(),signal:(await signals())[0],quote:quote(49)}),/STORAGE_FAILED/);assert.equal(called,false);});
 test('terminal fill evidence survives disappearance from active exchange history',async()=>{const {repo}=await started(),client=exchange();await runLiveCycle({repo,client,signals,quoteFor:async()=>quote(49),canTrade:true});const state=(await repo.read()).state,snap=await client.snapshot();snap.orders=[];snap.fills=[];reconcile(state,snap);assert.equal(accountRisk(state,snap).openCostCents,51);});
