@@ -3,27 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050510">
 <title>BANK TRADES PRO · Polymarket</title>
 <link rel="stylesheet" href="/account.css">
-<link rel="stylesheet" href="/polymarket.css">
-<script type="module" src="/polymarket.js"></script>
+<link rel="stylesheet" href="/arcade-theme.css?v=neon-polish">
+<link rel="stylesheet" href="/polymarket.css?v=arcade">
+<script type="module" src="/polymarket.js?v=arcade"></script>
 </head>
-<body>
-<header><a class="brand" href="/dashboard">BANK <span>TRADES</span> PRO</a></header>
+<body class="bt-command-v9">
 <main class="venue-desk poly-workspace">
-  <nav aria-label="Market venue">
+  <header class="poly-header">
+    <div>
+      <a class="brand" href="/dashboard">BANK <span>TRADES</span> PRO</a>
+      <div class="tag">POLYMARKET • 15-MINUTE INTELLIGENCE</div>
+    </div>
+    <span id="poly-clock"></span>
+  </header>
+  <nav class="market-venue-nav" aria-label="Market venue">
     <a href="/dashboard">Kalshi</a>
     <a href="/dashboard?venue=polymarket" aria-current="page">Polymarket</a>
   </nav>
-  <h1>Polymarket Pro Scalper</h1>
-  <nav id="poly-coins" aria-label="Live Pro Scalper calls by coin"></nav>
-  <section class="venue-card poly-scalper-panel" aria-labelledby="poly-title">
+  <section class="card poly-callboard" aria-labelledby="poly-callboard-title">
+    <h1 id="poly-callboard-title">Polymarket Pro Scalper</h1>
+    <nav id="poly-coins" aria-label="Live Pro Scalper calls by coin"></nav>
+  </section>
+  <section class="card venue-card poly-scalper-panel" aria-labelledby="poly-title">
     <h2 id="poly-title">BTC Up or Down</h2>
-    <p id="poly-clock"></p>
     <p id="poly-status" role="status">Loading live quotes…</p>
     <label><input id="poly-signal-toggle" type="checkbox" checked> <span id="poly-toggle-label">Signals ON</span></label>
     <section id="poly-signals" hidden aria-labelledby="poly-signal-title">
-      <h3 id="poly-signal-title">Polymarket Pro Scalper</h3>
+      <h3 id="poly-signal-title">Scalper Engines</h3>
       <p id="poly-signal-status"></p>
       <details open><summary>Individual engine calls</summary>
       <table class="poly-calls"><thead><tr><th scope="col">Engine</th><th scope="col">Signal</th><th scope="col">Saved entry</th><th scope="col">Bid</th></tr></thead><tbody id="poly-signal-calls"></tbody></table>
@@ -31,14 +40,14 @@
 
     </section>
   </section>
-  <aside class="venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
+  <aside class="card venue-card poly-live-panel" id="poly-live-panel" aria-labelledby="poly-live-title">
     <h2 id="poly-live-title">Live Position Tracker</h2>
     <div class="poly-tracker">
         <p id="poly-tracker-empty">Waiting for a BUY call.</p>
         <div id="poly-tracker-positions"></div>
       </div>
   </aside>
-  <section class="venue-card poly-history-panel" aria-labelledby="poly-history-title">
+  <section class="card venue-card poly-history-panel" aria-labelledby="poly-history-title">
       <h2 id="poly-history-title">Live Call &amp; Flip History</h2>
       <p id="poly-history-empty">No Polymarket calls recorded in this browser yet.</p>
       <ol id="poly-call-history"></ol>

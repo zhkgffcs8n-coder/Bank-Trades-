@@ -42,6 +42,8 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const label = action.replace(/^FLIP · /, '');
     const kind = label.startsWith('BUY UP') ? 'buy-up'
       : label.startsWith('BUY DOWN') ? 'buy-down'
+      : label === 'UP WATCH' ? 'watch-up'
+      : label === 'DOWN WATCH' ? 'watch-down'
       : label.startsWith('TAKE PROFIT') ? 'profit'
       : label.startsWith('SELL FAST') ? 'stop'
       : /^(SELL|EXIT|TIME EXIT)/.test(label) ? 'sell'
@@ -57,14 +59,24 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const name = document.createElement('strong');
     name.textContent = coin;
     const call = document.createElement('span');
-    const prices = document.createElement('small');
+    const prices = document.createElement('span');
+    prices.className = 'poly-tile-prices';
+    const metrics = ['entry', 'bid'].map(kind => {
+      const box = document.createElement('span');
+      box.className = 'poly-tile-price ' + kind;
+      const label = document.createElement('small');
+      const value = document.createElement('b');
+      box.append(label, value);
+      prices.append(box);
+      return { label, value };
+    });
     button.append(name, call, prices);
     button.addEventListener('click', () => {
       selected = coin;
       render();
     });
     picker.append(button);
-    return { button, coin, call, prices };
+    return { button, coin, call, prices, metrics };
   });
 
   toggle.addEventListener('change', render);
@@ -154,7 +166,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
   }
 
   function renderCoinCalls() {
-    for (const { button, coin, call, prices } of buttons) {
+    for (const { button, coin, call, prices, metrics } of buttons) {
       button.setAttribute('aria-pressed', String(coin === selected));
       call.hidden = prices.hidden = !toggle.checked;
       if (!toggle.checked) continue;
@@ -165,14 +177,18 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
       const displayed = active ?? engineCalls.filter(item => item.position)
         .sort((a, b) => b.position.updatedAt - a.position.updatedAt)[0];
       let action = displayed?.action ?? 'NO QUOTE';
-      let detail = '';
+      let entryLabel = 'UP ASK';
+      let bidLabel = 'DOWN ASK';
+      let entry = market?.quotes[0]?.ask;
+      let bid = market?.quotes[1]?.ask;
       if (displayed) {
         const { position } = displayed;
-        const bid = market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
-        detail = 'Entry ' + formatPrice(position.entry / 100);
-        if (Number.isFinite(position.exitBid)) detail += ' · Exit ' + formatPrice(position.exitBid / 100);
-        else if (Number.isFinite(bid)) detail += ' · Bid ' + formatPrice(bid);
-        else if (!market && !position.exit) detail += ' · Bid stale';
+        entryLabel = 'ENTRY';
+        entry = position.entry / 100;
+        bidLabel = position.exit ? 'EXIT' : market ? 'LIVE BID' : 'BID STALE';
+        bid = position.exit
+          ? Number.isFinite(position.exitBid) ? position.exitBid / 100 : null
+          : market?.quotes.find(quote => quote.label.toLowerCase() === position.side)?.bid;
       } else if (market) {
         const [up, down] = market.quotes;
         if ([up.bid, up.ask, down.bid, down.ask].every(Number.isFinite)) {
@@ -183,7 +199,14 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
         }
       }
       if (call.textContent !== action) call.replaceChildren(actionBadge(action));
-      prices.textContent = detail;
+      button.dataset.direction = displayed?.side?.toLowerCase() ?? '';
+      const labels = [entryLabel, bidLabel];
+      const values = [entry, bid];
+      metrics.forEach(({ label, value }, index) => {
+        const formatted = Number.isFinite(values[index]) ? formatPrice(values[index]) : '—';
+        if (label.textContent !== labels[index]) label.textContent = labels[index];
+        if (value.textContent !== formatted) value.textContent = formatted;
+      });
     }
   }
 
@@ -267,6 +290,7 @@ import { evaluateScalperV8 } from './src/scalper-v8.mjs';
     const market = freshMarket(selected);
     renderCoinCalls();
     title.textContent = `${selected} Up or Down`;
+    clock.hidden = !fresh;
     clock.textContent = fresh ? `Round ends in ${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, '0')}` : '';
     table.hidden = !market;
     link.hidden = !market;
