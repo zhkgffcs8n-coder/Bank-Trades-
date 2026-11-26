@@ -69,6 +69,12 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
    });
   }
   try{reconcile(state,snapshot);}catch(e){
+   if(e.settlementMismatch){
+    const {ticker,botQuantity,exchangeQuantity,invalidResult,invalidTime}=e.settlementMismatch;
+    const reason=invalidResult||invalidTime?'Kalshi settlement result or timestamp could not be verified.':
+     'KaiBot signed quantity '+botQuantity+' differs from Kalshi settlement quantity '+exchangeQuantity+'.';
+    return json({error:'Settlement mismatch for '+ticker+'. '+reason},409);
+   }
    const mismatch=/^POSITION_MISMATCH_(.+)$/.exec(e.message);
    if(action!=='reconcile'||!mismatch||state.intents.some(intent=>intent.ticker===mismatch[1]&&intent.status!=='ABORTED'))throw e;
    const positions=snapshot.positions.filter(p=>Number(p.position_fp??p.position)!==0&&
