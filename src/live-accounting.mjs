@@ -5,7 +5,10 @@ export function settlementFor(snapshot,ticker,qty){
  if(!matches.length)return null;
  if(matches.length!==1)throw Error('DUPLICATE_SETTLEMENT');const s=matches[0];
  const yes=numeric(s.yes_count_fp,'SETTLEMENT_YES'),no=numeric(s.no_count_fp,'SETTLEMENT_NO');
- if(Math.abs(yes-no-qty)>1e-7||!['yes','no'].includes(s.market_result)||!Number.isFinite(Date.parse(s.settled_time)))throw Error('SETTLEMENT_MISMATCH');
+ if(Math.abs(yes-no-qty)>1e-7||!['yes','no'].includes(s.market_result)||!Number.isFinite(Date.parse(s.settled_time)))throw Object.assign(Error('SETTLEMENT_MISMATCH'),{
+  settlementMismatch:{ticker,botQuantity:qty,exchangeQuantity:yes-no,
+   invalidResult:!['yes','no'].includes(s.market_result),invalidTime:!Number.isFinite(Date.parse(s.settled_time))}
+ });
  const revenue=numeric(s.revenue,'SETTLEMENT_REVENUE');
  if(Math.abs(revenue-(s.market_result==='yes'?yes:no)*100)>1e-7)throw Error('SETTLEMENT_REVENUE_MISMATCH');return s;
 }
