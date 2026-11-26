@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {liveRepository} from '../netlify/functions/lib/live-state.mjs';
-import {initialState,reconcile,submitIntent} from '../src/live-execution.mjs';
+import {initialState,reconcile,submitIntent,validateLimits} from '../src/live-execution.mjs';
 import {accountRisk} from '../src/live-accounting.mjs';
 import {runLiveCycle} from '../src/live-cycle.mjs';
 import {createLiveControl} from '../netlify/functions/kalshi-live-control.mjs';
@@ -189,4 +189,15 @@ test('authenticated reconciliation records a server-build receipt even when STAR
  assert.equal(receipt.test,'production-authenticated-account-snapshot');
  assert.equal(receipt.verified,true);
  assert.ok(Number.isFinite(receipt.at));
+});
+
+test('expanded live order sizing respects the selected maximum and available balance',async()=>{
+ const state=initialState();state.enabled=true;state.stopped=false;
+ state.limits={...state.limits,unlimitedBudgets:true,orderCents:20000};
+ const client=exchange();const snapshot=await client.snapshot();
+ const intent=await submitIntent({state,client,persist:async()=>{},checkStopped:async()=>false,
+  snapshot,signal:(await signals())[0],quote:quote(49)});
+ assert.equal(intent.qty,16);
+ assert.equal(intent.reserve,960);
+ assert.throws(()=>validateLimits({...state.limits,orderCents:20001}),/LIMIT_OUT_OF_RANGE/);
 });
