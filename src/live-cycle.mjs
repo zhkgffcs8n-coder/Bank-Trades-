@@ -60,7 +60,10 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
    if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference)){waitingReason='ENTRY_PRICE_ABOVE_SIGNAL';continue;}
    let intent;
    try{
-    intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
+    // Reuse the reconciled account read when it is still fresh after quote retrieval.
+    const snapshotAge=Date.now()-snap.at;
+    const entrySnapshot=snap.complete===true&&snapshotAge>=0&&snapshotAge<=1500?snap:await client.snapshot();
+    intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:entrySnapshot,signal,quote,trialCaps:championMode});
    }catch(error){
     if(!waitForDependencies||!['POSITION_LIMIT','DAILY_LOSS_LIMIT','EXPOSURE_LIMIT','SPENDING_LIMIT',
      'LATE_ENTRY','INVALID_SPREAD','STALE_OR_WRONG_MARKET','STALE_BEFORE_SUBMISSION'].includes(error.message))throw error;
