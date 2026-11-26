@@ -31,7 +31,8 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
    if(!quote||quote.ticker!==p.ticker||!Number.isFinite(quote.at)||Date.now()-quote.at<0||Date.now()-quote.at>10000||!Number.isFinite(quote[p.side+'Bid'])||quote[p.side+'Bid']<=0||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=Date.now())return {status:'EXIT_QUOTE_UNAVAILABLE',ticker:p.ticker,retryRequired:true};
    state.peaks??={};state.peaks[p.ticker]=Math.max(state.peaks[p.ticker]||p.entryCents,quote[p.side+'Bid']);await persist(state);
    const side=p.side.toUpperCase();
-   const decision=decisions?.find(signal=>signal.ticker===p.ticker&&
+   const source=state.intents.find(intent=>intent.ticker===p.ticker&&intent.action==='buy')?.source??'pro-scalper';
+   const decision=decisions?.find(signal=>signal.ticker===p.ticker&&(signal.source??'pro-scalper')===source&&
     Number.isFinite(signal.at)&&Date.now()-signal.at>=0&&Date.now()-signal.at<=10000&&signal.action.endsWith(' '+side));
    const bid=quote[p.side+'Bid'];
    const netPositive=decision?.exitReference!=null?bid>=decision.exitReference:bid-p.entryCents>10;
@@ -51,6 +52,11 @@ export async function runLiveCycle({repo,client,signals,quoteFor,canTrade,champi
   for(const signal of decisions??await signals()){
    if(!['BUY UP','BUY DOWN'].includes(signal.action)||state.intents.some(i=>i.ticker===signal.ticker&&i.action==='buy'))continue;
    const quote=await safeQuote(quoteFor,signal.ticker,waitForDependencies);if(!quote){waitingReason='ENTRY_QUOTE_UNAVAILABLE';continue;}
+   if(signal.source==='cross-coin'){
+    const remaining=quote.expiresAt-Date.now(),side=signal.action==='BUY UP'?'up':'down';
+    const ask=quote[side+'Ask'],bid=quote[side+'Bid'];
+    if(remaining<60000||remaining>360000||ask<40||ask>80||ask-bid>4){waitingReason='CROSS_COIN_QUOTE_OUTSIDE_LIMITS';continue;}
+   }
    if(championMode&&!(quote[signal.action==='BUY UP'?'upAsk':'downAsk']<=signal.entryReference)){waitingReason='ENTRY_PRICE_ABOVE_SIGNAL';continue;}
    const intent=await submitIntent({state,client,persist,checkStopped:repo.stopped,snapshot:await client.snapshot(),signal,quote,trialCaps:championMode});
    reconcile(state,await client.snapshot());await persist(state);return {status:'ENTRY_SUBMITTED',id:intent.id};
