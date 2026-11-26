@@ -3,8 +3,8 @@ import {admin} from '@netlify/identity';
 import {liveRepository} from './live-state.mjs';
 import {openKalshiCredentials} from './kalshi-credential-envelope.mjs';
 import {kalshiClient} from './kalshi-execution-client.mjs';
-import {liveBuildCommit,releaseStatus} from './kalshi-release-gate.mjs';
-import {championExecutionSignals} from '../../../src/champion-kaibot-intake.mjs';
+import {liveBuildCommit} from './kalshi-release-gate.mjs';
+import {championExecutionSignals,inspectChampionIntake} from '../../../src/champion-kaibot-intake.mjs';
 import {runLiveCycle} from '../../../src/live-cycle.mjs';
 import {parseCollectorPrice,validCollectorQuote} from '../../../src/collector-quote.mjs';
 export function parseLiveQuote(m,ticker,at,receivedAt){
@@ -22,25 +22,40 @@ export const liveStore=()=>getStore({name:'bank-trades-live-execution-v1',consis
 export async function runtime(userId){
  const user=await admin.getUser(userId);if(!user?.confirmedAt||!user.roles?.includes('owner'))throw Error('OWNER_ACCESS_REQUIRED');
  const db=liveStore(),repo=liveRepository(db,user.id);
- async function client(){
+ async function client(allowWrites=false){
   const record=await getStore({name:'bank-trades-kalshi-credentials',consistency:'strong'}).get('credentials/'+user.id,{type:'json'});
   if(!record?.envelope)throw Error('KALSHI_CREDENTIALS_NOT_CONNECTED');
   if(record.securityVersion!==2)throw Error('CREDENTIAL_ROTATION_REQUIRED');
   const credentials=openKalshiCredentials({userId:user.id,envelope:record.envelope,secret:process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY});
-  return kalshiClient(credentials,{allowWrites:releaseStatus().canTrade,allowCancellation:true});
+  return kalshiClient(credentials,{allowWrites,allowCancellation:true});
  }
  return {db,repo,client,async tick(){
   const record=await repo.read();
-  if(!releaseStatus().canTrade&&!record.state.intents.length)return {status:'RELEASE_BLOCKED',...releaseStatus()};
-  const exchange=await client();
-  const result=await runLiveCycle({repo,client:exchange,canTrade:releaseStatus().canTrade,
-   championMode:true,
-   signals:async()=>championExecutionSignals(await getStore({name:'bank-trades-market-history',consistency:'strong'})
-    .get('predator-v13/health',{type:'json'})),
+  const armed=record.state.manualArmVersion===1&&record.state.enabled&&!await repo.stopped();
+  const report=async result=>{
+   await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:liveBuildCommit()});
+   return result;
+  };
+  if(!armed&&!record.state.intents.length)return report({status:'STOPPED'});
+  let exchange;
+  try{exchange=await client(true);}catch(error){
+   if(!armed)throw error;
+   return report({status:'ARMED_WAITING',reason:/^[A-Z0-9_]+$/.test(error.message)?error.message:'KALSHI_CLIENT_UNAVAILABLE'});
+  }
+  let intakeStatus='NO_SIGNAL';
+  const result=await runLiveCycle({repo,client:exchange,canTrade:state=>state.manualArmVersion===1&&state.enabled,
+   championMode:true,waitForDependencies:true,signalStatus:()=>intakeStatus,
+   signals:async()=>{
+    try{
+     const worker=await getStore({name:'bank-trades-market-history',consistency:'strong'}).get('predator-v13/health',{type:'json'});
+     intakeStatus=inspectChampionIntake(worker).status;
+     return championExecutionSignals(worker);
+    }catch{intakeStatus='PRO_SCALPER_FEED_UNAVAILABLE';return [];}
+   },
    quoteFor:async ticker=>{
     const at=Date.now(),data=await exchange.request('GET','/trade-api/v2/markets/'+encodeURIComponent(ticker)),m=data.market;
     return parseLiveQuote(m,ticker,at,Date.now());
    }});
-  await db.setJSON('heartbeat/'+user.id,{at:Date.now(),result,commit:liveBuildCommit()});return result;
+  return report(result);
  }};
 }

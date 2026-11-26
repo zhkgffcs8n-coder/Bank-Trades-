@@ -8,9 +8,9 @@ export default async req=>{try{
  const runner=await live.db.get('runner-status',{type:'json'});
  const release=releaseStatus(),commit=liveBuildCommit();
  const authentication=commit?await live.db.get('release-receipts/'+user.id+'/'+commit+'/authentication',{type:'json'}):null;
- return json({...release,mode:release.canTrade?'LIVE READY':'LIVE DISABLED',canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
+ return json({...release,mode:record.state.manualArmVersion===1&&record.state.enabled&&!await live.repo.stopped()?'ARMED':'LIVE OFF',canAcceptApiKeys:/^[a-fA-F0-9]{64}$/.test(process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY||''),
   ownerConfigured:process.env.KALSHI_LIVE_OWNER_ID===user.id,busy:!!record.lock,limits:record.state.limits,
   receipts:{authentication},accountReconciledAt:record.state.lastReconciledAt||null,heartbeat,runner,
   monitoring:{scheduledSeconds:60,foregroundSeconds:5,latencyVerified:false},
-  note:'Local tests are not exchange certification. START stays blocked until all release checks pass.'});
+  note:'Release checks are informational. Live orders depend on runtime execution checks.'});
 }catch(e){return errorResponse(e)}};
