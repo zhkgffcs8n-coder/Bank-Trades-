@@ -96,5 +96,10 @@ export function createLiveControl({getOwner=owner,getRuntime=runtime,getRelease=
   }
   return json({reconciled:true,risk:state.risk,checkedAt:state.lastReconciledAt,...getRelease()});
  }finally{await session.release();}
-}catch(e){if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
+}catch(e){
+ if(e.settlementRevenueMismatch){
+  const {ticker,revenue,expectedRevenue,yes,no,result}=e.settlementRevenueMismatch;
+  return json({enabled:false,error:`Settlement revenue mismatch for ${ticker}. Kalshi reported ${revenue} cents. Expected ${expectedRevenue} cents for ${yes} YES and ${no} NO with result ${result}.`},409);
+ }
+ if(/^[A-Z][A-Z0-9_:.-]+$/.test(e.message||''))return json({enabled:false,error:e.message},503);return errorResponse(e)}};}
 export default createLiveControl();

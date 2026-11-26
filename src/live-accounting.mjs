@@ -12,7 +12,11 @@ export function settlementFor(snapshot,ticker,qty,{manualExit=false}={}){
  const revenue=numeric(s.revenue,'SETTLEMENT_REVENUE');
  // A verified flat manual exit is accounted for from its fills. Retain the exchange receipt.
  if(manualExit&&yes===0&&no===0)return s;
- if(Math.abs(revenue-(s.market_result==='yes'?yes:no)*100)>1e-7)throw Error('SETTLEMENT_REVENUE_MISMATCH');return s;
+ const expectedRevenue=(s.market_result==='yes'?yes:no)*100;
+ if(Math.abs(revenue-expectedRevenue)>1e-7)throw Object.assign(Error('SETTLEMENT_REVENUE_MISMATCH'),{
+  settlementRevenueMismatch:{ticker,revenue,expectedRevenue,yes,no,result:s.market_result}
+ });
+ return s;
 }
 // Gains never replenish this conservative daily risk budget. Open cost is reserved in full.
 function calculateAccount(state,snapshot,now,history){
