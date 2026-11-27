@@ -923,8 +923,17 @@ let btcEntryMarket=null,btcEntryDirection=null;
 let btcListingPending=false,btcDirectionPending=false;
 let paintedScalpAction;
 const scalpEntryVisibleUntil=new WeakMap();
+const btcEntryAwaitingPaint=new WeakSet();
 function showingScalpEntry(position,now=Date.now()){
-  return now<(scalpEntryVisibleUntil.get(position)??0);
+  return btcEntryAwaitingPaint.has(position)||now<(scalpEntryVisibleUntil.get(position)??0);
+}
+function waitForBtcEntryPaint(position){
+  btcEntryAwaitingPaint.add(position);
+  // A frame must have a chance to present BUY before another quote can replace it.
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    btcEntryAwaitingPaint.delete(position);
+    if(selectedCoin==='BTC'&&positions.get('BTC')===position)refreshScalpExit();
+  }));
 }
 function scalpEntryAction(position){
   return 'BUY '+position.side.toUpperCase()+' '+position.entry.toFixed(1)+'% ASK';
@@ -1035,6 +1044,7 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
     reversalReadings.delete(selectedCoin);
     entered=true;
     scalpEntryVisibleUntil.set(tracked,Date.now()+1000);
+    if(selectedCoin==='BTC')waitForBtcEntryPaint(tracked);
   }
   const announce=(stage,action)=>window.dispatchEvent(new CustomEvent('banktrades:scalper-voice',{
     detail:{stage,action,asset:selectedCoin,ticker,side:tracked.side,entry:tracked.entry,exitBid:tracked.exitBid}
@@ -1275,20 +1285,28 @@ function assess(coin,market,e,visible,{feed,allowBtcEntry=true,entryOnly=false}=
   if(!useBook&&quoteAt>=(scalpQuotes.get(coin)?.at??0)&&Date.now()-quoteAt<=5000&&quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
     scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid,market});
   }
-  if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||Date.now()-e.at>90000||Date.now()-e.candleAt>180000||e.at>Date.now()||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');
-  const expiry=Date.parse(market.expires_at),left=(expiry-Date.now())/1000,ya=price(market,'yes_ask'),yb=price(market,'yes_bid'),na=price(market,'no_ask'),nb=price(market,'no_bid');
-  if(!Number.isFinite(left)||left<=0||left>900||![ya,yb,na,nb].every(Number.isFinite)||ya<yb||na<nb)return unavailable('Invalid '+coin+' market or quotes');
+  const now=Date.now(),closeLeft=(Date.parse(market.close_time)-now)/1000;
+  const expiry=Date.parse(market.expires_at),left=(expiry-now)/1000;
+  const ya=price(market,'yes_ask'),yb=upBid,na=price(market,'no_ask'),nb=downBid;
+  const validMarket=left>0&&left<=900&&ya>=yb&&na>=nb&&[ya,yb,na,nb].every(Number.isFinite);
+  const callable=closeLeft>0&&closeLeft<=900&&[ya,yb,na,nb].every(value=>value>0&&value<100);
+  const quotes={up:{ask:ya,bid:yb},down:{ask:na,bid:nb}};
+  if(entryOnly&&coin==='BTC'&&feed?.enabled){
+    if(validMarket&&callable)scalp(market,closeLeft,'mixed',false,quotes,feed);
+    else unavailable('Invalid '+coin+' market or quotes');
+    return;
+  }
+  if(!e||!Number.isFinite(e.at)||!Number.isFinite(e.candleAt)||now-e.at>90000||now-e.candleAt>180000||e.at>now||e.candleAt>e.at)return unavailable(coin+' spot candle evidence unavailable or stale');
+  if(!validMarket)return unavailable('Invalid '+coin+' market or quotes');
   const diff=e.bull-e.bear,side=diff>=3?'up':diff<=-3?'down':'mixed',ask=side==='up'?ya:na,bid=side==='up'?yb:nb,spread=Math.max(ya-yb,na-nb);
   const strong=side!=='mixed'&&e.direction===side&&Math.abs(diff)>=4&&spread<=3&&ask>=35&&ask<=80&&left>=180;
   latestScalpEvidence.set(coin,{ticker:market.ticker,direction:Math.abs(diff)>=4&&e.direction===side?side:'mixed',source:'spot',at:e.candleAt});
-  const closeLeft=(Date.parse(market.close_time)-Date.now())/1000;
   if(visible){
-    if(closeLeft>0&&closeLeft<=900&&
-    [ya,yb,na,nb].every(value=>value>0&&value<100)){
+    if(callable){
       if(coin==='BTC'&&positions.get(coin)?.ticker===market.ticker){refreshBtcScalpBook();refreshScalpExit();}
       else if(coin!=='BTC'||allowBtcEntry){
         const direction=coin==='BTC'?(feed??sharedV8.find(row=>row.asset==='BTC')?.tradingView):null;
-        scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},direction,scalpExitEvidence(coin,market.ticker));
+        scalp(market,closeLeft,side,strong,quotes,direction,scalpExitEvidence(coin,market.ticker));
       }
     }else{
       showScalp('DATA WAIT · No open '+coin+' 15-minute contract with valid quotes');
