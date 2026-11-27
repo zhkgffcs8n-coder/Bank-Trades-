@@ -15,7 +15,7 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
  const refresh=runInNewContext(book+'\n'+listener+'\nrefreshBtcScalpBook',{
   window:{addEventListener:(name,fn)=>{if(name==='banktrades:kalshi-quote')receive=fn;if(name==='banktrades:shared-signals')onEvidence=fn;}},
   Date:class extends Date {static now(){return now;}},Number,scalpQuotes:quotes,positions,selectedCoin:'BTC',
-  document:{hidden:false},AbortSignal,btcScalpBookMaxAge:1800,btcScalpBookPending:false,latestBtcStreamQuote:null,
+  document:{hidden:false},AbortSignal,btcScalpBookMaxAge:1800,btcEntryQuoteMaxAge:1000,btcScalpBookPending:false,latestBtcStreamQuote:null,btcEntryMarket:null,
   async fetch(url){
    assert.equal(url,'/api/data?mode=orderbook&live=1&ticker='+ticker);
    return {ok:true,json:async()=>({fetched_at:new Date(now).toISOString(),orderbook:{orderbook_fp:{
@@ -163,31 +163,32 @@ test('BTC BUY is readable before a fast cash-out without moving the recorded exi
  assert.deepEqual(events.map(event=>event.detail.stage),['entry','exit']);
 });
 
-test('BTC entry rechecks immediately on input and prefers fresh same-round depth',()=>{
+test('BTC entry rejects the 45% listing and evaluates the fresh 62% ask immediately',()=>{
  const now=100000,ticker='KXBTC15M-TEST',close=now+420000;
- const market={ticker,close_time:new Date(close).toISOString(),quote_received_at:new Date(now-300).toISOString()};
+ const market={ticker,close_time:new Date(close).toISOString(),quote_received_at:new Date(now-300).toISOString(),no_ask:45};
  const feed={ticker,enabled:true,status:'FRESH',candleCloseAt:now-1000,direction:'UP'};
- const stream={ticker,expiresAt:close,receivedAt:now-50,yesBid:54,noBid:44};
+ const depth={ticker,expiresAt:close,at:now-50,up:38,down:61,isOrderBook:true,market:{no_ask_dollars:'0.6200'}};
  const inputs=source.slice(source.indexOf('function btcDirectionFor('),source.indexOf('async function refreshBtcDirection('));
- const positions=new Map(),calls=[];
+ const positions=new Map(),scalpQuotes=new Map(),calls=[];
  const context={
   selectedCoin:'BTC',document:{hidden:false},window:{},positions,btcEntryMarket:market,
-  btcEntryDirection:feed,sharedV8:[],btcScalpBookMaxAge:1800,latestBtcStreamQuote:stream,
+  btcEntryDirection:feed,sharedV8:[],btcEntryQuoteMaxAge:1000,scalpQuotes,
   Date:class extends Date {static now(){return now;}},
   assess:(...args)=>calls.push(args)
  };
  const evaluate=runInNewContext(inputs+'\nevaluateBtcEntry',context);
  evaluate();
- assert.equal(calls[0][1].yes_ask_dollars,'0.5600');
+ assert.equal(calls.length,0,'listings cannot start an entry');
+ scalpQuotes.set('BTC',{...depth,ticker:'KXBTC15M-PREVIOUS'});
+ evaluate();
+ scalpQuotes.set('BTC',{...depth,at:now-1001});
+ evaluate();
+ assert.equal(calls.length,0,'old round and stale quotes cannot start an entry');
+ scalpQuotes.set('BTC',depth);
+ evaluate();
+ assert.equal(calls[0][1].no_ask_dollars,'0.6200');
  assert.equal(calls[0][4].feed,feed);
- context.latestBtcStreamQuote={...stream,ticker:'KXBTC15M-PREVIOUS'};
- evaluate();
- assert.equal(calls[1][1],market);
- context.btcEntryMarket={...market,quote_received_at:new Date(now-1801).toISOString()};
- evaluate();
- assert.equal(calls.length,2,'stale listings cannot start an entry');
- context.btcEntryMarket=market;
  positions.set('BTC',{ticker});
  evaluate();
- assert.equal(calls.length,2,'a same-round call is already active');
+ assert.equal(calls.length,1,'a same-round call is already active');
 });

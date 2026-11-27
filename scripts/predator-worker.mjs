@@ -154,13 +154,13 @@ function connect(){
   if(socket!==ws||market?.ticker!==ticker)return;
   try{
    const frame=JSON.parse(bytes);
-   if(frame.type==='error'){btcQuoteRelay.reset();socket.terminate();return;}
+   if(frame.type==='error'){btcQuoteRelay.resetStream();socket.terminate();return;}
    const update=depth.apply(frame,Date.now());
-   if(update.status==='GAP'){gaps++;book=null;btcQuoteRelay.reset();socket.terminate();return;}
+   if(update.status==='GAP'){gaps++;book=null;btcQuoteRelay.resetStream();socket.terminate();return;}
    if(update.status==='INVALID_BOOK'){
     // Invalid frames must not extend the healthy-book watchdog indefinitely.
     counters.invalidBookFrames++;
-    btcQuoteRelay.reset();
+    btcQuoteRelay.resetStream();
     book=null;
     return;
    }
@@ -170,11 +170,11 @@ function connect(){
     btcQuoteRelay.publish(update,Date.parse(market.close_time));
     evaluate(tape.snapshot().tape,'KALSHI_WS',update.receivedAt);
    }
-  }catch{book=null;btcQuoteRelay.reset();socket.terminate();}
+  }catch{book=null;btcQuoteRelay.resetStream();socket.terminate();}
  });
  socket.on('error',()=>{});
  socket.on('close',()=>{
-  if(ws===socket){btcQuoteRelay.reset();ws=null;if(bookSource==='KALSHI_WS')book=null;}
+  if(ws===socket){btcQuoteRelay.resetStream();ws=null;if(bookSource==='KALSHI_WS')book=null;}
  });
 }
 async function discover(now){
@@ -314,7 +314,7 @@ async function run(){
   }
   if(ws?.readyState===WebSocket.OPEN&&Date.now()-lastDepthAt>10000){
    counters.depthTimeouts++;
-   btcQuoteRelay.reset();
+   btcQuoteRelay.resetStream();
    book=null;
    ws.terminate();
   }
@@ -388,9 +388,20 @@ async function run(){
 for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{stopping=true;});
 btcQuoteRelay.server.on('error',error=>console.error(JSON.stringify({event:'BTC_QUOTE_RELAY_ERROR',code:error.code})));
 btcQuoteRelay.server.listen(8080,'0.0.0.0');
+// Keep dashboard quotes flowing independently of research and heartbeat calls.
+let dashboardDepthPending=false;
+const dashboardDepthTimer=setInterval(async()=>{
+ const round=market,at=Date.now(),expiresAt=Date.parse(round?.close_time);
+ if(stopping||dashboardDepthPending||!(expiresAt>at)||btcQuoteRelay.hasFreshStream(round.ticker))return;
+ dashboardDepthPending=true;
+ try{
+  const depth=parseDepthV8(await get('/markets/'+encodeURIComponent(round.ticker)+'/orderbook?depth=1'),round.ticker,at);
+  if(depth&&market?.ticker===round.ticker)btcQuoteRelay.publishRest(depth,expiresAt);
+ }catch{}finally{dashboardDepthPending=false;}
+},750);
 const stopCrossCoinDepth=startCrossCoinDepth(credentials,get,btcQuoteRelay);
 try{await run();}
 finally{
- stopCrossCoinDepth();btcQuoteRelay.close();tape?.close();ws?.terminate();
+ clearInterval(dashboardDepthTimer);stopCrossCoinDepth();btcQuoteRelay.close();tape?.close();ws?.terminate();
  if(dirty)await persist();
 }
