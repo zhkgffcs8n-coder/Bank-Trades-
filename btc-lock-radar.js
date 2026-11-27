@@ -1135,8 +1135,19 @@ async function checkBtcScalpEntry(market,side,aligned){
   }
   if(version!==selectionVersion||document.hidden||positions.get('BTC')?.ticker===ticker)return;
   const now=Date.now(),left=(expiresAt-now)/1000;
-  if(!snapshot||now-snapshot.at>btcScalpBookMaxAge||left<=0){
-    showScalp('WAIT · Awaiting a fresh Kalshi BTC order book');
+  if(left<=0)return;
+  if(!snapshot||now-snapshot.at>btcScalpBookMaxAge){
+    const at=Date.parse(market.quote_received_at);
+    if(!Number.isFinite(at)||at>now+2000||now-at>5000){
+      showScalp('WAIT · Awaiting fresh Kalshi BTC quotes');
+      return;
+    }
+    const quotes={up:{ask:price(market,'yes_ask'),bid:price(market,'yes_bid')},
+      down:{ask:price(market,'no_ask'),bid:price(market,'no_bid')}};
+    const chosen=quotes[side];
+    const strong=aligned&&left>=180&&chosen.ask>=35&&chosen.ask<=80&&
+      Object.values(quotes).every(({ask,bid})=>ask-bid<=3);
+    scalp(market,left,side,strong,quotes,sharedV8.find(row=>row.asset==='BTC')?.tradingView,scalpExitEvidence('BTC',ticker));
     return;
   }
   const quotes={up:{ask:price(snapshot.market,'yes_ask'),bid:snapshot.up},
