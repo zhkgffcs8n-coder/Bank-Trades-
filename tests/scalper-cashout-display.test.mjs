@@ -3,25 +3,25 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 const source=readFileSync(new URL('../btc-lock-radar.js',import.meta.url),'utf8');
-const code=source.slice(source.indexOf('const scalpClock='),source.indexOf('const researchReadouts='));
-test('cashout stays blank until the exit is visible and then shows the recorded bid and time',()=>{
- const cashPercent={},cashLabel={},entryPercent={},entryLabel={},currentAsk={},entryTime={},cashTime={},scalpPrices={dataset:{}};
- const market={no_ask:62};
- const paint=runInNewContext(code+'\npaintScalpPrices',{cashPercent,cashLabel,entryPercent,entryLabel,currentAsk,entryTime,cashTime,scalpPrices,
-  scalpQuotes:new Map([['BTC',{market}]]),scalpQuoteStatus:()=>({fresh:true}),price:(m,k)=>m[k]});
- const position={ticker:'KXBTC15M-TEST',side:'down',entry:45,entryAt:Date.parse('2026-11-27T11:46:00.125Z'),exit:null};
+const code=source.slice(source.indexOf('const scalpPrices='),source.indexOf('const researchReadouts='));
+test('the original two price cards show the locked ask and the recorded bid once exit is visible',()=>{
+ const cashPercent={},cashLabel={},entryPercent={};
+ const fields={'[data-entry-percent]':entryPercent,'[data-cash-percent]':cashPercent,'[data-cash-label]':cashLabel};
+ const cards={dataset:{},querySelector:selector=>fields[selector]};
+ const paint=runInNewContext(code+'\npaintScalpPrices',{
+  document:{createElement:()=>cards},scalper:{querySelector:()=>({after(){}})}
+ });
+ assert.match(cards.innerHTML,/<div data-price-entry><span>BUY IN · ASK<\/span><strong data-entry-percent>—%<\/strong><\/div>/);
+ assert.match(cards.innerHTML,/<div data-price-cash><span data-cash-label>CASH OUT · WAIT<\/span><strong data-cash-percent><\/strong><\/div>/);
+ const position={ticker:'KXBTC15M-TEST',side:'down',entry:45,exit:null};
  paint(position,null);
  assert.equal(entryPercent.textContent,'45.0%');
- assert.equal(entryLabel.textContent,'BUY CALL · ORIGINAL ASK');
- assert.equal(currentAsk.textContent,'ASK NOW 62.0%');
- assert.equal(entryTime.textContent,'03:46:00.125 PT');
- position.exit='TAKE PROFIT';position.exitBid=87;position.exitAt=position.entryAt+1200;
+ position.exit='TAKE PROFIT';position.exitBid=87;
  paint(position,null);
  assert.equal(cashPercent.textContent,'');
- assert.equal(cashTime.textContent,'');
  assert.equal(cashLabel.textContent,'CASH OUT · WAIT');
  paint(position,position.exit);
+ assert.equal(entryPercent.textContent,'45.0%');
  assert.equal(cashPercent.textContent,'87.0%');
- assert.equal(cashTime.textContent,'03:46:01.325 PT');
  assert.equal(cashLabel.textContent,'CASH OUT · EXIT CALL');
 });
