@@ -105,35 +105,34 @@ test('silent quote stream reconnects automatically while REST refresh stays acti
  assert.equal(refreshes,3);
 });
 
-test('BTC entry uses the exact-round depth ask and never falls back to the listing ask',async()=>{
- const now=Date.now(),ticker='KXBTC15M-TEST',expiresAt=now+600000;
- const market={ticker,close_time:new Date(expiresAt).toISOString(),no_ask_dollars:'0.55'};
- const calls=[],statuses=[],snapshots=new Map();
- let stream={ticker,expiresAt,receivedAt:now,yesBid:31,noBid:68};
- let book=null;
- const bestBid=source.slice(source.indexOf('function bestBid('),source.indexOf('// One-contract research estimate.'));
- const check=runInNewContext(bestBid+'\n'+listener+'\ncheckBtcScalpEntry',{
-  Date:class extends Date {static now(){return now;}},AbortSignal,setInterval(){},
-  window:{addEventListener(){}},document:{hidden:false},selectionVersion:1,
-  positions:new Map(),scalpQuotes:snapshots,btcScalpBookMaxAge:1800,sharedV8:[],
-  get latestBtcStreamQuote(){return stream;},
-  async fetch(){return {ok:!!book,json:async()=>book};},
-  price:(m,k)=>Number((Number(m[k+'_dollars'])*100).toFixed(2)),
-  scalp:(...args)=>calls.push(args),showScalp:status=>statuses.push(status),scalpExitEvidence:()=>null
+test('fresh same-round TradingView direction can open a BTC call while depth is unavailable',()=>{
+ const now=Date.now(),ticker='KXBTC15M-TEST',close=new Date(now+600000).toISOString();
+ const market={ticker,close_time:close,expires_at:close,quote_received_at:new Date(now).toISOString(),
+  floor_strike:95000,yes_ask:43,yes_bid:42,no_ask:58,no_bid:57};
+ const feed={enabled:true,ticker:'KXBTC15M-PREVIOUS',status:'FRESH',direction:'DOWN',candleCloseAt:now-1000};
+ const spot={at:now,candleAt:now-1000,bull:7,bear:2,direction:'up',rsi:60};
+ const positions=new Map(),statuses=[],events=[];
+ const strategy=source.slice(source.indexOf('function scalp(market'),source.indexOf('// Each coin quote is delivered'));
+ const assess=source.slice(source.indexOf('function assess('),source.indexOf("waitForData('Checking '+selectedCoin+' market and spot feed');"));
+ const price=source.match(/^const price=.*;$/m)[0];
+ const evaluate=runInNewContext(price+'\n'+strategy+'\n'+assess+'\nassess',{
+  Date:class extends Date {static now(){return now;}},
+  selectedCoin:'BTC',positions,scalpQuotes:new Map(),latestScalpEvidence:new Map(),
+  directions:new Map(),reversalReadings:new Map(),scalpEntryVisibleUntil:new WeakMap(),
+  sharedV8:[{asset:'BTC',tradingView:feed}],scalpExitEvidence:()=>null,
+  showingScalpEntry:()=>true,scalpEntryAction:position=>'BUY '+position.side.toUpperCase(),
+  showScalp:status=>statuses.push(status),paintScalpPrices(){},persistScalpPosition(){},setTimeout(){},
+  waitForData:status=>assert.fail(status),state:{},facts:{},
+  refreshBtcScalpBook(){},window:{dispatchEvent:event=>events.push(event)},
+  CustomEvent:class {constructor(type,{detail}){Object.assign(this,{type,detail});}}
  });
- await check(market,'down',true);
- assert.equal(calls[0][4].down.ask,69);
- assert.equal(calls[0][4].down.bid,68);
- assert.equal(calls[0][3],true);
- stream={...stream,ticker:'KXBTC15M-OTHER'};
- await check(market,'down',true);
- stream={...stream,ticker,receivedAt:now-1801};
- await check(market,'down',true);
- assert.equal(calls.length,1);
- assert.equal(statuses.length,2);
- book={fetched_at:new Date(now).toISOString(),orderbook:{orderbook_fp:{
-  yes_dollars:[['0.30','2']],no_dollars:[['0.69','2']]
- }}};
- await check(market,'down',true);
- assert.equal(calls[1][4].down.ask,70);
+ evaluate('BTC',market,spot,true);
+ assert.match(statuses.at(-1),/Awaiting fresh TradingView BTC 1s/);
+ assert.equal(positions.size,0);
+ feed.ticker=ticker;
+ evaluate('BTC',market,spot,true);
+ assert.equal(positions.get('BTC').side,'down');
+ assert.equal(positions.get('BTC').entry,58);
+ assert.match(statuses.at(-1),/^BUY DOWN/);
+ assert.equal(events[0].detail.stage,'entry');
 });
