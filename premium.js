@@ -641,16 +641,16 @@ async function update(){
    const live=fresh&&valid&&m.ticker&&close>now&&close<=now+900000;
    if(live)contracts.push({asset,ticker:m.ticker,close,strike:Number(m.floor_strike)||null,yesBid:yb,yesAsk:ya,noBid:nb,noAsk:na});
    const tile=document.createElement('div');tile.className='premium-tile';
-   const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI LIVE BIDS';
-   const value=document.createElement('b');value.textContent=live?(yb<nb?'DOWN '+nb.toFixed(1)+'%':'UP '+yb.toFixed(1)+'%'):'—';
+   const label=document.createElement('small');label.textContent=asset+' · 15M KALSHI ASKS';
+   const value=document.createElement('b');value.textContent=live?(ya===na?'EVEN':ya<na?'DOWN '+na.toFixed(1)+'%':'UP '+ya.toFixed(1)+'%'):'—';
    const meta=document.createElement('small');meta.textContent=live?Math.ceil((close-now)/60000)+'m':fresh?'Market unavailable':'Quotes stale';
-   const down=document.createElement('small');down.textContent=live?(yb<nb?'UP '+yb.toFixed(1)+'%':'DOWN '+nb.toFixed(1)+'%'):'Waiting for live Kalshi quotes';
+   const down=document.createElement('small');down.textContent=live?(ya<na?'UP '+ya.toFixed(1)+'%':'DOWN '+na.toFixed(1)+'%'):'Waiting for live Kalshi quotes';
    const action=document.createElement('strong');
    action.dataset.contractAction='';
    action.style.display='block';
    if(live){
     tile.dataset.ticker=m.ticker;
-    tile.dataset.side=yb>nb?'UP':nb>yb?'DOWN':'';
+    tile.dataset.side=ya>na?'UP':na>ya?'DOWN':'';
     renderContractAction(tile,action);
     setTimeout(()=>{
      if(!tile.isConnected)return;
