@@ -105,13 +105,13 @@ test('silent quote stream reconnects automatically while REST refresh stays acti
  assert.equal(refreshes,3);
 });
 
-test('fresh same-round TradingView entry skips missing spot data and renders before a qualifying exit',()=>{
+test('BTC BUY is readable before a fast cash-out without moving the recorded exit',()=>{
  let now=Date.now();
  const ticker='KXBTC15M-TEST',close=new Date(now+600000).toISOString();
  const market={ticker,close_time:close,expires_at:close,quote_received_at:new Date(now).toISOString(),
-  floor_strike:95000,yes_ask:43,yes_bid:42,no_ask:58,no_bid:57};
+  floor_strike:95000,yes_ask:21,yes_bid:20,no_ask:80,no_bid:79};
  const feed={enabled:true,ticker:'KXBTC15M-PREVIOUS',status:'FRESH',direction:'DOWN',candleCloseAt:now-1000};
- const positions=new Map(),statuses=[],events=[],frames=[],cashouts=[];
+ const positions=new Map(),statuses=[],events=[],frames=[],cashouts=[],timers=[];
  const display=source.slice(source.indexOf('const scalpEntryVisibleUntil='),source.indexOf('function scalpQuoteStatus('));
  const strategy=source.slice(source.indexOf('function scalp(market'),source.indexOf('// Each coin quote is delivered'));
  const assess=source.slice(source.indexOf('function assess('),source.indexOf("waitForData('Checking '+selectedCoin+' market and spot feed');"));
@@ -122,13 +122,14 @@ test('fresh same-round TradingView entry skips missing spot data and renders bef
   directions:new Map(),reversalReadings:new Map(),
   sharedV8:[{asset:'BTC',tradingView:feed}],scalpExitEvidence:()=>null,
   confirmedScalpReversal:()=>({confirmed:false,reading:null}),estimatedCost:()=>0.01,
-  showScalp:status=>statuses.push(status),paintScalpPrices:position=>cashouts.push(position.exitBid),
-  persistScalpPosition(){},setTimeout(){},requestAnimationFrame:callback=>frames.push(callback),
+  showScalp:status=>statuses.push(status),paintScalpPrices:(position,exit)=>cashouts.push(exit?position.exitBid:undefined),
+  persistScalpPosition(){},setTimeout:(callback,delay)=>timers.push({callback,delay}),requestAnimationFrame:callback=>frames.push(callback),
   waitForData:status=>assert.fail(status),state:{},facts:{},
-  refreshBtcScalpBook(){},refreshScalpExit:()=>checkExit(),window:{dispatchEvent:event=>events.push(event)},
+  refreshBtcScalpBook(){},refreshScalpExit:()=>{checkExit();return true;},window:{dispatchEvent:event=>events.push(event)},
   CustomEvent:class {constructor(type,{detail}){Object.assign(this,{type,detail});}}
  });
- const checkExit=()=>scalp(market,598,'mixed',false,{up:{ask:24,bid:23},down:{ask:77,bid:76}});
+ let bid=87;
+ const checkExit=()=>scalp(market,598,'mixed',false,{up:{ask:100-bid,bid:99-bid},down:{ask:bid+1,bid}});
  const options={feed,entryOnly:true};
  evaluate('BTC',market,undefined,true,options);
  assert.match(statuses.at(-1),/Awaiting fresh TradingView BTC 1s/);
@@ -136,7 +137,8 @@ test('fresh same-round TradingView entry skips missing spot data and renders bef
  feed.ticker=ticker;
  evaluate('BTC',market,undefined,true,options);
  assert.equal(positions.get('BTC').side,'down');
- assert.equal(positions.get('BTC').entry,58);
+ assert.equal(positions.get('BTC').entry,80);
+ assert.equal(positions.get('BTC').entryAt,now);
  assert.match(statuses.at(-1),/^BUY DOWN/);
  assert.deepEqual(events.map(event=>event.detail.stage),['entry']);
  now+=2000;
@@ -146,8 +148,18 @@ test('fresh same-round TradingView entry skips missing spot data and renders bef
  assert.match(statuses.at(-1),/^BUY DOWN/);
  assert.equal(cashouts.at(-1),undefined);
  frames.shift()();
+ assert.equal(positions.get('BTC').exitBid,87);
+ assert.equal(positions.get('BTC').exitAt,now);
+ assert.deepEqual(events.map(event=>event.detail.stage),['entry','exit']);
+ bid=89;
+ now+=2999;
+ checkExit();
+ assert.match(statuses.at(-1),/^BUY DOWN/);
+ assert.equal(cashouts.at(-1),undefined);
+ now+=1;
+ timers.find(timer=>timer.delay===3000).callback();
  assert.match(statuses.at(-1),/^TAKE PROFIT/);
- assert.equal(cashouts.at(-1),76);
+ assert.equal(cashouts.at(-1),87);
  assert.deepEqual(events.map(event=>event.detail.stage),['entry','exit']);
 });
 

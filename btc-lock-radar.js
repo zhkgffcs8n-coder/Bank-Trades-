@@ -7,19 +7,28 @@ scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 const scalpPrices=document.createElement('div');
 scalpPrices.className='bt-scalp-prices';
-scalpPrices.innerHTML='<div data-price-entry><span>BUY IN · ASK</span><strong data-entry-percent>—%</strong></div><div data-price-cash><span data-cash-label>CASH OUT · WAIT</span><strong data-cash-percent></strong></div>';
+scalpPrices.innerHTML='<div data-price-entry><span>BUY IN · ASK</span><strong data-entry-percent>—%</strong><span data-entry-time></span></div><div data-price-cash><span data-cash-label>CASH OUT · WAIT</span><strong data-cash-percent></strong><span data-cash-time></span></div>';
 scalper.querySelector('[data-action]').after(scalpPrices);
 const entryPercent=scalpPrices.querySelector('[data-entry-percent]');
 const cashPercent=scalpPrices.querySelector('[data-cash-percent]');
 const cashLabel=scalpPrices.querySelector('[data-cash-label]');
-function paintScalpPrices(position,bid){
+const entryTime=scalpPrices.querySelector('[data-entry-time]');
+const cashTime=scalpPrices.querySelector('[data-cash-time]');
+const scalpClock=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Los_Angeles',hour:'2-digit',minute:'2-digit',second:'2-digit',fractionalSecondDigits:3});
+function paintScalpTime(element,at){
+  const time=at==null?'':scalpClock.format(at)+' PT';
+  if(element.textContent!==time)element.textContent=time;
+}
+function paintScalpPrices(position,exit){
   const active=position&&Number.isFinite(position.entry);
   entryPercent.textContent=active?position.entry.toFixed(1)+'%':'—%';
-  const cash=position?.exit?position.exitBid:undefined;
+  const cash=exit?position.exitBid:undefined;
   cashPercent.textContent=active&&Number.isFinite(cash)?cash.toFixed(1)+'%':'';
-  cashLabel.textContent=position?.exitBid!=null?'CASH OUT · EXIT CALL':'CASH OUT · WAIT';
+  cashLabel.textContent=cash!=null?'CASH OUT · EXIT CALL':'CASH OUT · WAIT';
+  paintScalpTime(entryTime,position?.entryAt);
+  paintScalpTime(cashTime,cash!=null?position.exitAt:null);
   scalpPrices.dataset.side=active?position.side:'';
-  scalpPrices.dataset.closed=String(position?.exitBid!=null);
+  scalpPrices.dataset.closed=String(cash!=null);
 }
 const researchReadouts=document.createElement('div');
 const v8Readouts=document.createElement('div');
@@ -899,7 +908,10 @@ function restoreScalpPositions(storage,now=Date.now()){
          !Number.isFinite(row.expiresAt)||row.expiresAt<=now||row.expiresAt>now+900000||
          ![null,'TIME EXIT','SELL FAST','TAKE PROFIT','EXIT · MOMENTUM REVERSED'].includes(p.exit)||
          (p.exit!=null&&(!Number.isFinite(p.exitBid)||p.exitBid<0||p.exitBid>100)))continue;
-      restored.set(row.coin,{ticker:p.ticker,side:p.side,entry:p.entry,exit:p.exit,expiresAt:row.expiresAt,...(p.exit!=null?{exitBid:p.exitBid}:{})});
+      const position={ticker:p.ticker,side:p.side,entry:p.entry,exit:p.exit,expiresAt:row.expiresAt,...(p.exit!=null?{exitBid:p.exitBid}:{})};
+      if(Number.isFinite(p.entryAt)&&p.entryAt>0&&p.entryAt<=now)position.entryAt=p.entryAt;
+      if(p.exit!=null&&position.entryAt&&Number.isFinite(p.exitAt)&&p.exitAt>=position.entryAt&&p.exitAt<=now)position.exitAt=p.exitAt;
+      restored.set(row.coin,position);
     }
   }catch{}
   return restored;
@@ -924,16 +936,31 @@ let btcListingPending=false,btcDirectionPending=false;
 let paintedScalpAction;
 const scalpEntryVisibleUntil=new WeakMap();
 const btcEntryAwaitingPaint=new WeakSet();
+const btcBuyAlertUntil=new WeakMap();
+const btcBuyAlertMs=3000;
 function showingScalpEntry(position,now=Date.now()){
   return btcEntryAwaitingPaint.has(position)||now<(scalpEntryVisibleUntil.get(position)??0);
 }
 function waitForBtcEntryPaint(position){
   btcEntryAwaitingPaint.add(position);
-  // A frame must have a chance to present BUY before another quote can replace it.
+  btcBuyAlertUntil.set(position,Infinity);
+  // Start the dashboard alert's reading time after the browser can present BUY.
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     btcEntryAwaitingPaint.delete(position);
+    btcBuyAlertUntil.set(position,Date.now()+btcBuyAlertMs);
+    setTimeout(()=>{
+      if(selectedCoin==='BTC'&&positions.get('BTC')===position&&!refreshScalpExit()){
+        showScalp('Waiting for the latest Kalshi bid');
+      }
+    },btcBuyAlertMs);
     if(selectedCoin==='BTC'&&positions.get('BTC')===position)refreshScalpExit();
   }));
+}
+function showingScalpBuyAlert(position){
+  return Date.now()<(btcBuyAlertUntil.get(position)??0);
+}
+function visibleScalpExit(position){
+  return showingScalpBuyAlert(position)?null:position?.exit;
 }
 function scalpEntryAction(position){
   return 'BUY '+position.side.toUpperCase()+' '+position.entry.toFixed(1)+'% ASK';
@@ -954,11 +981,12 @@ function showScalp(message,exitSide,ticker){
   const quoteStatus=position?scalpQuoteStatus(position,snapshot):null;
   if(!ticker&&position){
     const feedMessage=message;
-    const action=position.exit||(showingScalpEntry(position)?scalpEntryAction(position):'HOLD '+position.side.toUpperCase());
-    exitSide=position.exit?position.side:null;
+    const exit=visibleScalpExit(position);
+    const action=exit||(showingScalpEntry(position)||showingScalpBuyAlert(position)?scalpEntryAction(position):'HOLD '+position.side.toUpperCase());
+    exitSide=exit?position.side:null;
     ticker=position.ticker;
     message=action+' · Called BUY '+position.side.toUpperCase()+' at '+position.entry.toFixed(1)+'% · '+ticker+' · '+feedMessage;
-    paintScalpPrices(position,quoteStatus?.fresh?quoteStatus.bid:undefined);
+    paintScalpPrices(position,exit);
   }
   const separator=message.indexOf(' · ');
   const action=separator<0?message:message.slice(0,separator);
@@ -1040,6 +1068,7 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
       return;
     }
     tracked={ticker,side:entrySide,entry:quotes[entrySide].ask,exit:null,expiresAt:Date.parse(market.close_time)||Date.now()+left*1000};
+    if(selectedCoin==='BTC')tracked.entryAt=Date.now();
     positions.set(selectedCoin,tracked);
     reversalReadings.delete(selectedCoin);
     entered=true;
@@ -1061,13 +1090,17 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
     }else if(reversal.confirmed)tracked.exit=move>0?'TAKE PROFIT':'SELL FAST';
   }
   const newExit=tracked.exit&&tracked.exitBid==null;
-  if(newExit)tracked.exitBid=quote.bid;
+  if(newExit){
+    tracked.exitBid=quote.bid;
+    if(tracked.entryAt)tracked.exitAt=Date.now();
+  }
   if(entered||newExit)persistScalpPosition(selectedCoin,tracked,market,left);
   const liveMove=move.toFixed(1);
-  const action=tracked.exit||(showingEntry?scalpEntryAction(tracked):'HOLD '+tracked.side.toUpperCase());
-  const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
-  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
-  paintScalpPrices(tracked,quote.bid);
+  const exit=visibleScalpExit(tracked);
+  const action=exit||(showingEntry||showingScalpBuyAlert(tracked)?scalpEntryAction(tracked):'HOLD '+tracked.side.toUpperCase());
+  const signalBid=exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
+  showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,exit?tracked.side:null,ticker);
+  paintScalpPrices(tracked,exit);
   if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
   else if(entered){
     announce('entry','BUY');
@@ -1103,6 +1136,7 @@ function refreshScalpExit(){
   const quotes={up:{ask:price(market,'yes_ask'),bid:snapshot.up},down:{ask:price(market,'no_ask'),bid:snapshot.down}};
   if(Object.values(quotes).every(q=>Number.isFinite(q.ask)&&q.ask>=q.bid&&q.ask<=100)){
     scalp(market,(snapshot.expiresAt-now)/1000,'mixed',false,quotes,undefined,scalpExitEvidence(coin,market.ticker));
+    return true;
   }
 }
 function applyBtcStreamQuote(quote){

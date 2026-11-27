@@ -16,7 +16,7 @@ for(const side of ['up','down']){
    const voice=[];
    const prices={};
    let now=Date.now();
-   const browser=runInNewContext(cost+'\n'+entryDisplay+scalp+'\nscalp',{Date:class extends Date {static now(){return now;}},setTimeout(){},requestAnimationFrame(callback){callback();},refreshScalpExit(){},positions,reversalReadings:new Map(),confirmedScalpReversal:(_p,_q,e)=>({confirmed:!!e,reading:null}),persistScalpPosition(){},refreshBtcScalpBook(){},selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
+   const browser=runInNewContext(cost+'\n'+entryDisplay+scalp+'\nscalp',{Date:class extends Date {static now(){return now;}},setTimeout(){},requestAnimationFrame(callback){callback();},refreshScalpExit(){},positions,reversalReadings:new Map(),confirmedScalpReversal:(_p,_q,e)=>({confirmed:!!e,reading:null}),persistScalpPosition(){},refreshBtcScalpBook(){},selectedCoin:'BTC',paintScalpPrices(position,exit){prices.entry=position.entry;prices.cash=exit?position.exitBid:undefined;},window:{dispatchEvent:event=>voice.push(event.detail)},
     CustomEvent:class {constructor(_type,{detail}){this.detail=detail;}},
     showScalp(message,exitSide){
      const label=message.split(' · ')[0].replace(/ \d+\.\d+% ASK$/,'');
@@ -34,8 +34,8 @@ for(const side of ['up','down']){
     now+=1000;
     browser({ticker:tick.ticker},tick.secondsLeft,tick.side,tick.strong,tick.quotes,undefined,tick.reversalConfirmed);
     const result=replayChampionScalper(tick,previous);
-    assert.equal(result.action,displayed);
-    const {expiresAt, ...browserSignal} = positions.get('BTC') ?? {};
+    assert.equal(displayed,index>=1&&index<=3?'BUY '+side.toUpperCase():result.action);
+    const {expiresAt, entryAt, exitAt, ...browserSignal} = positions.get('BTC') ?? {};
     assert.deepEqual(result.position, expiresAt == null ? null : browserSignal);
     previous=result.position;
     if(index===1){

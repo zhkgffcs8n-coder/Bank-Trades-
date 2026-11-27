@@ -3,14 +3,21 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import test from 'node:test';
 const source=readFileSync(new URL('../btc-lock-radar.js',import.meta.url),'utf8');
-const code=source.slice(source.indexOf('function paintScalpPrices('),source.indexOf('const researchReadouts='));
-test('cashout stays blank during HOLD despite moving bids and freezes at exit',()=>{
- const cashPercent={},cashLabel={},entryPercent={},scalpPrices={dataset:{}};
- const paint=runInNewContext(code+'\npaintScalpPrices',{cashPercent,cashLabel,entryPercent,scalpPrices});
- const position={side:'down',entry:76,exit:null};
- for(const bid of [83,81,90]){
-  paint(position,bid);assert.equal(cashPercent.textContent,'');assert.equal(cashLabel.textContent,'CASH OUT · WAIT');assert.equal(entryPercent.textContent,'76.0%');
- }
- position.exit='TAKE PROFIT';position.exitBid=86;
- paint(position,94);assert.equal(cashPercent.textContent,'86.0%');assert.equal(cashLabel.textContent,'CASH OUT · EXIT CALL');
+const code=source.slice(source.indexOf('const scalpClock='),source.indexOf('const researchReadouts='));
+test('cashout stays blank until the exit is visible and then shows the recorded bid and time',()=>{
+ const cashPercent={},cashLabel={},entryPercent={},entryTime={},cashTime={},scalpPrices={dataset:{}};
+ const paint=runInNewContext(code+'\npaintScalpPrices',{cashPercent,cashLabel,entryPercent,entryTime,cashTime,scalpPrices});
+ const position={side:'down',entry:80,entryAt:Date.parse('2026-11-27T11:46:00.125Z'),exit:null};
+ paint(position,null);
+ assert.equal(entryPercent.textContent,'80.0%');
+ assert.equal(entryTime.textContent,'03:46:00.125 PT');
+ position.exit='TAKE PROFIT';position.exitBid=87;position.exitAt=position.entryAt+1200;
+ paint(position,null);
+ assert.equal(cashPercent.textContent,'');
+ assert.equal(cashTime.textContent,'');
+ assert.equal(cashLabel.textContent,'CASH OUT · WAIT');
+ paint(position,position.exit);
+ assert.equal(cashPercent.textContent,'87.0%');
+ assert.equal(cashTime.textContent,'03:46:01.325 PT');
+ assert.equal(cashLabel.textContent,'CASH OUT · EXIT CALL');
 });
