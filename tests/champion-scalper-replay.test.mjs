@@ -16,7 +16,7 @@ for(const side of ['up','down']){
    const voice=[];
    const prices={};
    let now=Date.now();
-   const browser=runInNewContext(cost+'\n'+entryDisplay+scalp+'\nscalp',{Date:class extends Date {static now(){return now;}},setTimeout(){},positions,reversalReadings:new Map(),confirmedScalpReversal:(_p,_q,e)=>({confirmed:!!e,reading:null}),persistScalpPosition(){},refreshBtcScalpBook(){},selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
+   const browser=runInNewContext(cost+'\n'+entryDisplay+scalp+'\nscalp',{Date:class extends Date {static now(){return now;}},setTimeout(){},requestAnimationFrame(callback){callback();},refreshScalpExit(){},positions,reversalReadings:new Map(),confirmedScalpReversal:(_p,_q,e)=>({confirmed:!!e,reading:null}),persistScalpPosition(){},refreshBtcScalpBook(){},selectedCoin:'BTC',paintScalpPrices(position,bid){prices.entry=position.entry;prices.cash=position.exitBid??bid;},window:{dispatchEvent:event=>voice.push(event.detail)},
     CustomEvent:class {constructor(_type,{detail}){this.detail=detail;}},
     showScalp(message,exitSide){
      const label=message.split(' · ')[0].replace(/ \d+\.\d+% ASK$/,'');
