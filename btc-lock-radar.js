@@ -1030,28 +1030,6 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const announce=(stage,action)=>window.dispatchEvent(new CustomEvent('banktrades:scalper-voice',{
     detail:{stage,action,asset:selectedCoin,ticker,side:tracked.side,entry:tracked.entry,exitBid:tracked.exitBid}
   }));
-  const deliverToKaiBot=(stage,action)=>{
-    if(selectedCoin!=='BTC')return;
-    const signal={ticker,side:tracked.side,stage,action,entry:tracked.entry,exitBid:tracked.exitBid,at:Date.now()};
-    const showOutcome=outcome=>window.dispatchEvent(new CustomEvent('banktrades:kaibot-delivery',{
-      detail:{ticker,stage,outcome,signalAt:signal.at}
-    }));
-    const deliver=async()=>{
-      try{
-        const response=await fetch('/.netlify/functions/kalshi-live-control',{method:'POST',credentials:'same-origin',
-          headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'scalper-event',signal})});
-        const result=await response.json();
-        if(response.status===503&&result.error==='EXECUTION_BUSY'&&Date.now()-signal.at<8500){
-          setTimeout(deliver,250);return;
-        }
-        showOutcome(result.reason||result.error||result.status||'HTTP '+response.status);
-      }catch{
-        if(Date.now()-signal.at<8500)setTimeout(deliver,500);
-        else showOutcome('DELIVERY_RESPONSE_UNAVAILABLE');
-      }
-    };
-    void deliver();
-  };
   const quote=quotes[tracked.side];
   const move=quote.bid-tracked.entry;
   const showingEntry=showingScalpEntry(tracked);
@@ -1071,9 +1049,9 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   const signalBid=tracked.exit?' · Bid at exit signal '+tracked.exitBid.toFixed(1)+'%':'';
   showScalp(action+' · '+ticker+' · '+Math.ceil(left)+'s left · Entry reference '+tracked.entry.toFixed(1)+'% · Current '+tracked.side.toUpperCase()+' bid '+quote.bid.toFixed(1)+'% · Current move '+(move>=0?'+':'')+liveMove+' pts'+signalBid,tracked.exit?tracked.side:null,ticker);
   paintScalpPrices(tracked,quote.bid);
-  if(newExit){announce('exit',tracked.exit.replace(' · ',' because '));deliverToKaiBot('exit',tracked.exit);}
+  if(newExit)announce('exit',tracked.exit.replace(' · ',' because '));
   else if(entered){
-    announce('entry','BUY');deliverToKaiBot('entry','BUY');
+    announce('entry','BUY');
     const coin=selectedCoin;
     setTimeout(()=>{
       if(selectedCoin===coin&&positions.get(coin)===tracked)refreshScalpExit();
