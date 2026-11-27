@@ -1115,10 +1115,10 @@ function invalidateBtcStream(){
 }
 async function fetchBtcScalpBook(ticker,expiresAt){
   const response=await fetch('/api/data?mode=orderbook&live=1&ticker='+encodeURIComponent(ticker),
-    {cache:'no-store',signal:AbortSignal.timeout(1500)});
+    {cache:'no-store',signal:AbortSignal.timeout(2500)});
   if(!response.ok)return null;
   const data=await response.json(),now=Date.now(),at=Date.parse(data.fetched_at);
-  if(!Number.isFinite(at)||at>now||now-at>btcScalpBookMaxAge||expiresAt<=now)return null;
+  if(!Number.isFinite(at)||at>now+2000||now-at>btcScalpBookMaxAge||expiresAt<=now)return null;
   const book=data.orderbook?.orderbook_fp??data.orderbook;
   const yes=bestBid(book,'yes',0),no=bestBid(book,'no',0);
   if(!yes||!no||Math.round((yes.price+no.price)*10000)>10000)return null;
