@@ -11,7 +11,7 @@ function harness(position,snapshot){
   scalpLabel,scalpDetail,scalpAction:{style:{},classList:{toggle(){}}},scalpIcon:{},scalpMotion:null,
   actionLooks:new Proxy({},{get:()=>['icon','black','white',null]}),
   price:(market,key)=>market?.[key],btcScalpBookMaxAge:1800,
-  paintScalpPrices:(p,bid)=>prices.push({p,bid})};
+  paintScalpPrices:(p,exit)=>prices.push({p,exit})};
  const show=runInNewContext('let sharedScalpCall,paintedScalpAction;'+status+display+'\nshowScalp',context);
  return {show,scalpLabel,scalpDetail,prices};
 }
@@ -21,7 +21,7 @@ for(const exit of [null,'SELL FAST'])test('data wait retains '+(exit||'open call
  h.show('DATA WAIT · Spot evidence stale');
  assert.equal(h.scalpLabel.textContent,(exit?'SELL FAST DOWN':'HOLD DOWN')+' · 42.0% LIVE BID');
  assert.match(h.scalpDetail.textContent,/Called BUY DOWN at 50.0%/);
- assert.equal(h.prices.at(-1).bid,42);
+ assert.equal(h.prices.at(-1).exit,exit);
  assert.equal(position.exitBid,exit?37:undefined);
 });
 test('stale and different-round quotes never display as live',()=>{
@@ -30,7 +30,7 @@ test('stale and different-round quotes never display as live',()=>{
   h.show('DATA WAIT · Quotes unavailable');
   assert.doesNotMatch(h.scalpLabel.textContent,/LIVE BID/);
   assert.match(h.scalpLabel.textContent,/HOLD UP/);
-  assert.equal(h.prices.at(-1).bid,undefined);
+  assert.equal(h.prices.at(-1).exit,undefined);
  }
 });
 
