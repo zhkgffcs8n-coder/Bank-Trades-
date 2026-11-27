@@ -10,8 +10,9 @@ function harness(position,snapshot){
  const context={positions:new Map([['BTC',position]]),scalpQuotes:new Map([['BTC',snapshot]]),selectedCoin:'BTC',
   scalpLabel,scalpDetail,scalpAction:{style:{},classList:{toggle(){}}},scalpIcon:{},scalpMotion:null,
   actionLooks:new Proxy({},{get:()=>['icon','black','white',null]}),
+  price:(market,key)=>market?.[key],btcScalpBookMaxAge:1800,
   paintScalpPrices:(p,bid)=>prices.push({p,bid})};
- const show=runInNewContext('let sharedScalpCall;'+status+display+'\nshowScalp',context);
+ const show=runInNewContext('let sharedScalpCall,paintedScalpAction;'+status+display+'\nshowScalp',context);
  return {show,scalpLabel,scalpDetail,prices};
 }
 for(const exit of [null,'SELL FAST'])test('data wait retains '+(exit||'open call')+' and independent live bid',()=>{
@@ -40,4 +41,12 @@ test('round rollover clears the expired call and both price boxes without a quot
  assert.equal(h.prices.at(-1).p,null);
  h.show('NO ENTRY · Waiting for aligned BTC momentum');
  assert.equal(h.scalpLabel.textContent,'NO ENTRY');
+});
+
+test('BTC buy call shows its original entry next to the current ask',()=>{
+ const ticker='KXBTC15M-TEST';
+ const h=harness({ticker,side:'down',entry:49},{ticker,at:Date.now(),expiresAt:Date.now()+60000,
+  isOrderBook:true,isStream:true,down:54,market:{no_ask:55}});
+ h.show('BUY DOWN 49.0% ASK · Entry call',null,ticker);
+ assert.equal(h.scalpLabel.textContent,'BUY DOWN 49.0% ASK · NOW 55.0% ASK · 54.0% LIVE BID');
 });

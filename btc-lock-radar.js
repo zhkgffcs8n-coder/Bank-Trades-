@@ -826,6 +826,7 @@ function selectCoin(coin){
   refreshTitan();
   waitForData('Checking '+coin+' market and spot feed');
   evaluate();
+  if(coin==='BTC')refreshBtcEntryInputs();
 }
 function mountScalper(){
   const feed=document.getElementById('btVerifiedAlertFeed');
@@ -918,6 +919,9 @@ const scalpQuotes=new Map();
 const btcScalpBookMaxAge=1800;
 let btcScalpBookPending=false;
 let latestBtcStreamQuote=null;
+let btcEntryMarket=null,btcEntryDirection=null;
+let btcListingPending=false,btcDirectionPending=false;
+let paintedScalpAction;
 const scalpEntryVisibleUntil=new WeakMap();
 function showingScalpEntry(position,now=Date.now()){
   return now<(scalpEntryVisibleUntil.get(position)??0);
@@ -937,7 +941,8 @@ function showScalp(message,exitSide,ticker){
     position=null;
     paintScalpPrices(null);
   }
-  const quoteStatus=position?scalpQuoteStatus(position,scalpQuotes.get(selectedCoin)):null;
+  const snapshot=scalpQuotes.get(selectedCoin);
+  const quoteStatus=position?scalpQuoteStatus(position,snapshot):null;
   if(!ticker&&position){
     const feedMessage=message;
     const action=position.exit||(showingScalpEntry(position)?scalpEntryAction(position):'HOLD '+position.side.toUpperCase());
@@ -951,10 +956,15 @@ function showScalp(message,exitSide,ticker){
   const detail=separator<0?'':message.slice(separator+3);
   const callLabel=exitSide?action+' '+exitSide.toUpperCase():action;
   const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(2).replace(/0$/,'')+'% '+(quoteStatus.fresh?('LIVE BID'+(selectedCoin==='BTC'&&scalpQuotes.get(selectedCoin)?.isOrderBook&&!scalpQuotes.get(selectedCoin)?.isStream?' · POLLING':'')):'LAST BID · STALE'):'BID UNAVAILABLE'):'';
-  const label=callLabel+(liveLabel?' · '+liveLabel:'');
+  const ask=selectedCoin==='BTC'&&action.startsWith('BUY ')&&snapshot?.ticker===position?.ticker&&
+    Date.now()-snapshot.at<=btcScalpBookMaxAge
+    ?price(snapshot.market,position.side==='up'?'yes_ask':'no_ask'):NaN;
+  const label=callLabel+(Number.isFinite(ask)?' · NOW '+ask.toFixed(1)+'% ASK':'')+(liveLabel?' · '+liveLabel:'');
   sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
   scalpAction.classList.toggle('bt-hold-glow',action.startsWith('HOLD'));
-  if(scalpLabel.textContent!==label){
+  if(scalpLabel.textContent!==label)scalpLabel.textContent=label;
+  if(paintedScalpAction!==callLabel){
+    paintedScalpAction=callLabel;
     const kind=action.startsWith('BUY UP')?'up':action.startsWith('BUY DOWN')?'down'
       :action.startsWith('HOLD')?'hold':action==='TAKE PROFIT'?'profit':action==='SELL FAST'?'fast'
       :/^(TIME EXIT|EXIT)/.test(action)?'exit':'wait';
@@ -962,7 +972,6 @@ function showScalp(message,exitSide,ticker){
     scalpAction.style.background=background;
     scalpAction.style.color=color;
     scalpAction.style.boxShadow='0 4px 0 '+background+', 0 0 18px '+color+'44';
-    scalpLabel.textContent=label;
     scalpIcon.textContent=icon;
     scalpMotion?.cancel();
     if(move&&!document.hidden&&!reducedMotion.matches&&!document.body.classList.contains('bt-arcade-muted')){
@@ -1060,11 +1069,13 @@ function scalp(market,left,side,strong,quotes,feed,evidence){
   }
 }
 // Each coin quote is delivered immediately, without waiting for slower peers or spot candles.
-window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
+window.addEventListener('banktrades:kalshi-quote',({detail:row})=>receiveScalpListing(row));
+function receiveScalpListing(row){
   const coin=row?.asset,market=row?.market,at=Date.parse(row?.quote_received_at),now=Date.now();
   if(!row?.available||!market?.ticker?.startsWith('KX'+coin+'15M-')||!Number.isFinite(at)||now-at>5000||at>now+2000)return;
   const expiresAt=Date.parse(market.close_time),up=price(market,'yes_bid'),down=price(market,'no_bid');
   if(!(expiresAt>now)||![up,down].every(value=>Number.isFinite(value)&&value>=0&&value<=100))return;
+  if(coin==='BTC')rememberBtcEntryMarket({...market,quote_received_at:row.quote_received_at});
   const previous=scalpQuotes.get(coin);
   if(previous&&previous.at>=at)return;
   if(coin==='BTC'&&positions.get(coin)?.ticker===market.ticker){
@@ -1073,7 +1084,7 @@ window.addEventListener('banktrades:kalshi-quote',({detail:row})=>{
   }
   scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down,market});
   if(coin===selectedCoin)refreshScalpExit();
-});
+}
 function refreshScalpExit(){
   const coin=selectedCoin,snapshot=scalpQuotes.get(coin),position=positions.get(coin),now=Date.now();
   if(!position||!snapshot?.market||snapshot.ticker!==position.ticker||now-snapshot.at>(snapshot.isOrderBook?btcScalpBookMaxAge:5000)||snapshot.at>now+2000||snapshot.expiresAt<=now)return;
@@ -1086,10 +1097,15 @@ function refreshScalpExit(){
 }
 function applyBtcStreamQuote(quote){
   const position=positions.get('BTC'),now=Date.now();
-  if(selectedCoin!=='BTC'||!position||!quote||position.ticker!==quote.ticker||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=now||
+  if(selectedCoin!=='BTC'||!quote||!Number.isFinite(quote.expiresAt)||quote.expiresAt<=now||
      !Number.isFinite(quote.receivedAt)||quote.receivedAt>now+2000||now-quote.receivedAt>btcScalpBookMaxAge||
      ![quote.yesBid,quote.noBid].every(bid=>Number.isFinite(bid)&&bid>0&&bid<100)||
      Math.round((quote.yesBid+quote.noBid)*100)>10000)return false;
+  if(position?.ticker!==quote.ticker){
+    if(btcEntryMarket?.ticker!==quote.ticker)return false;
+    evaluateBtcEntry();
+    return true;
+  }
   const previous=scalpQuotes.get('BTC');
   if(previous?.isStream&&previous.ticker===quote.ticker&&previous.at>quote.receivedAt)return true;
   const market={ticker:quote.ticker,close_time:new Date(quote.expiresAt).toISOString(),
@@ -1137,7 +1153,10 @@ async function refreshBtcScalpBook(){
   }catch{}finally{btcScalpBookPending=false;}
 }
 // The shared-signal listener above updates sharedV8 before this listener runs.
-window.addEventListener('banktrades:shared-signals',refreshScalpExit);
+window.addEventListener('banktrades:shared-signals',()=>{
+  evaluateBtcEntry();
+  refreshScalpExit();
+});
 setInterval(()=>{
  const position=positions.get(selectedCoin);
  if(position?.expiresAt<=Date.now()){
@@ -1177,13 +1196,76 @@ async function evaluate(){
       const market=marketFor(asset);
       bot.setMarket(market?.ticker?.startsWith('KX'+asset+'15M-')?market:null);
     }
+    if(btcMarket)rememberBtcEntryMarket(btcMarket);
     if(coin!=='BTC')assess('BTC',btcMarket,window.__BANK_TRADES_BTC_EVIDENCE__,false);
-    assess(coin,marketFor(coin),e,true);
+    assess(coin,marketFor(coin),e,true,{allowBtcEntry:false});
   }finally{
     if(pendingVersion===version)pendingVersion=undefined;
   }
 }
-function assess(coin,market,e,visible){
+function rememberBtcEntryMarket(market){
+  const now=Date.now(),quoteAt=Date.parse(market.quote_received_at);
+  if(!Number.isFinite(quoteAt)||quoteAt<=(Date.parse(btcEntryMarket?.quote_received_at)||0))return;
+  if(Date.parse(market.close_time)<=now||!(Date.parse(market.open_time)<=now))return;
+  const newRound=btcEntryMarket?.ticker!==market.ticker;
+  btcEntryMarket=market;
+  evaluateBtcEntry();
+  if(newRound)void refreshBtcDirection();
+}
+function btcDirectionFor(market){
+  const shared=sharedV8.find(row=>row.asset==='BTC')?.tradingView;
+  if(!btcEntryDirection||btcEntryDirection.ticker!==market?.ticker)return shared;
+  if(shared?.ticker===market.ticker&&shared.enabled===btcEntryDirection.enabled&&
+     shared.status==='FRESH'&&shared.candleCloseAt>(btcEntryDirection.candleCloseAt??0))return shared;
+  return btcEntryDirection;
+}
+function evaluateBtcEntry(){
+  if(selectedCoin!=='BTC'||document.hidden||!btcEntryMarket)return;
+  const market=btcEntryMarket,now=Date.now(),expiry=Date.parse(market.close_time);
+  if(expiry<=now||positions.get('BTC')?.ticker===market.ticker)return;
+  const direction=btcDirectionFor(market);
+  if(!direction)return;
+  const stream=latestBtcStreamQuote;
+  const freshStream=stream?.ticker===market.ticker&&stream.expiresAt===expiry&&
+    stream.receivedAt<=now+2000&&now-stream.receivedAt<=btcScalpBookMaxAge&&
+    [stream.yesBid,stream.noBid].every(bid=>Number.isFinite(bid)&&bid>0&&bid<100)&&
+    Math.round((stream.yesBid+stream.noBid)*100)<=10000;
+  if(freshStream){
+    assess('BTC',{...market,quote_received_at:new Date(stream.receivedAt).toISOString(),
+      yes_bid_dollars:(stream.yesBid/100).toFixed(4),no_bid_dollars:(stream.noBid/100).toFixed(4),
+      yes_ask_dollars:((100-stream.noBid)/100).toFixed(4),no_ask_dollars:((100-stream.yesBid)/100).toFixed(4)
+    },window.__BANK_TRADES_BTC_EVIDENCE__,true,{feed:direction,entryOnly:true});
+  }else if(now-Date.parse(market.quote_received_at)<=btcScalpBookMaxAge){
+    assess('BTC',market,window.__BANK_TRADES_BTC_EVIDENCE__,true,{feed:direction,entryOnly:true});
+  }
+}
+async function refreshBtcDirection(){
+  const market=btcEntryMarket;
+  if(!market||selectedCoin!=='BTC'||document.hidden||btcDirectionPending||
+     positions.get('BTC')?.ticker===market.ticker||Date.parse(market.close_time)<=Date.now())return;
+  btcDirectionPending=true;
+  try{
+    const params=new URLSearchParams({ticker:market.ticker,open:Date.parse(market.open_time),close:Date.parse(market.close_time)});
+    const response=await fetch('/.netlify/functions/scalper-btc-direction?'+params,
+      {cache:'no-store',signal:AbortSignal.timeout(2500)});
+    if(!response.ok)return;
+    const direction=await response.json();
+    if(direction.ticker!==btcEntryMarket?.ticker||typeof direction.enabled!=='boolean')return;
+    btcEntryDirection=direction;
+    evaluateBtcEntry();
+  }catch{}finally{btcDirectionPending=false;}
+}
+function refreshBtcEntryInputs(){
+  if(selectedCoin!=='BTC'||document.hidden)return;
+  void refreshBtcDirection();
+  if(btcListingPending||Date.now()-Date.parse(btcEntryMarket?.quote_received_at)<1250)return;
+  btcListingPending=true;
+  fetch('/api/data?mode=markets&live=1&asset=BTC',{cache:'no-store',signal:AbortSignal.timeout(2500)})
+    .then(response=>response.ok?response.json():null)
+    .then(data=>receiveScalpListing(data?.results?.find(row=>row.asset==='BTC')))
+    .catch(()=>{}).finally(()=>{btcListingPending=false;});
+}
+function assess(coin,market,e,visible,{feed,allowBtcEntry=true,entryOnly=false}={}){
   const unavailable=message=>{if(visible)waitForData(message)};
   if(!market?.ticker?.startsWith('KX'+coin+'15M-'))return unavailable('Kalshi '+coin+' 15-minute contract unavailable');
   // Refresh the called contract's bid even when spot entry evidence is unavailable.
@@ -1204,11 +1286,15 @@ function assess(coin,market,e,visible){
     if(closeLeft>0&&closeLeft<=900&&
     [ya,yb,na,nb].every(value=>value>0&&value<100)){
       if(coin==='BTC'&&positions.get(coin)?.ticker===market.ticker){refreshBtcScalpBook();refreshScalpExit();}
-      else scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},coin==='BTC'?sharedV8.find(row=>row.asset==='BTC')?.tradingView:null,scalpExitEvidence(coin,market.ticker));
+      else if(coin!=='BTC'||allowBtcEntry){
+        const direction=coin==='BTC'?(feed??sharedV8.find(row=>row.asset==='BTC')?.tradingView):null;
+        scalp(market,closeLeft,side,strong,{up:{ask:ya,bid:yb},down:{ask:na,bid:nb}},direction,scalpExitEvidence(coin,market.ticker));
+      }
     }else{
       showScalp('DATA WAIT · No open '+coin+' 15-minute contract with valid quotes');
     }
   }
+  if(entryOnly)return;
   const quality=Math.max(0,Math.min(100,Math.round(35+Math.min(30,Math.abs(diff)*6)+Math.max(0,3-spread)*6+(left>=360?10:0))));
   const previous=directions.get(coin);
   const sameRound=previous?.ticker===market.ticker;
@@ -1228,6 +1314,7 @@ function assess(coin,market,e,visible){
   }
 }
 waitForData('Checking '+selectedCoin+' market and spot feed');
+window.addEventListener('banktrades:btc-analysis',evaluateBtcEntry);
 botsFor('BTC');
 refreshTitan();setInterval(refreshTitan,60000);
 refreshV8Scoreboard();setInterval(refreshV8Scoreboard,60000);
@@ -1271,6 +1358,9 @@ connectBtcQuoteStream();
 setInterval(maintainBtcQuoteStream,400);
 document.addEventListener('visibilitychange',maintainBtcQuoteStream);
 window.addEventListener('pageshow',maintainBtcQuoteStream);
+refreshBtcEntryInputs();
+setInterval(refreshBtcEntryInputs,1000);
+document.addEventListener('visibilitychange',refreshBtcEntryInputs);
 evaluate();setInterval(()=>{if(!document.hidden&&selectedCoin==='BTC')evaluate()},5000);
 setInterval(()=>{if(!document.hidden&&selectedCoin!=='BTC')evaluate()},30000);
 })();

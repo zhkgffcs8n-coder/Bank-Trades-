@@ -23,7 +23,7 @@ test('BTC exit checks use fresh exact-ticker depth and ignore newer listing quot
    }}})};
   },
   price:(m,k)=>Number((Number(m[k+'_dollars'])*100).toFixed(2)),scalp:(...args)=>calls.push(args),
-  scalpExitEvidence:()=>null,setInterval(){}
+  scalpExitEvidence:()=>null,setInterval(){},rememberBtcEntryMarket(){},evaluateBtcEntry(){}
  });
  const row={asset:'BTC',available:true,quote_received_at:new Date(now-100).toISOString(),
   market:{ticker,close_time:new Date(now+60000).toISOString(),yes_bid_dollars:'0.60',no_bid_dollars:'0.38'}};
@@ -53,7 +53,7 @@ test('browser forwards same-millisecond stream bids in order and invalidates on 
  const {apply,reset}=runInNewContext(listener+'\n({apply:applyBtcStreamQuote,reset:invalidateBtcStream})',{
   window:{addEventListener(){}},setInterval(){},Date,scalpQuotes:snapshots,
   selectedCoin:'BTC',positions:new Map([['BTC',{ticker}]]),
-  btcScalpBookMaxAge:1800,latestBtcStreamQuote:null,
+  btcScalpBookMaxAge:1800,latestBtcStreamQuote:null,btcEntryMarket:null,
   price:(market,key)=>Number(market[key+'_dollars'])*100,
   scalp:(_market,_left,_side,_strong,quotes)=>calls.push(quotes.up.bid),
   scalpExitEvidence:()=>null,showScalp(){}
@@ -135,4 +135,33 @@ test('fresh same-round TradingView direction can open a BTC call while depth is 
  assert.equal(positions.get('BTC').entry,58);
  assert.match(statuses.at(-1),/^BUY DOWN/);
  assert.equal(events[0].detail.stage,'entry');
+});
+
+test('BTC entry rechecks immediately on input and prefers fresh same-round depth',()=>{
+ const now=100000,ticker='KXBTC15M-TEST',close=now+420000;
+ const market={ticker,close_time:new Date(close).toISOString(),quote_received_at:new Date(now-300).toISOString()};
+ const feed={ticker,enabled:true,status:'FRESH',candleCloseAt:now-1000,direction:'UP'};
+ const stream={ticker,expiresAt:close,receivedAt:now-50,yesBid:54,noBid:44};
+ const inputs=source.slice(source.indexOf('function btcDirectionFor('),source.indexOf('async function refreshBtcDirection('));
+ const positions=new Map(),calls=[];
+ const context={
+  selectedCoin:'BTC',document:{hidden:false},window:{},positions,btcEntryMarket:market,
+  btcEntryDirection:feed,sharedV8:[],btcScalpBookMaxAge:1800,latestBtcStreamQuote:stream,
+  Date:class extends Date {static now(){return now;}},
+  assess:(...args)=>calls.push(args)
+ };
+ const evaluate=runInNewContext(inputs+'\nevaluateBtcEntry',context);
+ evaluate();
+ assert.equal(calls[0][1].yes_ask_dollars,'0.5600');
+ assert.equal(calls[0][4].feed,feed);
+ context.latestBtcStreamQuote={...stream,ticker:'KXBTC15M-PREVIOUS'};
+ evaluate();
+ assert.equal(calls[1][1],market);
+ context.btcEntryMarket={...market,quote_received_at:new Date(now-1801).toISOString()};
+ evaluate();
+ assert.equal(calls.length,2,'stale listings cannot start an entry');
+ context.btcEntryMarket=market;
+ positions.set('BTC',{ticker});
+ evaluate();
+ assert.equal(calls.length,2,'a same-round call is already active');
 });
