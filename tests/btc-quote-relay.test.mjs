@@ -6,7 +6,8 @@ import {Readable} from 'node:stream';
 import {createBtcQuoteRelay} from '../src/btc-quote-relay.mjs';
 
 test('public listener serves only BTC bids and forwards a brief spike before its pullback',async()=>{
- const relay=createBtcQuoteRelay({now:()=>100});
+ let now=100;
+ const relay=createBtcQuoteRelay({now:()=>now});
  relay.server.listen(0,'127.0.0.1');
  await once(relay.server,'listening');
  const url='http://127.0.0.1:'+relay.server.address().port;
@@ -32,8 +33,21 @@ test('public listener serves only BTC bids and forwards a brief spike before its
   const spike=await event();
   assert.deepEqual(spike.data,{ticker:tick.ticker,yesBid:80,noBid:19,receivedAt:100,eventAt:99,expiresAt:200});
   assert.equal((await event()).data.yesBid,43);
+  const fallback={ticker:tick.ticker,at:100,yes:{price:.38},no:{price:.61}};
+  relay.publishRest(fallback,200);
+  assert.equal(relay.hasFreshStream(tick.ticker),true);
   relay.reset();
   assert.equal((await event()).name,'event: unavailable');
+  relay.publishRest(fallback,200);
+  relay.resetStream();
+  const rest=await event();
+  assert.equal(rest.data.source,'REST');
+  assert.equal(rest.data.yesBid,38);
+  assert.equal(relay.hasFreshStream(tick.ticker),false);
+  now=1200;
+  relay.publishRest(fallback,2000);
+  relay.publish({...tick,receivedAt:now,yes:{price:.43}},2000);
+  assert.equal((await event()).data.yesBid,43,'delayed REST is discarded and the stream takes over');
   await lines.return();
  }finally{relay.close();}
 });

@@ -7,9 +7,11 @@ scalper.style.cssText='box-sizing:border-box;margin:12px 0;padding:clamp(18px,2.
 scalper.innerHTML='<h2 style="margin:0 0 18px;font-size:clamp(20px,2vw,30px)">⚡ BTC 15-MIN PRO SCALPER</h2><div role="status" aria-live="polite"><strong data-action style="display:flex;align-items:center;gap:10px;padding:12px;border:2px solid currentColor;border-radius:14px;font-size:clamp(20px,2.7vw,40px);line-height:1.12"><span data-icon aria-hidden="true" style="display:inline-block;flex:none"></span><span data-label></span></strong><p data-detail style="font-size:16px;line-height:1.55"></p></div><p class="premium-foot">Research signals only. Entry uses the ask and exit uses the bid. Quote changes exclude fees.</p>';
 const scalpPrices=document.createElement('div');
 scalpPrices.className='bt-scalp-prices';
-scalpPrices.innerHTML='<div data-price-entry><span>BUY IN · ASK</span><strong data-entry-percent>—%</strong><span data-entry-time></span></div><div data-price-cash><span data-cash-label>CASH OUT · WAIT</span><strong data-cash-percent></strong><span data-cash-time></span></div>';
+scalpPrices.innerHTML='<div data-price-entry><span data-entry-label>BUY IN · ASK</span><strong data-entry-percent>—%</strong><span data-entry-time></span><span data-current-ask></span></div><div data-price-cash><span data-cash-label>CASH OUT · WAIT</span><strong data-cash-percent></strong><span data-cash-time></span></div>';
 scalper.querySelector('[data-action]').after(scalpPrices);
 const entryPercent=scalpPrices.querySelector('[data-entry-percent]');
+const entryLabel=scalpPrices.querySelector('[data-entry-label]');
+const currentAsk=scalpPrices.querySelector('[data-current-ask]');
 const cashPercent=scalpPrices.querySelector('[data-cash-percent]');
 const cashLabel=scalpPrices.querySelector('[data-cash-label]');
 const entryTime=scalpPrices.querySelector('[data-entry-time]');
@@ -21,6 +23,12 @@ function paintScalpTime(element,at){
 }
 function paintScalpPrices(position,exit){
   const active=position&&Number.isFinite(position.entry);
+  const btc=active&&position.ticker?.startsWith('KXBTC15M-');
+  const snapshot=btc?scalpQuotes.get('BTC'):null;
+  const ask=btc&&scalpQuoteStatus(position,snapshot).fresh
+    ?price(snapshot.market,position.side==='up'?'yes_ask':'no_ask'):NaN;
+  entryLabel.textContent=btc?'BUY CALL · ORIGINAL ASK':'BUY IN · ASK';
+  currentAsk.textContent=btc?(Number.isFinite(ask)?'ASK NOW '+ask.toFixed(1)+'%':'ASK NOW · UNAVAILABLE'):'';
   entryPercent.textContent=active?position.entry.toFixed(1)+'%':'—%';
   const cash=exit?position.exitBid:undefined;
   cashPercent.textContent=active&&Number.isFinite(cash)?cash.toFixed(1)+'%':'';
@@ -929,6 +937,7 @@ function persistScalpPosition(coin,position,market,left){
 }
 const scalpQuotes=new Map();
 const btcScalpBookMaxAge=1800;
+const btcEntryQuoteMaxAge=1000;
 let btcScalpBookPending=false;
 let latestBtcStreamQuote=null;
 let btcEntryMarket=null,btcEntryDirection=null;
@@ -993,8 +1002,7 @@ function showScalp(message,exitSide,ticker){
   const detail=separator<0?'':message.slice(separator+3);
   const callLabel=exitSide?action+' '+exitSide.toUpperCase():action;
   const liveLabel=quoteStatus?(quoteStatus.bid!=null?quoteStatus.bid.toFixed(2).replace(/0$/,'')+'% '+(quoteStatus.fresh?('LIVE BID'+(selectedCoin==='BTC'&&scalpQuotes.get(selectedCoin)?.isOrderBook&&!scalpQuotes.get(selectedCoin)?.isStream?' · POLLING':'')):'LAST BID · STALE'):'BID UNAVAILABLE'):'';
-  const ask=selectedCoin==='BTC'&&action.startsWith('BUY ')&&snapshot?.ticker===position?.ticker&&
-    Date.now()-snapshot.at<=btcScalpBookMaxAge
+  const ask=selectedCoin==='BTC'&&action.startsWith('BUY ')&&quoteStatus?.fresh
     ?price(snapshot.market,position.side==='up'?'yes_ask':'no_ask'):NaN;
   const label=callLabel+(Number.isFinite(ask)?' · NOW '+ask.toFixed(1)+'% ASK':'')+(liveLabel?' · '+liveLabel:'');
   sharedScalpCall=ticker?{coin:selectedCoin,ticker,label,at:Date.now(),tone:action==='TAKE PROFIT'?'profit':exitSide?'sell':'hold'}:null;
@@ -1125,6 +1133,7 @@ function receiveScalpListing(row){
     if(previous?.ticker!==market.ticker)scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down,market});
     return refreshBtcScalpBook();
   }
+  if(coin==='BTC'&&previous?.ticker===market.ticker&&previous.isOrderBook)return;
   scalpQuotes.set(coin,{ticker:market.ticker,at,expiresAt,up,down,market});
   if(coin===selectedCoin)refreshScalpExit();
 }
@@ -1145,18 +1154,16 @@ function applyBtcStreamQuote(quote){
      !Number.isFinite(quote.receivedAt)||quote.receivedAt>now+2000||now-quote.receivedAt>btcScalpBookMaxAge||
      ![quote.yesBid,quote.noBid].every(bid=>Number.isFinite(bid)&&bid>0&&bid<100)||
      Math.round((quote.yesBid+quote.noBid)*100)>10000)return false;
-  if(position?.ticker!==quote.ticker){
-    if(btcEntryMarket?.ticker!==quote.ticker)return false;
-    evaluateBtcEntry();
-    return true;
-  }
+  const active=position?.ticker===quote.ticker;
+  if(!active&&btcEntryMarket?.ticker!==quote.ticker)return false;
   const previous=scalpQuotes.get('BTC');
-  if(previous?.isStream&&previous.ticker===quote.ticker&&previous.at>quote.receivedAt)return true;
+  if(previous?.isOrderBook&&previous.ticker===quote.ticker&&previous.at>quote.receivedAt)return true;
   const market={ticker:quote.ticker,close_time:new Date(quote.expiresAt).toISOString(),
     yes_ask_dollars:((100-quote.noBid)/100).toFixed(4),no_ask_dollars:((100-quote.yesBid)/100).toFixed(4)};
   scalpQuotes.set('BTC',{ticker:quote.ticker,at:quote.receivedAt,expiresAt:quote.expiresAt,
-    up:quote.yesBid,down:quote.noBid,market,isOrderBook:true,isStream:true});
-  refreshScalpExit();
+    up:quote.yesBid,down:quote.noBid,market,isOrderBook:true,isStream:quote.source!=='REST'});
+  if(active)refreshScalpExit();
+  else evaluateBtcEntry();
   return true;
 }
 function invalidateBtcStream(){
@@ -1169,31 +1176,32 @@ function invalidateBtcStream(){
 }
 async function refreshBtcScalpBook(){
   const position=positions.get('BTC');
-  if(document.hidden||selectedCoin!=='BTC'||!position||btcScalpBookPending)return;
+  const ticker=btcEntryMarket?.ticker??position?.ticker;
+  if(document.hidden||selectedCoin!=='BTC'||!ticker||btcScalpBookPending)return;
+  const active=position?.ticker===ticker;
   const previous=scalpQuotes.get('BTC');
-  if(latestBtcStreamQuote?.ticker===position.ticker&&Date.now()-latestBtcStreamQuote.receivedAt<=btcScalpBookMaxAge){
-    if(previous?.isStream&&previous.at===latestBtcStreamQuote.receivedAt)return;
+  if(latestBtcStreamQuote?.ticker===ticker&&Date.now()-latestBtcStreamQuote.receivedAt<=btcEntryQuoteMaxAge){
+    if(previous?.isOrderBook&&previous.at>=latestBtcStreamQuote.receivedAt)return;
     if(applyBtcStreamQuote(latestBtcStreamQuote))return;
   }
-  const matching=previous?.ticker===position.ticker?previous:null;
-  const expiresAt=position.expiresAt??matching?.expiresAt;
+  const expiresAt=active?position.expiresAt:Date.parse(btcEntryMarket.close_time);
   if(!Number.isFinite(expiresAt)||expiresAt<=Date.now())return;
   btcScalpBookPending=true;
+  const requestedAt=Date.now();
   try{
-    const response=await fetch('/api/data?mode=orderbook&live=1&ticker='+encodeURIComponent(position.ticker),
+    const response=await fetch('/api/data?mode=orderbook&live=1&ticker='+encodeURIComponent(ticker),
       {cache:'no-store',signal:AbortSignal.timeout(1500)});
     if(!response.ok)return;
-    const data=await response.json(),now=Date.now(),at=Date.parse(data.fetched_at);
+    const data=await response.json(),now=Date.now(),at=Math.min(Date.parse(data.fetched_at),requestedAt);
     const current=scalpQuotes.get('BTC');
-    if(positions.get('BTC')!==position||!Number.isFinite(at)||at>now||now-at>btcScalpBookMaxAge||expiresAt<=now||
-       (current?.ticker===position.ticker&&(at<=current.at||(current.isStream&&now-current.at<=btcScalpBookMaxAge))))return;
+    if((btcEntryMarket?.ticker??positions.get('BTC')?.ticker)!==ticker||
+       !Number.isFinite(at)||at>now||now-at>(active?btcScalpBookMaxAge:btcEntryQuoteMaxAge)||expiresAt<=now||
+       (current?.isOrderBook&&current.ticker===ticker&&at<=current.at))return;
     const book=data.orderbook?.orderbook_fp??data.orderbook;
     const yes=bestBid(book,'yes',0),no=bestBid(book,'no',0);
     if(!yes||!no||Math.round((yes.price+no.price)*10000)>10000)return;
-    const market={ticker:position.ticker,close_time:new Date(expiresAt).toISOString(),yes_ask_dollars:(1-no.price).toFixed(4),no_ask_dollars:(1-yes.price).toFixed(4)};
-    scalpQuotes.set('BTC',{ticker:position.ticker,expiresAt,market,at,up:Number((yes.price*100).toFixed(2)),
-      down:Number((no.price*100).toFixed(2)),isOrderBook:true});
-    refreshScalpExit();
+    applyBtcStreamQuote({ticker,expiresAt,receivedAt:at,yesBid:Number((yes.price*100).toFixed(2)),
+      noBid:Number((no.price*100).toFixed(2)),source:'REST'});
   }catch{}finally{btcScalpBookPending=false;}
 }
 // The shared-signal listener above updates sharedV8 before this listener runs.
@@ -1253,6 +1261,7 @@ function rememberBtcEntryMarket(market){
   if(Date.parse(market.close_time)<=now||!(Date.parse(market.open_time)<=now))return;
   const newRound=btcEntryMarket?.ticker!==market.ticker;
   btcEntryMarket=market;
+  if(latestBtcStreamQuote?.ticker===market.ticker)applyBtcStreamQuote(latestBtcStreamQuote);
   evaluateBtcEntry();
   if(newRound)void refreshBtcDirection();
 }
@@ -1269,19 +1278,11 @@ function evaluateBtcEntry(){
   if(expiry<=now||positions.get('BTC')?.ticker===market.ticker)return;
   const direction=btcDirectionFor(market);
   if(!direction)return;
-  const stream=latestBtcStreamQuote;
-  const freshStream=stream?.ticker===market.ticker&&stream.expiresAt===expiry&&
-    stream.receivedAt<=now+2000&&now-stream.receivedAt<=btcScalpBookMaxAge&&
-    [stream.yesBid,stream.noBid].every(bid=>Number.isFinite(bid)&&bid>0&&bid<100)&&
-    Math.round((stream.yesBid+stream.noBid)*100)<=10000;
-  if(freshStream){
-    assess('BTC',{...market,quote_received_at:new Date(stream.receivedAt).toISOString(),
-      yes_bid_dollars:(stream.yesBid/100).toFixed(4),no_bid_dollars:(stream.noBid/100).toFixed(4),
-      yes_ask_dollars:((100-stream.noBid)/100).toFixed(4),no_ask_dollars:((100-stream.yesBid)/100).toFixed(4)
-    },window.__BANK_TRADES_BTC_EVIDENCE__,true,{feed:direction,entryOnly:true});
-  }else if(now-Date.parse(market.quote_received_at)<=btcScalpBookMaxAge){
-    assess('BTC',market,window.__BANK_TRADES_BTC_EVIDENCE__,true,{feed:direction,entryOnly:true});
-  }
+  const depth=scalpQuotes.get('BTC');
+  if(!depth?.isOrderBook||depth.ticker!==market.ticker||depth.expiresAt!==expiry||now-depth.at>btcEntryQuoteMaxAge)return;
+  assess('BTC',{...market,...depth.market,quote_received_at:new Date(depth.at).toISOString(),
+    yes_bid_dollars:(depth.up/100).toFixed(4),no_bid_dollars:(depth.down/100).toFixed(4)
+  },window.__BANK_TRADES_BTC_EVIDENCE__,true,{feed:direction,entryOnly:true});
 }
 async function refreshBtcDirection(){
   const market=btcEntryMarket;
@@ -1315,7 +1316,7 @@ function assess(coin,market,e,visible,{feed,allowBtcEntry=true,entryOnly=false}=
   // Refresh the called contract's bid even when spot entry evidence is unavailable.
   const quoteAt=Date.parse(market.quote_received_at),quoteExpiry=Date.parse(market.close_time||market.expires_at);
   const upBid=price(market,'yes_bid'),downBid=price(market,'no_bid');
-  const useBook=coin==='BTC'&&positions.get(coin)?.ticker===market.ticker&&scalpQuotes.get(coin)?.ticker===market.ticker;
+  const useBook=coin==='BTC'&&scalpQuotes.get(coin)?.isOrderBook&&scalpQuotes.get(coin).ticker===market.ticker;
   if(!useBook&&quoteAt>=(scalpQuotes.get(coin)?.at??0)&&Date.now()-quoteAt<=5000&&quoteExpiry>quoteAt&&quoteExpiry-quoteAt<=900000&&[upBid,downBid].every(value=>Number.isFinite(value)&&value>=0&&value<=100)){
     scalpQuotes.set(coin,{ticker:market.ticker,at:quoteAt,expiresAt:quoteExpiry,up:upBid,down:downBid,market});
   }

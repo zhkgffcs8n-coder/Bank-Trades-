@@ -9,6 +9,9 @@ export function createBtcQuoteRelay({origins=['https://neon-gecko-046bff.netlify
  function broadcast(event,payload){
   for(const response of clients)send(response,event,payload);
  }
+ function hasFreshStream(ticker){
+  return latest?.ticker===ticker&&latest.source!=='REST'&&now()-latest.receivedAt<=1500;
+ }
  function reset(){
   if(!latest)return;
   resetCross(latest.ticker);
@@ -59,6 +62,16 @@ export function createBtcQuoteRelay({origins=['https://neon-gecko-046bff.netlify
  });
  return {
   server,publishCross,resetCross,
+  hasFreshStream,
+  publishRest(depth,expiresAt){
+   if(!(expiresAt>now())||now()-depth.at>1000||hasFreshStream(depth.ticker))return;
+   latest={ticker:depth.ticker,yesBid:Math.round(depth.yes.price*10000)/100,
+    noBid:Math.round(depth.no.price*10000)/100,receivedAt:depth.at,eventAt:null,expiresAt,source:'REST'};
+   broadcast('quote',latest);
+  },
+  resetStream(){
+   if(latest?.source!=='REST')reset();
+  },
   publish(update,expiresAt){
    if(update.status!=='READY'||!update.ticker.startsWith('KXBTC15M-')||!(expiresAt>now()))return;
    publishCross(update,expiresAt);
